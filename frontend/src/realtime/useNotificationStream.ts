@@ -1,0 +1,56 @@
+import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+
+import { tokens } from '../api/client'
+import { RISK } from '../api/labels'
+import type { AppNotification } from '../api/types'
+
+/**
+ * Персональный WebSocket-поток уведомлений. На каждое уведомление — всплывающее сообщение
+ * и инвалидация связанных запросов, чтобы списки обновлялись без перезагрузки страницы.
+ */
+export function useNotificationStream(enabled: boolean) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!enabled) return
+    let socket: WebSocket | null = null
+    let retry: number | undefined
+    let attempt = 0
+    let closed = false
+
+    const connect = () => {
+      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      socket = new WebSocket(`${scheme}://${window.location.host}/ws/notifications/?token=${tokens.access ?? ''}`)
+      socket.onopen = () => {
+        attempt = 0
+      }
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as { type: string; data: AppNotification }
+        if (message.type !== 'notification') return
+        const n = message.data
+        notifications.show({
+          title: n.title,
+          message: n.body,
+          color: RISK[n.level]?.color ?? 'blue',
+          autoClose: n.level === 'critical' ? false : 8000,
+        })
+        void queryClient.invalidateQueries({ queryKey: ['incidents'] })
+        void queryClient.invalidateQueries({ queryKey: ['overview'] })
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      }
+      socket.onclose = () => {
+        if (closed) return
+        // Экспоненциальная пауза переподключения, не чаще раза в 30 с
+        retry = window.setTimeout(connect, Math.min(30_000, 1000 * 2 ** attempt++))
+      }
+    }
+    connect()
+    return () => {
+      closed = true
+      window.clearTimeout(retry)
+      socket?.close()
+    }
+  }, [enabled, queryClient])
+}

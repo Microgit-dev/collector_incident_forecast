@@ -1,0 +1,39 @@
+{
+	# Метрики Caddy для Prometheus
+	servers {
+		metrics
+	}
+}
+
+# Локальный стенд: TLS 1.2+ с сертификатом внутреннего CA Caddy (ТЗ §11 — шифрование при передаче).
+# Для боевого домена достаточно заменить адрес сайта — сертификат выпустится автоматически.
+localhost, 127.0.0.1 {
+	tls internal
+	encode zstd gzip
+
+	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle /grafana* {
+		reverse_proxy grafana:3000
+	}
+
+	# SPA: неизвестные пути отдаются index.html, маршрутизирует React Router
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+:2019 {
+	metrics /metrics
+}

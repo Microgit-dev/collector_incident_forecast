@@ -1,0 +1,72 @@
+[project]
+name = "collector-forecast"
+version = "0.1.0"
+description = "Прогнозирование отказов датчиков и раннее выявление инцидентов в инженерных коллекторах"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Web / API
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16",
+    "djangorestframework-simplejwt>=5.5",
+    "drf-spectacular>=0.28",
+    "django-filter>=25.1",
+    "django-cors-headers>=4.7",
+    "django-environ>=0.12",
+    "whitenoise>=6.9",
+    # Storage
+    "psycopg[binary]>=3.2",
+    "redis>=5.2",
+    # Domain helpers
+    "django-treebeard>=4.7",
+    "django-auditlog>=3.1",
+    # Async / realtime
+    "celery[redis]>=5.5",
+    "django-celery-beat>=2.8",
+    "channels>=4.2",
+    "channels-redis>=4.2",
+    "uvicorn[standard]>=0.34",
+    # Streaming
+    "confluent-kafka>=2.8",
+    # Observability
+    "django-prometheus>=2.3",
+    # Data / ML
+    "polars>=1.20",
+    "pyarrow>=19.0",
+    "numpy>=2.1",
+    "scikit-learn>=1.6",
+    "lightgbm>=4.6",
+    "joblib>=1.4",
+    "httpx>=0.28",
+    # Reports
+    "openpyxl>=3.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.3",
+    "pytest-django>=4.10",
+    "factory-boy>=3.3",
+]
+# python-ldap needs libldap headers: installed only inside the Linux image
+ldap = [
+    "django-auth-ldap>=5.1",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["**/migrations/**"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "SIM", "RUF"]
+# Длину строк контролирует ruff format; E501 дублирует его на длинных f-строках
+ignore = ["E501", "RUF012", "RUF001", "RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+addopts = "-q"
