@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: collector-forecast
+    folder: Collector Forecast
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards

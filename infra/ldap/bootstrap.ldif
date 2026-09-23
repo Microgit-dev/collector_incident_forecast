@@ -1,0 +1,108 @@
+# Тестовый каталог вместо AD заказчика. Пароль всех демо-учёток: Passw0rd!
+# Группы ou=roles маппятся на одноимённые роли (Django Groups) через django-auth-ldap.
+
+dn: ou=people,dc=collector,dc=local
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=roles,dc=collector,dc=local
+objectClass: organizationalUnit
+ou: roles
+
+dn: uid=ods.ivanov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: ods.ivanov
+cn:: 0JjQstCw0L0g0JjQstCw0L3QvtCy
+givenName:: 0JjQstCw0L0=
+sn:: 0JjQstCw0L3QvtCy
+mail: ods.ivanov@collector.local
+userPassword: Passw0rd!
+
+dn: uid=disp.petrov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: disp.petrov
+cn:: 0J/RkdGC0YAg0J/QtdGC0YDQvtCy
+givenName:: 0J/RkdGC0YA=
+sn:: 0J/QtdGC0YDQvtCy
+mail: disp.petrov@collector.local
+userPassword: Passw0rd!
+
+dn: uid=head.sidorova,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: head.sidorova
+cn:: 0JzQsNGA0LjRjyDQodC40LTQvtGA0L7QstCw
+givenName:: 0JzQsNGA0LjRjw==
+sn:: 0KHQuNC00L7RgNC+0LLQsA==
+mail: head.sidorova@collector.local
+userPassword: Passw0rd!
+
+dn: uid=analyst.kuznetsov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: analyst.kuznetsov
+cn:: 0JDQu9C10LrRgdC10Lkg0JrRg9C30L3QtdGG0L7Qsg==
+givenName:: 0JDQu9C10LrRgdC10Lk=
+sn:: 0JrRg9C30L3QtdGG0L7Qsg==
+mail: analyst.kuznetsov@collector.local
+userPassword: Passw0rd!
+
+dn: uid=brigade.smirnov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: brigade.smirnov
+cn:: 0KHQtdGA0LPQtdC5INCh0LzQuNGA0L3QvtCy
+givenName:: 0KHQtdGA0LPQtdC5
+sn:: 0KHQvNC40YDQvdC+0LI=
+mail: brigade.smirnov@collector.local
+userPassword: Passw0rd!
+
+dn: uid=observer.orlova,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: observer.orlova
+cn:: 0JDQvdC90LAg0J7RgNC70L7QstCw
+givenName:: 0JDQvdC90LA=
+sn:: 0J7RgNC70L7QstCw
+mail: observer.orlova@collector.local
+userPassword: Passw0rd!
+
+dn: uid=admin.volkov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: admin.volkov
+cn:: 0JTQvNC40YLRgNC40Lkg0JLQvtC70LrQvtCy
+givenName:: 0JTQvNC40YLRgNC40Lk=
+sn:: 0JLQvtC70LrQvtCy
+mail: admin.volkov@collector.local
+userPassword: Passw0rd!
+
+dn: cn=ods_dispatcher,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: ods_dispatcher
+member: uid=ods.ivanov,ou=people,dc=collector,dc=local
+
+dn: cn=unit_dispatcher,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: unit_dispatcher
+member: uid=disp.petrov,ou=people,dc=collector,dc=local
+
+dn: cn=head,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: head
+member: uid=head.sidorova,ou=people,dc=collector,dc=local
+
+dn: cn=analyst,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: analyst
+member: uid=analyst.kuznetsov,ou=people,dc=collector,dc=local
+
+dn: cn=technician,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: technician
+member: uid=brigade.smirnov,ou=people,dc=collector,dc=local
+
+dn: cn=observer,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: observer
+member: uid=observer.orlova,ou=people,dc=collector,dc=local
+
+dn: cn=admin,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: admin
+member: uid=admin.volkov,ou=people,dc=collector,dc=local
