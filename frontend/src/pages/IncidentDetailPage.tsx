@@ -3,10 +3,12 @@ import {
   Badge,
   Button,
   Card,
+  Chip,
   Grid,
   Group,
   Loader,
   Modal,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -23,8 +25,8 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type Page } from '../api/client'
-import { INCIDENT_TYPE, OUTCOME } from '../api/labels'
-import type { DecisionOutcome, DecisionReason, IncidentDetail } from '../api/types'
+import { CAUSE, INCIDENT_TYPE, OUTCOME } from '../api/labels'
+import type { DecisionCause, DecisionOutcome, DecisionReason, IncidentDetail } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
 import { ActionsCard, EpisodeCard, HypothesesCard } from '../components/EpisodePanels'
@@ -34,6 +36,8 @@ function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail
   const [outcome, setOutcome] = useState<DecisionOutcome | null>(null)
   const [reason, setReason] = useState<string | null>(null)
   const [comment, setComment] = useState('')
+  const [cause, setCause] = useState<DecisionCause | ''>('')
+  const [useful, setUseful] = useState<'yes' | 'no' | 'unknown'>('unknown')
 
   const reasons = useQuery({
     queryKey: ['decision-reasons'],
@@ -45,7 +49,13 @@ function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail
     mutationFn: () =>
       api<IncidentDetail>(`/incidents/items/${incident.id}/decide/`, {
         method: 'POST',
-        body: { outcome, reason: reason ? Number(reason) : null, comment },
+        body: {
+          outcome,
+          reason: reason ? Number(reason) : null,
+          comment,
+          cause,
+          forecast_useful: incident.is_forecast && useful !== 'unknown' ? useful === 'yes' : null,
+        },
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['incidents', incident.id], data)
@@ -61,8 +71,43 @@ function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail
     .map((r) => ({ value: String(r.id), label: r.name }))
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Решение по инциденту">
+    <Modal opened={opened} onClose={onClose} title="Решение по инциденту" size="lg">
       <Stack>
+        <div>
+          <Text size="sm" fw={500} mb={6}>
+            Что произошло на самом деле
+          </Text>
+          <Chip.Group multiple={false} value={cause} onChange={(v) => setCause(v as DecisionCause)}>
+            <Group gap={6}>
+              {(Object.keys(CAUSE) as DecisionCause[]).map((c) => (
+                <Chip key={c} value={c} size="sm" variant="light">
+                  {CAUSE[c].label}
+                </Chip>
+              ))}
+            </Group>
+          </Chip.Group>
+          <Text size="xs" c="dimmed" mt={6}>
+            {cause
+              ? `Для модели отказа датчиков: ${CAUSE[cause].hint}.`
+              : 'Ответ попадает в обратную связь: аналитик видит, как решения диспетчеров влияют на обучение моделей.'}
+          </Text>
+        </div>
+        {incident.is_forecast && (
+          <div>
+            <Text size="sm" fw={500} mb={6}>
+              Прогноз помог?
+            </Text>
+            <SegmentedControl
+              value={useful}
+              onChange={(v) => setUseful(v as typeof useful)}
+              data={[
+                { value: 'yes', label: 'Да, успели среагировать' },
+                { value: 'no', label: 'Нет, бесполезен' },
+                { value: 'unknown', label: 'Не ясно' },
+              ]}
+            />
+          </div>
+        )}
         <Select
           label="Решение"
           data={Object.entries(OUTCOME).map(([value, label]) => ({ value, label }))}

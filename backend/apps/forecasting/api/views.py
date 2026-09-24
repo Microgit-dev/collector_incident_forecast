@@ -114,7 +114,7 @@ class RiskPolicyViewSet(viewsets.ModelViewSet):
 
 
 class PredictionViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
-    queryset = Prediction.objects.select_related("node", "channel")
+    queryset = Prediction.objects.select_related("node", "channel", "channel__sensor_type", "model")
     serializer_class = PredictionSerializer
     filterset_fields = {
         "task": ["exact"],
@@ -142,10 +142,14 @@ class PredictionViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         )
 
     def retrieve(self, request, *args, **kwargs):
+        from ..card import prediction_card
+
         prediction = self.get_object()
         log_view(request, prediction, "prediction.view")
         return Response(
-            self.get_serializer(prediction).data | {"viewed_by": viewers(prediction, "prediction.view")}
+            self.get_serializer(prediction).data
+            | {"viewed_by": viewers(prediction, "prediction.view")}
+            | prediction_card(prediction)
         )
 
 

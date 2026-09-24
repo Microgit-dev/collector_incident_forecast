@@ -138,11 +138,23 @@ export interface Alert {
   details: Record<string, unknown>
 }
 
+export type DecisionCause =
+  | 'sensor_fault'
+  | 'communication'
+  | 'power'
+  | 'false_alarm'
+  | 'external'
+  | 'works'
+  | 'real_event'
+  | 'insufficient_data'
+
 export interface Decision {
   id: number
   outcome: DecisionOutcome
   reason: number | null
   comment: string
+  cause: DecisionCause | ''
+  forecast_useful: boolean | null
   decided_by_name: string
   decided_at: string
 }
@@ -321,4 +333,130 @@ export interface ChannelRisk {
   probability: number
   risk_level: RiskLevel
   factors: Factor[]
+}
+
+export interface LiveIncident {
+  id: number
+  title: string
+  type: IncidentType
+  severity: RiskLevel
+  status: IncidentStatus
+  priority: number
+  contour: string
+  is_forecast: boolean
+  node_name: string
+  signals_count: number
+  channels_count: number
+  last_signal_at: string | null
+  ack_deadline: string | null
+  overdue: boolean
+  assigned_to_name: string | null
+  escalation_level: number
+}
+
+export interface TaskRisk {
+  as_of: string | null
+  levels: Record<'critical' | 'high' | 'medium', number>
+  top: {
+    channel?: number
+    channel_name?: string
+    prediction?: number | null
+    node_name: string
+    probability: number
+    risk_level: RiskLevel
+    factor: string
+  }[]
+}
+
+export interface Live {
+  now: string
+  minutes: number
+  data_clock: string | null
+  last_signal_at: string | null
+  signals: {
+    total: number
+    by_contour: Record<string, number>
+    by_type: Record<string, number>
+    bucket_minutes: number
+    series: { t: string; physical: number; technical: number }[]
+  }
+  episodes: { touched: number; new: number; items: LiveIncident[] }
+  action: { open: number; unassigned: number; overdue: number; escalated: number; items: LiveIncident[] }
+  risks: {
+    tasks: Record<string, TaskRisk>
+    nodes: {
+      node: number
+      node_name: string
+      task: string
+      risk_level: RiskLevel
+      max_probability: number
+      channels_at_risk: number
+    }[]
+  }
+}
+
+export interface PredictionCard extends Prediction {
+  viewed_by: Viewer[]
+  model_info: {
+    method: 'model' | 'rules'
+    note?: string
+    version?: string
+    algorithm?: string
+    status?: string
+    roc_auc?: number
+    pr_auc?: number
+    base_rate?: number
+    level_test?: { precision?: number; recall?: number; alerts_per_day?: number; lead_time_median_h?: number }
+    baseline?: { rule: string; precision: number; recall: number }
+  }
+  realized: Record<'live' | 'backtest', { confirmed: number; resolved: number; precision: number | null }>
+  channel_info: {
+    id: number
+    name: string
+    sensor_type: string | null
+    picket: number | null
+    location_hint: string
+    state: { state: string; since: string; last_seen_at: string } | null
+    health: {
+      score: number
+      components: Record<string, number | null>
+      silent: boolean
+      silent_since: string | null
+      last_seen_at: string | null
+      periodic: boolean
+    } | null
+    daily: {
+      day: string
+      readings: number
+      alarms: number
+      faults: number
+      power_losses: number
+      unknowns: number
+      numeric_max: number | null
+      last_state: string
+    }[]
+    risks: { task: string; probability: number; risk_level: RiskLevel; as_of: string }[]
+  } | null
+  history: { id: number; issued_at: string; probability: number; risk_level: RiskLevel; outcome: PredictionOutcome }[]
+  incidents: {
+    id: number
+    title: string
+    type: IncidentType
+    severity: RiskLevel
+    status: IncidentStatus
+    is_forecast: boolean
+    opened_at: string
+    hypothesis: string | null
+    decision: string | null
+  }[]
+  recommendations: {
+    id: number
+    work_type: string
+    priority: RiskLevel
+    due_date: string
+    status: string
+    rationale: string
+    work_order: { id: number; number: string; status: string } | null
+  }[]
+  actions: { code: string; title: string }[]
 }

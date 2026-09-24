@@ -40,3 +40,16 @@ def test_intrusion_at_night_on_armed_object_vs_authorized_access():
     assert level(authorized.score) in ("low", "medium")
     assert any("санкционированный" in f["title"] for f in authorized.factors)
     assert intrusion_risk([], ScenarioContext(local_time=NIGHT)).score == 0
+
+
+def test_repeated_backtest_does_not_duplicate_journal(tree, monkeypatch):
+    from apps.forecasting import scenarios
+    from apps.forecasting.domain.scenarios import Assessment
+    from apps.forecasting.models import Prediction
+
+    a = Assessment(score=0.8, factors=[{"title": "Сработали дымовые извещатели: 3", "feature": "rule"}])
+    monkeypatch.setattr(scenarios, "assess", lambda as_of: [("fire", tree["house"].pk, a)])
+    scenarios.run_scenarios(DAY, backtest=True)
+    Prediction.objects.update(outcome="confirmed")  # исход проставлен до повторного прогона
+    scenarios.run_scenarios(DAY, backtest=True)
+    assert Prediction.objects.filter(task="fire", is_backtest=True).count() == 1

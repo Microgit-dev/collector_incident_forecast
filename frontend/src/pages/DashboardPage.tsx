@@ -2,13 +2,15 @@ import { BarChart, DonutChart } from '@mantine/charts'
 import { Alert, Button, Card, Group, Loader, Progress, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { CHANNEL_STATE, INCIDENT_TYPE, RISK } from '../api/labels'
-import type { FloodStats, IncidentType, NodeRisk, Overview, RiskLevel } from '../api/types'
+import type { FloodStats, IncidentType, Live, NodeRisk, Overview, RiskLevel } from '../api/types'
 import { RiskBadge } from '../components/badges'
+import { PipelinePanel, RisksPanel } from '../components/LivePanels'
 
 function Kpi({ label, value, hint, color, to }: { label: string; value: number; hint?: string; color?: string; to?: string }) {
   const body = (
@@ -147,6 +149,12 @@ function NodeRiskCard() {
 
 export function DashboardPage() {
   const { can } = useAuth()
+  const [minutes, setMinutes] = useState('10')
+  const live = useQuery({
+    queryKey: ['live', minutes],
+    queryFn: () => api<Live>('/analytics/live/', { query: { minutes } }),
+    refetchInterval: 15_000,
+  })
   const { data, isLoading } = useQuery({
     queryKey: ['overview'],
     queryFn: () => api<Overview>('/analytics/overview/'),
@@ -187,6 +195,15 @@ export function DashboardPage() {
           </Group>
         </Alert>
       )}
+      {live.data && (
+        <>
+          <PipelinePanel data={live.data} minutes={minutes} onMinutes={setMinutes} />
+          <RisksPanel data={live.data} />
+        </>
+      )}
+      <Title order={4} mt="sm">
+        Сводка
+      </Title>
       <SimpleGrid cols={{ base: 2, md: 4 }}>
         <Kpi label="Открытые инциденты" value={data.incidents_open} color="red" to="/incidents" />
         <Kpi label="Не взяты в работу" value={data.incidents_unassigned} color="orange" hint="ожидают диспетчера" />
