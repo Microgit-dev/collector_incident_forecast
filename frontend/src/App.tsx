@@ -5,11 +5,14 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { AppLayout } from './layout/AppLayout'
 import { DashboardPage } from './pages/DashboardPage'
+import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
 import { DataQualityPage } from './pages/DataQualityPage'
+import { ForecastsPage } from './pages/ForecastsPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LoginPage } from './pages/LoginPage'
+import { ModelsPage } from './pages/ModelsPage'
 import { PlannedPage } from './pages/PlannedPage'
 import { TeamsPage } from './pages/TeamsPage'
 
@@ -49,16 +52,9 @@ export function App() {
             />
           }
         />
-        <Route
-          path="forecasts"
-          element={
-            <PlannedPage
-              title="Журнал прогнозов"
-              epic="E3/E5"
-              description="Реестр прогнозов с вероятностью, горизонтом, факторами риска и результатом отработки."
-            />
-          }
-        />
+        <Route path="forecasts" element={<ForecastsPage />} />
+        <Route path="models" element={<ModelsPage />} />
+        <Route path="data-health" element={<DataHealthPage />} />
         <Route
           path="workorders"
           element={

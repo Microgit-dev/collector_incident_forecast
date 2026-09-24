@@ -1,4 +1,4 @@
-import type { DecisionOutcome, IncidentStatus, IncidentType, RiskLevel } from './types'
+import type { DecisionOutcome, IncidentStatus, IncidentType, PredictionOutcome, RiskLevel } from './types'
 
 export const RISK: Record<RiskLevel, { label: string; color: string }> = {
   low: { label: 'Низкий', color: 'gray' },
@@ -15,6 +15,7 @@ export const INCIDENT_TYPE: Record<IncidentType, string> = {
   intrusion: 'Несанкционированный доступ',
   power: 'Потеря питания',
   equipment: 'Отказ оборудования',
+  communication: 'Потеря связи',
 }
 
 export const INCIDENT_STATUS: Record<IncidentStatus, { label: string; color: string }> = {
@@ -52,4 +53,19 @@ export const ROLE: Record<string, string> = {
   analyst: 'Аналитик',
   technician: 'Ремонтная бригада',
   observer: 'Наблюдатель',
+}
+
+export const PREDICTION_OUTCOME: Record<PredictionOutcome, { label: string; color: string }> = {
+  pending: { label: 'Ожидает', color: 'gray' },
+  confirmed: { label: 'Подтвердился', color: 'red' },
+  not_confirmed: { label: 'Не подтвердился', color: 'teal' },
+  prevented: { label: 'Предотвращён', color: 'blue' },
+}
+
+export const HEALTH_COMPONENT: Record<string, string> = {
+  completeness: 'Полнота',
+  freshness: 'Свежесть',
+  technical: 'Время в исправном состоянии',
+  stability: 'Стабильность частоты',
+  consistency: 'Согласованность с соседями',
 }

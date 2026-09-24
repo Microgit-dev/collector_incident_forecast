@@ -13,6 +13,7 @@ class IncidentType(models.TextChoices):
     INTRUSION = "intrusion", "Несанкционированный доступ"
     POWER = "power", "Потеря питания"
     EQUIPMENT = "equipment", "Отказ оборудования"
+    COMMUNICATION = "communication", "Потеря связи"
 
 
 class DecisionOutcome(models.TextChoices):

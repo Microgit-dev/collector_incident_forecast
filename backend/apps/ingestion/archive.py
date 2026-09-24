@@ -454,6 +454,8 @@ DAILY_COLUMNS = [
     "numeric_max",
     "first_ts",
     "last_ts",
+    "last_state",
+    "first_fault_ts",
 ]
 
 
@@ -491,6 +493,7 @@ def _daily_month(lf: pl.LazyFrame) -> pl.DataFrame:
     }
     # Числовая статистика — только по корректным значениям: служебные коды не концентрация
     valid_numeric = pl.when(pl.col("quality").is_in([Quality.OK, Quality.DRIFT])).then(pl.col("numeric"))
+    primary = pl.col("facet") == "primary"
     return (
         lf.with_columns(pl.col("ts").dt.convert_time_zone(MSK).dt.date().alias("day"))
         .group_by("day", "channel_id")
@@ -503,6 +506,17 @@ def _daily_month(lf: pl.LazyFrame) -> pl.DataFrame:
             valid_numeric.max().alias("numeric_max"),
             pl.col("ts").min().dt.replace_time_zone(None).alias("first_ts"),
             pl.col("ts").max().dt.replace_time_zone(None).alias("last_ts"),
+            pl.col("state")
+            .filter(primary)
+            .sort_by(pl.col("ts").filter(primary))
+            .last()
+            .fill_null("")
+            .alias("last_state"),
+            pl.col("ts")
+            .filter(pl.col("state") == State.FAULT.value)
+            .min()
+            .dt.replace_time_zone(None)
+            .alias("first_fault_ts"),
         )
         .select(DAILY_COLUMNS)
         .collect(engine="streaming")

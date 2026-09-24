@@ -1,12 +1,14 @@
 import { BarChart, DonutChart } from '@mantine/charts'
-import { Alert, Button, Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import { Alert, Button, Card, Group, Loader, Progress, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core'
+import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { CHANNEL_STATE, INCIDENT_TYPE, RISK } from '../api/labels'
-import type { IncidentType, Overview, RiskLevel } from '../api/types'
+import type { IncidentType, NodeRisk, Overview, RiskLevel } from '../api/types'
+import { RiskBadge } from '../components/badges'
 
 function Kpi({ label, value, hint, color, to }: { label: string; value: number; hint?: string; color?: string; to?: string }) {
   const body = (
@@ -34,6 +36,56 @@ function Kpi({ label, value, hint, color, to }: { label: string; value: number; 
 }
 
 const LEVELS: RiskLevel[] = ['critical', 'high', 'medium', 'low']
+
+function NodeRiskCard() {
+  const { data } = useQuery({
+    queryKey: ['node-risk'],
+    queryFn: () => api<NodeRisk[]>('/forecasting/node-risk/'),
+    refetchInterval: 60_000,
+  })
+  if (!data?.length) return null
+  const top = [...data].sort((a, b) => b.expected_failures - a.expected_failures).slice(0, 8)
+  const max = Math.max(...top.map((n) => n.expected_failures), 1)
+  return (
+    <Card withBorder radius="md">
+      <Group justify="space-between" mb="xs">
+        <Text fw={600}>Риск отказа датчиков по объектам</Text>
+        <Text size="xs" c="dimmed">
+          прогноз на {dayjs(data[0].as_of).format('DD.MM.YYYY HH:mm')}
+        </Text>
+      </Group>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Объект</Table.Th>
+            <Table.Th>Ожидаемых отказов за горизонт</Table.Th>
+            <Table.Th>Каналов под риском</Table.Th>
+            <Table.Th>Максимальный риск</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {top.map((n) => (
+            <Table.Tr key={n.node}>
+              <Table.Td>{n.node_name}</Table.Td>
+              <Table.Td>
+                <Group gap="xs" wrap="nowrap">
+                  <Progress value={(n.expected_failures / max) * 100} w={120} size="sm" />
+                  <Text size="sm">{n.expected_failures.toFixed(1)}</Text>
+                </Group>
+              </Table.Td>
+              <Table.Td>
+                {n.channels_at_risk} из {n.channels_total}
+              </Table.Td>
+              <Table.Td>
+                <RiskBadge level={n.risk_level} />
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  )
+}
 
 export function DashboardPage() {
   const { can } = useAuth()
@@ -126,6 +178,7 @@ export function DashboardPage() {
           )}
         </Card>
       </SimpleGrid>
+      <NodeRiskCard />
     </Stack>
   )
 }

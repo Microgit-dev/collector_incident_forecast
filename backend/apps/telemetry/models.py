@@ -93,6 +93,10 @@ class ChannelDaily(models.Model):
     numeric_max = models.FloatField("максимум", null=True)
     first_ts = models.DateTimeField("первое сообщение")
     last_ts = models.DateTimeField("последнее сообщение")
+    # Состояние основного аспекта на конец суток: каналы шлют сообщения при смене состояния,
+    # поэтому исправность канала в дни без сообщений определяется последним известным состоянием
+    last_state = models.CharField("состояние на конец суток", max_length=16, blank=True, default="")
+    first_fault_ts = models.DateTimeField("первая неисправность за сутки", null=True, blank=True)
 
     class Meta:
         verbose_name = "суточная сводка канала"

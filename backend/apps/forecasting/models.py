@@ -122,6 +122,9 @@ class Prediction(models.Model):
     summary = models.TextField("пояснение", blank=True)
     outcome = models.CharField("результат", max_length=16, choices=Outcome.choices, default=Outcome.PENDING)
     outcome_at = models.DateTimeField("результат зафиксирован", null=True, blank=True)
+    # Бэктест — прогноз, выпущенный задним числом по истории (проверка модели, демо журнала):
+    # по нему не создаются инциденты
+    is_backtest = models.BooleanField("бэктест", default=False, db_index=True)
 
     class Meta:
         verbose_name = "прогноз"
@@ -149,6 +152,8 @@ class TrainingRun(TimeStampedModel):
         MLModel, verbose_name="результат", null=True, blank=True, on_delete=models.SET_NULL
     )
     log = models.TextField("журнал", blank=True)
+    progress = models.FloatField("прогресс, %", default=0)
+    stage = models.CharField("этап", max_length=128, blank=True)
     started_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     finished_at = models.DateTimeField("завершён", null=True, blank=True)
 
@@ -156,3 +161,73 @@ class TrainingRun(TimeStampedModel):
         verbose_name = "запуск обучения"
         verbose_name_plural = "запуски обучения"
         ordering = ("-created_at",)
+
+
+class ChannelRisk(models.Model):
+    """Текущий прогноз по каналу (перезаписывается каждым циклом): схема, карточка объекта, приоритет."""
+
+    channel = models.ForeignKey("assets.Channel", on_delete=models.CASCADE, related_name="risks")
+    task = models.CharField("задача", max_length=32, choices=ForecastTask.choices)
+    as_of = models.DateTimeField("на момент")
+    probability = models.FloatField("вероятность")
+    risk_level = models.CharField("уровень риска", max_length=16, choices=RiskLevel.choices, db_index=True)
+    factors = models.JSONField("факторы риска", default=list, blank=True)
+    model = models.ForeignKey(MLModel, verbose_name="модель", null=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        verbose_name = "риск канала"
+        verbose_name_plural = "риски каналов"
+        constraints = [models.UniqueConstraint(fields=["channel", "task"], name="uniq_channel_risk")]
+
+    def __str__(self):
+        return f"{self.channel_id}: {self.probability:.0%}"
+
+
+class RiskSnapshot(models.Model):
+    """Снимок риска объекта за цикл прогноза — ряд для графика и динамики риска на схеме."""
+
+    node = models.ForeignKey("topology.Node", on_delete=models.CASCADE, related_name="risk_snapshots")
+    task = models.CharField("задача", max_length=32, choices=ForecastTask.choices)
+    as_of = models.DateTimeField("на момент", db_index=True)
+    max_probability = models.FloatField("максимальная вероятность по каналам")
+    expected_failures = models.FloatField("ожидаемое число отказов за горизонт")
+    channels_total = models.PositiveIntegerField("каналов оценено")
+    channels_at_risk = models.PositiveIntegerField("каналов с риском от среднего")
+    risk_level = models.CharField("уровень риска", max_length=16, choices=RiskLevel.choices)
+
+    class Meta:
+        verbose_name = "снимок риска объекта"
+        verbose_name_plural = "снимки риска объектов"
+        ordering = ("-as_of",)
+        indexes = [models.Index(fields=["node", "task", "-as_of"])]
+        constraints = [models.UniqueConstraint(fields=["node", "task", "as_of"], name="uniq_risk_snapshot")]
+
+    def __str__(self):
+        return f"{self.node_id}@{self.as_of:%Y-%m-%d %H:%M}: {self.risk_level}"
+
+
+class ChannelHealth(models.Model):
+    """
+    Data Health Score канала (0–100): насколько данным канала можно доверять.
+    Низкий балл снижает уверенность прогноза и сам по себе — повод для проверки канала.
+    """
+
+    channel = models.OneToOneField(
+        "assets.Channel", primary_key=True, on_delete=models.CASCADE, related_name="health"
+    )
+    computed_at = models.DateTimeField("рассчитан")
+    score = models.PositiveSmallIntegerField("балл", db_index=True)
+    # completeness, freshness, technical, stability, consistency — каждый 0..1
+    components = models.JSONField("составляющие", default=dict)
+    periodic = models.BooleanField("периодический канал", default=False)
+    expected_interval_s = models.PositiveIntegerField("ожидаемый интервал, с", null=True, blank=True)
+    last_seen_at = models.DateTimeField("последнее сообщение", null=True, blank=True)
+    silent = models.BooleanField("молчит", default=False, db_index=True)
+    silent_since = models.DateTimeField("молчит с", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "качество данных канала"
+        verbose_name_plural = "качество данных каналов"
+
+    def __str__(self):
+        return f"{self.channel_id}: {self.score}"
