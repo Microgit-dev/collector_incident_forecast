@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -20,13 +20,22 @@ class SmvuArchiveAdapter:
     key = "smvu_archive"
 
     def iter_events(
-        self, *, path: str, start: datetime | None = None, end: datetime | None = None, **_
+        self,
+        *,
+        path: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        channels: list[int] | None = None,
+        **_,
     ) -> Iterator[RawEvent]:
         lf = pl.scan_parquet(path)
+        # столбец ts в архиве — UTC: границы приводим к UTC, иначе Polars не сравнит зоны
         if start is not None:
-            lf = lf.filter(pl.col("ts") >= start)
+            lf = lf.filter(pl.col("ts") >= start.astimezone(UTC))
         if end is not None:
-            lf = lf.filter(pl.col("ts") < end)
+            lf = lf.filter(pl.col("ts") < end.astimezone(UTC))
+        if channels:
+            lf = lf.filter(pl.col("channel_ext").is_in(channels))
         frame = (
             lf.select("event_id", "channel_ext", "ts", "raw_value", "raw_alarm")
             .unique(subset=["event_id", "channel_ext", "ts", "raw_value"])

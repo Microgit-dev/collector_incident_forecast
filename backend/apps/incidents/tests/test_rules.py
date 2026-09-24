@@ -46,3 +46,32 @@ def test_unguarded_motion_is_not_an_incident(motion_channel):
     _push(motion_channel, 3, "Движения нет", raw_alarm=False)
     _push(motion_channel, 4, "Обнаружено движение", raw_alarm=True)
     assert Incident.objects.get().type == "intrusion"
+
+
+def test_short_alarm_within_one_batch_is_not_lost(motion_channel):
+    """Тревога, снятая в той же пачке консьюмера, всё равно сигнал; итоговое состояние — последнее."""
+    from datetime import timedelta
+
+    from apps.telemetry.models import ChannelState
+
+    _push(motion_channel, 1, "Движения нет", raw_alarm=False)
+    t0 = timezone.now()
+    batch = [
+        (2, "Обнаружено движение", True, t0),
+        (3, "Движения нет", False, t0 + timedelta(seconds=2)),
+    ]
+    store_readings(
+        [
+            NormalizedReading(
+                event_id=i,
+                channel_id=motion_channel.pk,
+                ts=ts,
+                raw_value=raw,
+                raw_alarm=alarm,
+                value=normalize(raw, DISCRETE, GLOBAL_RULES, alarm),
+            )
+            for i, raw, alarm, ts in batch
+        ]
+    )
+    assert Incident.objects.get().type == "intrusion"
+    assert ChannelState.objects.get(channel=motion_channel).state == "normal"
