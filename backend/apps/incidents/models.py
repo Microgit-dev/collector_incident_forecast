@@ -136,6 +136,8 @@ class Incident(TimeStampedModel):
     priority = models.FloatField("операционный приоритет", default=0, db_index=True)
     priority_factors = models.JSONField("составляющие приоритета", default=dict, blank=True)
     data_confidence = models.FloatField("уверенность данных (средний балл)", null=True, blank=True)
+    # Карточка из эмуляции смены (демонстрация аналитики): в метки обучения не попадает
+    is_emulated = models.BooleanField("эмуляция", default=False, db_index=True)
 
     class Meta:
         verbose_name = "инцидент"

@@ -9,9 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
     DJANGO_SETTINGS_MODULE=config.settings
 
-# libldap/libsasl — сборка python-ldap; libgomp1 — рантайм LightGBM; curl — healthcheck
+# libldap/libsasl — сборка python-ldap; libgomp1 — рантайм LightGBM; curl — healthcheck;
+# DejaVu — кириллица в PDF-отчётах
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libldap2-dev libsasl2-dev libgomp1 curl \
+    && apt-get install -y --no-install-recommends gcc libldap2-dev libsasl2-dev libgomp1 curl fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv

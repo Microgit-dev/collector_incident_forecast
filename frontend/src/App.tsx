@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from './auth/AuthContext'
 import { AppLayout } from './layout/AppLayout'
+import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
@@ -15,7 +16,6 @@ import { IncidentsPage } from './pages/IncidentsPage'
 import { LearningPage } from './pages/LearningPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModelsPage } from './pages/ModelsPage'
-import { PlannedPage } from './pages/PlannedPage'
 import { ReplayPage } from './pages/ReplayPage'
 import { SchemePage } from './pages/SchemePage'
 import { TeamsPage } from './pages/TeamsPage'
@@ -55,16 +55,7 @@ export function App() {
         <Route path="data-health" element={<DataHealthPage />} />
         <Route path="workorders" element={<WorkOrdersPage />} />
         <Route path="replay" element={<ReplayPage />} />
-        <Route
-          path="analytics"
-          element={
-            <PlannedPage
-              title="Аналитика"
-              epic="E6"
-              description="Статистика по типам инцидентов, сезонность, качество прогнозов, отчёты PDF/XLSX."
-            />
-          }
-        />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="data-import" element={<DataImportPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
