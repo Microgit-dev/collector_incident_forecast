@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { CHANNEL_STATE, INCIDENT_TYPE, RISK } from '../api/labels'
-import type { IncidentType, NodeRisk, Overview, RiskLevel } from '../api/types'
+import type { FloodStats, IncidentType, NodeRisk, Overview, RiskLevel } from '../api/types'
 import { RiskBadge } from '../components/badges'
 
 function Kpi({ label, value, hint, color, to }: { label: string; value: number; hint?: string; color?: string; to?: string }) {
@@ -36,6 +36,64 @@ function Kpi({ label, value, hint, color, to }: { label: string; value: number; 
 }
 
 const LEVELS: RiskLevel[] = ['critical', 'high', 'medium', 'low']
+
+function FloodCard() {
+  const { data } = useQuery({
+    queryKey: ['flood'],
+    queryFn: () => api<FloodStats>('/analytics/flood/', { query: { days: 30 } }),
+    staleTime: 10 * 60_000,
+  })
+  if (!data?.signals || !data.period) return null
+  return (
+    <Card withBorder radius="md">
+      <Group justify="space-between" mb="xs">
+        <Text fw={600}>Снижение нагрузки на диспетчера</Text>
+        <Text size="xs" c="dimmed">
+          {dayjs(data.period.from).format('DD.MM')} — {dayjs(data.period.to).format('DD.MM.YYYY')}
+        </Text>
+      </Group>
+      <Group align="flex-end" gap="xl" wrap="wrap">
+        <div>
+          <Text size="xs" c="dimmed">
+            Сигналов потока
+          </Text>
+          <Text fz={28} fw={700}>
+            {data.signals.toLocaleString('ru-RU')}
+          </Text>
+          <Text size="xs" c="dimmed">
+            ≈ {data.per_day?.signals.toLocaleString('ru-RU')} в сутки
+          </Text>
+        </div>
+        <Text fz={28} c="dimmed">
+          →
+        </Text>
+        <div>
+          <Text size="xs" c="dimmed">
+            Карточек-эпизодов
+          </Text>
+          <Text fz={28} fw={700} c="teal">
+            {data.episodes.toLocaleString('ru-RU')}
+          </Text>
+          <Text size="xs" c="dimmed">
+            ≈ {data.per_day?.episodes} в сутки
+          </Text>
+        </div>
+        <div>
+          <Text size="xs" c="dimmed">
+            Сокращение
+          </Text>
+          <Text fz={28} fw={700}>
+            ×{data.factor}
+          </Text>
+        </div>
+      </Group>
+      <Text size="xs" c="dimmed" mt="xs">
+        Переходы каналов в тревогу, неисправность, обесточивание и «не определено» склеиваются в эпизоды по объекту и
+        контуру риска, пока пауза между сигналами не больше 30 минут.
+      </Text>
+    </Card>
+  )
+}
 
 function NodeRiskCard() {
   const { data } = useQuery({
@@ -178,6 +236,7 @@ export function DashboardPage() {
           )}
         </Card>
       </SimpleGrid>
+      <FloodCard />
       <NodeRiskCard />
     </Stack>
   )

@@ -71,7 +71,6 @@ class IncidentSerializer(serializers.ModelSerializer):
     node_name = serializers.CharField(source="node.name", read_only=True)
     responsible_node_name = serializers.CharField(source="responsible_node.name", read_only=True)
     assigned_to_name = serializers.CharField(source="assigned_to.get_full_name", default=None, read_only=True)
-    alerts_count = serializers.IntegerField(source="alerts.count", read_only=True)
 
     class Meta:
         model = Incident
@@ -96,19 +95,42 @@ class IncidentSerializer(serializers.ModelSerializer):
             "assigned_to",
             "assigned_to_name",
             "escalation_level",
-            "alerts_count",
+            "contour",
+            "signals_count",
+            "channels_count",
+            "first_signal_at",
+            "last_signal_at",
+            "priority",
+            "data_confidence",
         )
         read_only_fields = fields
 
 
 class IncidentDetailSerializer(IncidentSerializer):
-    alerts = AlertSerializer(many=True, read_only=True)
+    alerts = serializers.SerializerMethodField()
     decisions = DecisionSerializer(many=True, read_only=True)
     events = IncidentEventSerializer(many=True, read_only=True)
 
     class Meta(IncidentSerializer.Meta):
-        fields = (*IncidentSerializer.Meta.fields, "alerts", "decisions", "events")
+        fields = (
+            *IncidentSerializer.Meta.fields,
+            "hypotheses",
+            "actions",
+            "priority_factors",
+            "alerts",
+            "decisions",
+            "events",
+        )
         read_only_fields = fields
+
+    def get_alerts(self, obj):
+        # В каскаде бывают сотни сигналов: карточке достаточно последних, счётчик — в signals_count
+        return AlertSerializer(
+            obj.alerts.select_related("channel").order_by("-raised_at")[:ALERTS_IN_CARD], many=True
+        ).data
+
+
+ALERTS_IN_CARD = 100
 
 
 class DecideSerializer(serializers.Serializer):
@@ -134,9 +156,11 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         "is_forecast": ["exact"],
         "assigned_to": ["exact", "isnull"],
         "opened_at": ["gte", "lt"],
+        "contour": ["exact"],
     }
     search_fields = ("title", "node__name")
-    ordering_fields = ("opened_at", "severity", "ack_deadline")
+    ordering_fields = ("opened_at", "severity", "ack_deadline", "priority", "last_signal_at", "signals_count")
+    ordering = ("-priority", "-last_signal_at")  # очередь диспетчера — по операционному приоритету
 
     def get_serializer_class(self):
         return IncidentDetailSerializer if self.action == "retrieve" else IncidentSerializer
@@ -144,7 +168,7 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if self.action == "retrieve":
-            qs = qs.prefetch_related("alerts__channel", "decisions__decided_by", "events__actor")
+            qs = qs.prefetch_related("decisions__decided_by", "events__actor")
         return qs
 
     def retrieve(self, request, *args, **kwargs):
@@ -195,6 +219,13 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         data = DecideSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         return self._run(request, "decide", services.decide, **data.validated_data)
+
+    @action(detail=True, methods=["post"], permission_classes=[require_perm("incidents.change_incident")])
+    def checklist(self, request, pk=None):
+        code = request.data.get("code", "")
+        return self._run(
+            request, "checklist", services.mark_action, code, done=bool(request.data.get("done", True))
+        )
 
     @action(detail=True, methods=["post"], permission_classes=[require_perm("incidents.escalate_incident")])
     def escalate(self, request, pk=None):

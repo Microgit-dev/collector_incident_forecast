@@ -102,7 +102,28 @@ export interface Incident {
   assigned_to: number | null
   assigned_to_name: string | null
   escalation_level: number
-  alerts_count: number
+  contour: 'physical' | 'technical'
+  signals_count: number
+  channels_count: number
+  first_signal_at: string | null
+  last_signal_at: string | null
+  priority: number
+  data_confidence: number | null
+}
+
+export interface Hypothesis {
+  code: string
+  title: string
+  weight: number
+  evidence: string[]
+}
+
+export interface ActionStep {
+  code: string
+  title: string
+  done: boolean
+  done_by: string | null
+  done_at: string | null
 }
 
 export interface Alert {
@@ -139,6 +160,18 @@ export interface IncidentDetail extends Incident {
   decisions: Decision[]
   events: IncidentEvent[]
   viewed_by: Viewer[]
+  hypotheses: Hypothesis[]
+  actions: ActionStep[]
+  priority_factors: Record<string, number>
+}
+
+export interface FloodStats {
+  period?: { from: string; to: string; days: number }
+  signals: number
+  episodes: number
+  factor: number | null
+  per_day?: { signals: number; episodes: number }
+  by_contour?: Record<string, { signals: number; episodes: number; largest_episode: number }>
 }
 
 export interface DecisionReason {

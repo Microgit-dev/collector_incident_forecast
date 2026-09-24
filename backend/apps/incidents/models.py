@@ -104,6 +104,26 @@ class Incident(TimeStampedModel):
     )
     escalation_level = models.PositiveSmallIntegerField("уровень эскалации", default=0)
 
+    # Эпизод: сколько сигналов и каналов склеено в карточку, первый и последний сигнал
+    contour = models.CharField(
+        "контур риска",
+        max_length=16,
+        choices=[("physical", "Физический"), ("technical", "Технический")],
+        default="technical",
+        db_index=True,
+    )
+    signals_count = models.PositiveIntegerField("сигналов", default=0)
+    channels_count = models.PositiveIntegerField("каналов", default=0)
+    first_signal_at = models.DateTimeField("первый сигнал", null=True, blank=True)
+    last_signal_at = models.DateTimeField("последний сигнал", null=True, blank=True, db_index=True)
+    # [{"code", "title", "weight", "evidence": [...]}] — первые три, веса в сумме 1
+    hypotheses = models.JSONField("гипотезы первопричины", default=list, blank=True)
+    # [{"code", "title", "done", "done_by", "done_at"}]
+    actions = models.JSONField("следующие действия", default=list, blank=True)
+    priority = models.FloatField("операционный приоритет", default=0, db_index=True)
+    priority_factors = models.JSONField("составляющие приоритета", default=dict, blank=True)
+    data_confidence = models.FloatField("уверенность данных (средний балл)", null=True, blank=True)
+
     class Meta:
         verbose_name = "инцидент"
         verbose_name_plural = "инциденты"
@@ -206,6 +226,8 @@ class IncidentEvent(models.Model):
     class Kind(models.TextChoices):
         OPENED = "opened", "Открыт"
         ALERT_ATTACHED = "alert_attached", "Добавлен сигнал"
+        TYPE_CHANGED = "type_changed", "Уточнён тип"
+        ACTION_DONE = "action_done", "Выполнен шаг"
         ACKNOWLEDGED = "acknowledged", "Принят"
         ASSIGNED = "assigned", "Взят в работу"
         RELEASED = "released", "Освобождён"

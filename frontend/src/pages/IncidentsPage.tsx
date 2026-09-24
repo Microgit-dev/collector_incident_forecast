@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, type Page } from '../api/client'
 import { INCIDENT_STATUS, INCIDENT_TYPE, RISK } from '../api/labels'
 import type { Incident } from '../api/types'
-import { RiskBadge, StatusBadge } from '../components/badges'
+import { ContourBadge, PriorityBadge, RiskBadge, StatusBadge } from '../components/badges'
 
 const PAGE_SIZE = 25
 const OPEN = ['new', 'acknowledged', 'in_progress']
@@ -34,7 +34,7 @@ export function IncidentsPage() {
           search: debounced,
           page,
           page_size: PAGE_SIZE,
-          ordering: '-opened_at',
+          ordering: '-priority,-last_signal_at',
         },
       }),
     placeholderData: keepPreviousData,
@@ -71,6 +71,7 @@ export function IncidentsPage() {
             <Table highlightOnHover verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
+                  <Table.Th>Приоритет</Table.Th>
                   <Table.Th>Открыт</Table.Th>
                   <Table.Th>Уровень</Table.Th>
                   <Table.Th>Инцидент</Table.Th>
@@ -82,6 +83,9 @@ export function IncidentsPage() {
               <Table.Tbody>
                 {query.data?.results.map((incident) => (
                   <Table.Tr key={incident.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/incidents/${incident.id}`)}>
+                    <Table.Td>
+                      <PriorityBadge value={incident.priority} />
+                    </Table.Td>
                     <Table.Td>
                       <Text size="sm">{dayjs(incident.opened_at).format('DD.MM HH:mm')}</Text>
                     </Table.Td>
@@ -95,8 +99,10 @@ export function IncidentsPage() {
                       <Group gap={4}>
                         <Text size="xs" c="dimmed">
                           {INCIDENT_TYPE[incident.type]}
-                          {incident.alerts_count > 1 && ` · сигналов: ${incident.alerts_count}`}
+                          {incident.signals_count > 1 &&
+                            ` · сигналов: ${incident.signals_count}, каналов: ${incident.channels_count}`}
                         </Text>
+                        <ContourBadge contour={incident.contour} />
                         {incident.is_forecast && (
                           <Badge size="xs" variant="outline">
                             прогноз

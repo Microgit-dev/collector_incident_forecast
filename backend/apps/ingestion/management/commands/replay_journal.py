@@ -1,5 +1,6 @@
 import dataclasses
 import time
+from datetime import datetime
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -17,7 +18,15 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("path", help="CSV журнала, например /data/dataset/журнал_событий_пример.csv")
+        parser.add_argument(
+            "path",
+            help="CSV журнала (/data/dataset/журнал_событий_пример.csv) или архив "
+            "(/artifacts/archive/journal_2026.parquet с --adapter smvu_archive)",
+        )
+        parser.add_argument(
+            "--from", dest="start", type=datetime.fromisoformat, help="начало интервала (архив)"
+        )
+        parser.add_argument("--to", dest="end", type=datetime.fromisoformat, help="конец интервала (архив)")
         parser.add_argument("--adapter", default="smvu_csv")
         parser.add_argument(
             "--speed", type=float, default=60.0, help="Во сколько раз быстрее реального времени"
@@ -30,12 +39,12 @@ class Command(BaseCommand):
             "поток выглядит «живым», и реактивные правила создают инциденты",
         )
 
-    def handle(self, *args, path, adapter, speed, limit, historical, **options):
+    def handle(self, *args, path, adapter, speed, limit, historical, start=None, end=None, **options):
         producer = make_producer()
         topic = settings.KAFKA["TOPIC_RAW_EVENTS"]
         prev_ts = None
         sent = 0
-        for event in REGISTRY[adapter].iter_events(path=path):
+        for event in REGISTRY[adapter].iter_events(path=path, start=start, end=end):
             if prev_ts is not None and speed > 0:
                 gap = (event.ts - prev_ts).total_seconds() / speed
                 if gap > 0:

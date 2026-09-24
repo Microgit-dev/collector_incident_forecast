@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import timedelta
 
 from django.dispatch import receiver
@@ -19,8 +20,9 @@ from apps.forecasting.models import RiskLevel
 from apps.normalization.domain.engine import State
 from apps.telemetry.signals import channel_states_changed
 
+from .domain.correlation import PHYSICAL, TECHNICAL, contour
 from .models import Alert, IncidentType
-from .services import raise_alert
+from .services import SignalIn, register_signals
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +49,14 @@ _ALARM_SEVERITY = {
 
 @receiver(channel_states_changed)
 def on_states_changed(sender, changes, **kwargs):
+    """Пачка смен состояния → сигналы, сгруппированные по объекту и контуру → эпизоды."""
     threshold = timezone.now() - RECENCY
     fresh = [c for c in changes if c.ts >= threshold and c.current != c.previous]
     if not fresh:
         return
     channels = Channel.objects.select_related("sensor_type", "node").in_bulk({c.channel_id for c in fresh})
+    groups: dict[tuple, list[SignalIn]] = defaultdict(list)
+    nodes = {}
     for change in fresh:
         channel = channels.get(change.channel_id)
         if channel is None:
@@ -67,20 +72,24 @@ def on_states_changed(sender, changes, **kwargs):
         elif change.current == State.POWER_LOSS:
             incident_type, severity = IncidentType.POWER, RiskLevel.MEDIUM
             title = f"Потеря питания: {channel.name}"
+        elif change.current == State.UNKNOWN:
+            incident_type, severity = IncidentType.COMMUNICATION, RiskLevel.LOW
+            title = f"Состояние не определено: {channel.name}"
         else:
             continue
-        raise_alert(
-            type=incident_type,
-            severity=severity,
-            node=channel.node,
-            channel=channel,
-            title=title,
-            source=Alert.Source.RULE,
-            raised_at=change.ts,
-            details={
-                "facet": change.facet,
-                "state": change.current,
-                "previous": change.previous,
-                "numeric": change.numeric,
-            },
+        # Физические угрозы группируются по типу, технические — одним эпизодом объекта
+        key = (channel.node_id, incident_type if contour(incident_type) == PHYSICAL else TECHNICAL)
+        nodes[channel.node_id] = channel.node
+        groups[key].append(
+            SignalIn(
+                title=title,
+                severity=severity,
+                ts=change.ts,
+                channel=channel,
+                state=change.current,
+                details={"facet": change.facet, "previous": change.previous, "numeric": change.numeric},
+            )
         )
+    for (node_id, kind), signals in groups.items():
+        incident_type = kind if kind != TECHNICAL else IncidentType.SENSOR_FAILURE
+        register_signals(type=incident_type, node=nodes[node_id], source=Alert.Source.RULE, signals=signals)
