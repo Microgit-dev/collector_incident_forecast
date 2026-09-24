@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from django.contrib.auth import get_user_model
@@ -21,6 +22,8 @@ from apps.forecasting.models import Prediction, RiskLevel
 from apps.notifications.services import notify
 from apps.topology.models import Node
 
+from . import analysis
+from .domain.correlation import PHYSICAL, contour
 from .models import (
     Alert,
     Decision,
@@ -33,7 +36,7 @@ from .models import (
 
 User = get_user_model()
 
-# Сигналы одного типа по одному объекту в этом окне склеиваются в один инцидент
+# Сигнал присоединяется к эпизоду, если с последнего сигнала эпизода прошло не больше окна
 GROUPING_WINDOW = timedelta(minutes=30)
 SEVERITY_ORDER = [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL]
 DEFAULT_ACK_MINUTES = {RiskLevel.LOW: 240, RiskLevel.MEDIUM: 60, RiskLevel.HIGH: 15, RiskLevel.CRITICAL: 5}
@@ -107,7 +110,117 @@ def _notify(incident: Incident, text: str) -> None:
 # ---------- жизненный цикл ----------
 
 
+@dataclass(frozen=True, slots=True)
+class SignalIn:
+    """Сигнал на входе: смена состояния канала, прогноз выше порога, молчание."""
+
+    title: str
+    severity: str
+    ts: datetime
+    channel: object | None = None
+    state: str = ""
+    details: dict = field(default_factory=dict)
+    prediction: Prediction | None = None
+    probability: float | None = None
+    horizon_hours: int | None = None
+
+
+def _grouping_filter(node: Node, incident_type: str, is_forecast: bool) -> Q:
+    """Физические угрозы и прогнозы склеиваются внутри своего типа, технические — в один эпизод объекта."""
+    q = Q(
+        node=node, is_forecast=is_forecast, contour=contour(incident_type), status__in=Incident.OPEN_STATUSES
+    )
+    if contour(incident_type) == PHYSICAL or is_forecast:
+        q &= Q(type=incident_type)
+    return q
+
+
 @transaction.atomic
+def register_signals(*, type: str, node: Node, source: str, signals: list[SignalIn]) -> list[Alert]:
+    """
+    Сигналы → эпизод. Сигнал склеивается с открытой карточкой того же объекта и контура,
+    если с её последнего сигнала прошло не больше GROUPING_WINDOW (окно скользит: каскад,
+    идущий часами, остаётся одной карточкой). Уведомление — только при открытии карточки,
+    росте уровня или уточнении типа, а не на каждый сигнал.
+    """
+    if not signals:
+        return []
+    signals = sorted(signals, key=lambda x: x.ts)
+    first, last = signals[0], signals[-1]
+    is_forecast = source == Alert.Source.FORECAST
+    severity = max((x.severity for x in signals), key=SEVERITY_ORDER.index)
+    incident = (
+        Incident.objects.select_for_update()
+        .filter(_grouping_filter(node, type, is_forecast), last_signal_at__gte=first.ts - GROUPING_WINDOW)
+        .order_by("-last_signal_at")
+        .first()
+    )
+    created = incident is None
+    bumped = False
+    if created:
+        incident = Incident.objects.create(
+            type=type,
+            contour=contour(type),
+            severity=severity,
+            node=node,
+            responsible_node=first_staffed_node(node),
+            title=first.title,
+            opened_at=first.ts,
+            first_signal_at=first.ts,
+            last_signal_at=last.ts,
+            ack_deadline=_ack_deadline(severity, first.ts),
+            is_forecast=is_forecast,
+            probability=first.probability,
+            horizon_hours=first.horizon_hours,
+        )
+        _event(incident, IncidentEvent.Kind.OPENED, text=first.title)
+    elif SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(incident.severity):
+        incident.severity, bumped = severity, True
+
+    alerts = Alert.objects.bulk_create(
+        [
+            Alert(
+                incident=incident,
+                source=source,
+                type=type,
+                severity=x.severity,
+                node=node,
+                channel=x.channel,
+                prediction=x.prediction,
+                raised_at=x.ts,
+                title=x.title[:255],
+                details={"state": x.state, **x.details} if x.state else x.details,
+            )
+            for x in signals
+        ]
+    )
+    incident.signals_count = incident.alerts.count()
+    incident.channels_count = incident.alerts.exclude(channel=None).values("channel").distinct().count()
+    incident.first_signal_at = min(incident.first_signal_at or first.ts, first.ts)
+    incident.last_signal_at = max(incident.last_signal_at or last.ts, last.ts)
+    if is_forecast and first.probability is not None:
+        incident.probability = max(incident.probability or 0, max(x.probability or 0 for x in signals))
+    if not created:
+        text = last.title if len(signals) == 1 else f"Добавлено сигналов: {len(signals)}"
+        _event(incident, IncidentEvent.Kind.ALERT_ATTACHED, text=text, alerts=len(signals))
+
+    previous_type, previous_severity = incident.type, incident.severity
+    analysis.refresh(incident)
+    if SEVERITY_ORDER.index(incident.severity) > SEVERITY_ORDER.index(previous_severity):
+        bumped = True
+        tighter = _ack_deadline(incident.severity, last.ts)
+        incident.ack_deadline = min(incident.ack_deadline, tighter) if incident.ack_deadline else tighter
+    incident.save()
+    if created:
+        _notify(incident, incident.title)
+    elif bumped or incident.type != previous_type:
+        _notify(
+            incident,
+            f"Уточнено: {incident.get_type_display()}, {incident.get_severity_display().lower()} уровень",
+        )
+    return alerts
+
+
 def raise_alert(
     *,
     type: str,
@@ -122,53 +235,37 @@ def raise_alert(
     probability: float | None = None,
     horizon_hours: int | None = None,
 ) -> Alert:
-    raised_at = raised_at or timezone.now()
-    incident = (
-        Incident.objects.select_for_update()
-        .filter(
-            node=node,
-            type=type,
-            status__in=Incident.OPEN_STATUSES,
-            opened_at__gte=raised_at - GROUPING_WINDOW,
-        )
-        .order_by("-opened_at")
-        .first()
-    )
-    created = incident is None
-    if created:
-        incident = Incident.objects.create(
-            type=type,
-            severity=severity,
-            node=node,
-            responsible_node=first_staffed_node(node),
-            title=title,
-            opened_at=raised_at,
-            ack_deadline=_ack_deadline(severity, raised_at),
-            is_forecast=source == Alert.Source.FORECAST,
-            probability=probability,
-            horizon_hours=horizon_hours,
-        )
-        _event(incident, IncidentEvent.Kind.OPENED, text=title)
-    elif SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(incident.severity):
-        incident.severity = severity
-        incident.save(update_fields=["severity", "updated_at"])
-
-    alert = Alert.objects.create(
-        incident=incident,
-        source=source,
-        type=type,
-        severity=severity,
-        node=node,
-        channel=channel,
-        prediction=prediction,
-        raised_at=raised_at,
+    """Один сигнал (прогноз, молчание, ручной ввод) — частный случай register_signals."""
+    signal = SignalIn(
         title=title,
-        details=details or {},
+        severity=severity,
+        ts=raised_at or timezone.now(),
+        channel=channel,
+        state=(details or {}).get("state", ""),
+        details={k: v for k, v in (details or {}).items() if k != "state"},
+        prediction=prediction,
+        probability=probability,
+        horizon_hours=horizon_hours,
     )
-    if not created:
-        _event(incident, IncidentEvent.Kind.ALERT_ATTACHED, text=title, alert_id=alert.pk)
-    _notify(incident, title if created else f"Новый сигнал: {title}")
-    return alert
+    return register_signals(type=type, node=node, source=source, signals=[signal])[0]
+
+
+@transaction.atomic
+def mark_action(incident: Incident, user, code: str, done: bool = True) -> Incident:
+    """Отметка шага чек-листа «что делать»; попадает в хронологию карточки."""
+    incident = Incident.objects.select_for_update().get(pk=incident.pk)
+    for step in incident.actions:
+        if step["code"] == code:
+            step["done"] = done
+            step["done_by"] = (user.get_full_name() or user.get_username()) if done else None
+            step["done_at"] = timezone.now().isoformat() if done else None
+            if done:
+                _event(incident, IncidentEvent.Kind.ACTION_DONE, actor=user, text=step["title"])
+            break
+    else:
+        raise IncidentError("Нет такого шага")
+    incident.save(update_fields=["actions", "updated_at"])
+    return incident
 
 
 @transaction.atomic

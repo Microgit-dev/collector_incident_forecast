@@ -27,6 +27,7 @@ import { INCIDENT_TYPE, OUTCOME } from '../api/labels'
 import type { DecisionOutcome, DecisionReason, IncidentDetail } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
+import { ActionsCard, EpisodeCard, HypothesesCard } from '../components/EpisodePanels'
 
 function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail; opened: boolean; onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -178,6 +179,9 @@ export function IncidentDetailPage() {
       <Grid>
         <Grid.Col span={{ base: 12, md: 7 }}>
           <Stack>
+            <EpisodeCard incident={incident} />
+            <HypothesesCard incident={incident} />
+            <ActionsCard incident={incident} canEdit={open && !lockedByOther && can('incidents.change_incident')} />
             <Card withBorder radius="md">
               <Text fw={600} mb="xs">
                 Ответственность
@@ -197,7 +201,9 @@ export function IncidentDetailPage() {
             </Card>
             <Card withBorder radius="md">
               <Text fw={600} mb="xs">
-                Сигналы ({incident.alerts.length})
+                Сигналы ({incident.signals_count > incident.alerts.length
+                  ? `последние ${incident.alerts.length} из ${incident.signals_count}`
+                  : incident.alerts.length})
               </Text>
               <Stack gap="xs">
                 {incident.alerts.map((alert) => (

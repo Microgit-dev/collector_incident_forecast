@@ -62,6 +62,20 @@ export const PREDICTION_OUTCOME: Record<PredictionOutcome, { label: string; colo
   prevented: { label: 'Предотвращён', color: 'blue' },
 }
 
+export const CONTOUR: Record<string, { label: string; color: string }> = {
+  physical: { label: 'Физический', color: 'red' },
+  technical: { label: 'Технический', color: 'blue' },
+}
+
+export const PRIORITY_FACTOR: Record<string, string> = {
+  severity: 'Тяжесть',
+  contour: 'Контур',
+  criticality: 'Критичность объекта',
+  confidence: 'Уверенность данных',
+  urgency: 'Срочность',
+  probability: 'Вероятность',
+}
+
 export const HEALTH_COMPONENT: Record<string, string> = {
   completeness: 'Полнота',
   freshness: 'Свежесть',
