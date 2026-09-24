@@ -157,33 +157,36 @@ def data_clock() -> datetime | None:
     с горсткой каналов (тестовый прогон, ручная загрузка файла) полными не считаются:
     по ним признаки за 7–90 суток были бы пустыми.
     """
+    from django.db.models import Max
     from django.utils import timezone
 
+    from apps.telemetry.models import ChannelDaily, Reading
+
     day = last_complete_day()
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT max(ts) FROM telemetry_reading WHERE ts <= now()")
-        last_reading = cursor.fetchone()[0]
     now = timezone.now()
+    last_reading = Reading.objects.filter(ts__lte=now).aggregate(t=Max("ts"))["t"]
     if day is None:
         return min(last_reading, now) if last_reading else None
     today = timezone.localdate()
     if day >= today - timedelta(days=1) and last_reading:
         return min(last_reading, now)
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT max(last_ts) FROM telemetry_channeldaily WHERE day = %s", [day])
-        return cursor.fetchone()[0]
+    return ChannelDaily.objects.filter(day=day).aggregate(t=Max("last_ts"))["t"]
 
 
 def last_complete_day() -> date | None:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT day, count(*) FROM telemetry_channeldaily "
-            "WHERE day > (SELECT max(day) FROM telemetry_channeldaily) - 400 GROUP BY day ORDER BY day"
-        )
-        rows = cursor.fetchall()
-    if not rows:
+    from django.db.models import Count, Max
+
+    from apps.telemetry.models import ChannelDaily
+
+    last = ChannelDaily.objects.aggregate(d=Max("day"))["d"]
+    if last is None:
         return None
-    counts = dict(rows)
+    counts = dict(
+        ChannelDaily.objects.filter(day__gt=last - timedelta(days=400))
+        .order_by()
+        .values_list("day")
+        .annotate(n=Count("channel"))
+    )
     median = sorted(counts.values())[len(counts) // 2]
     for day in sorted(counts, reverse=True):
         window = [day - timedelta(days=k) for k in range(CONTINUITY_DAYS)]

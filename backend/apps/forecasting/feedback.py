@@ -80,6 +80,62 @@ DEFAULT_RULES = [
         "Внешнее воздействие на физический датчик — к отказу датчика не относится.",
     ),
     (
+        "cause-sensor_fault",
+        FeedbackEffect.POSITIVE,
+        2.0,
+        True,
+        "Диспетчер указал «неисправность датчика»: подтверждённый отказ канала.",
+    ),
+    (
+        "cause-communication",
+        FeedbackEffect.NEGATIVE,
+        1.5,
+        True,
+        "Причина — потеря связи: «неисправен» в журнале не означает отказ датчика.",
+    ),
+    (
+        "cause-power",
+        FeedbackEffect.NEGATIVE,
+        1.5,
+        True,
+        "Причина — обесточивание: датчик исправен, отказа не было.",
+    ),
+    (
+        "cause-works",
+        FeedbackEffect.EXCLUDE,
+        1.0,
+        True,
+        "Работы на объекте: состояния каналов в это время не отражают их исправность.",
+    ),
+    (
+        "cause-false_alarm",
+        FeedbackEffect.IGNORE,
+        1.0,
+        True,
+        "Ложное срабатывание без уточнения: для отказа датчика неоднозначно — уточните причиной.",
+    ),
+    (
+        "cause-external",
+        FeedbackEffect.IGNORE,
+        1.0,
+        True,
+        "Внешнее воздействие на физический датчик — к отказу датчика не относится.",
+    ),
+    (
+        "cause-real_event",
+        FeedbackEffect.IGNORE,
+        1.0,
+        True,
+        "Реальное событие (пожар, газ, вода, доступ) — к отказу датчика не относится.",
+    ),
+    (
+        "cause-insufficient_data",
+        FeedbackEffect.IGNORE,
+        1.0,
+        True,
+        "Недостаточно данных для вывода — метку не ставим.",
+    ),
+    (
         PREVENTED,
         FeedbackEffect.EXCLUDE,
         1.0,
@@ -90,9 +146,10 @@ DEFAULT_RULES = [
 
 
 def seed_rules() -> int:
-    from apps.incidents.models import DecisionReason
+    from apps.incidents.models import DecisionCause, DecisionReason
 
     titles = dict(DecisionReason.objects.values_list("code", "name"))
+    titles |= {f"cause-{value}": f"Что произошло: {label.lower()}" for value, label in DecisionCause.choices}
     created = 0
     for code, effect, weight, auto, text in DEFAULT_RULES:
         _, new = FeedbackRule.objects.get_or_create(
@@ -119,11 +176,19 @@ def labels_from_decision(decision) -> int:
     from apps.incidents.models import DecisionOutcome
 
     incident = decision.incident
-    code = decision.reason.code if decision.reason else None
+    # Приоритет: предотвращённый прогноз, затем «что произошло», затем причина решения
+    codes = [
+        f"cause-{decision.cause}" if decision.cause else None,
+        decision.reason.code if decision.reason else None,
+    ]
     if incident.is_forecast and decision.outcome == DecisionOutcome.RESOLVED:
-        code = PREVENTED
-    rule = FeedbackRule.objects.filter(code=code, enabled=True).first() if code else None
-    if rule is None or rule.effect == FeedbackEffect.IGNORE:
+        codes.insert(0, PREVENTED)
+    rules = {r.code: r for r in FeedbackRule.objects.filter(code__in=[c for c in codes if c], enabled=True)}
+    rule = next(
+        (rules[c] for c in codes if c in rules and rules[c].effect != FeedbackEffect.IGNORE),
+        None,
+    )
+    if rule is None:
         return 0
     status = FeedbackLabel.Status.ACCEPTED if rule.auto_accept else FeedbackLabel.Status.PENDING
     first_seen: dict[int, tuple] = {}

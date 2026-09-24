@@ -1,4 +1,4 @@
-import type { DecisionOutcome, IncidentStatus, IncidentType, PredictionOutcome, RiskLevel } from './types'
+import type { DecisionCause, DecisionOutcome, IncidentStatus, IncidentType, PredictionOutcome, RiskLevel } from './types'
 
 export const RISK: Record<RiskLevel, { label: string; color: string }> = {
   low: { label: 'Низкий', color: 'gray' },
@@ -82,4 +82,24 @@ export const HEALTH_COMPONENT: Record<string, string> = {
   technical: 'Время в исправном состоянии',
   stability: 'Стабильность частоты',
   consistency: 'Согласованность с соседями',
+}
+
+export const TASK: Record<string, string> = {
+  sensor_failure: 'Отказ датчика',
+  gas: 'Загазованность',
+  flood: 'Подтопление',
+  fire: 'Пожар (индикатор)',
+  intrusion: 'НСД (индикатор)',
+}
+
+// Что произошло — обратная связь диспетчера (ТЗ §12), подсказка — как это учтёт модель отказа датчика
+export const CAUSE: Record<DecisionCause, { label: string; hint: string }> = {
+  sensor_fault: { label: 'Неисправность датчика', hint: 'подтверждённый отказ канала — пример для обучения' },
+  communication: { label: 'Потеря связи', hint: 'канал исправен, «неисправен» в журнале — от связи' },
+  power: { label: 'Обесточивание', hint: 'канал исправен, пропадало питание' },
+  false_alarm: { label: 'Ложное срабатывание', hint: 'угрозы не было' },
+  external: { label: 'Внешнее воздействие', hint: 'нагрев, конденсат, пыль, вибрация' },
+  works: { label: 'Работы на объекте', hint: 'эти сутки исключаются из обучения' },
+  real_event: { label: 'Реальное событие', hint: 'угроза подтвердилась' },
+  insufficient_data: { label: 'Недостаточно данных', hint: 'вывод сделать нельзя — метка не ставится' },
 }

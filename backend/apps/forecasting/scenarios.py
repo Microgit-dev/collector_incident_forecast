@@ -183,9 +183,11 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
         summary = f"{TITLES[task]} на объекте «{node.name}»: индекс {a.score:.2f}. " + "; ".join(
             f["title"] for f in a.factors
         )
-        current = Prediction.objects.filter(
-            task=task, node_id=node_id, outcome=Prediction.Outcome.PENDING, valid_until__gt=as_of
-        ).first()
+        journal = Prediction.objects.filter(task=task, node_id=node_id, is_backtest=backtest)
+        # Повторный прогон бэктеста за тот же момент не должен дублировать запись, даже с проставленным исходом
+        if journal.filter(issued_at=as_of).exists():
+            continue
+        current = journal.filter(outcome=Prediction.Outcome.PENDING, valid_until__gt=as_of).first()
         if current and LEVEL_RANK.index(lvl) <= LEVEL_RANK.index(current.risk_level):
             continue
         if current:

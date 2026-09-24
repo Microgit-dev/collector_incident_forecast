@@ -13,6 +13,40 @@ class OverviewView(APIView):
         return Response(overview(request.user))
 
 
+class LiveView(APIView):
+    """Главный экран: сигналы за окно → эпизоды → требуют действия, активные риски."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.forecasting.data import data_clock
+
+        from ..live import active_risks, stream
+
+        minutes = min(max(int(request.query_params.get("minutes", 10)), 1), 24 * 60)
+        return Response(
+            stream(request.user, minutes) | {"risks": active_risks(request.user), "data_clock": data_clock()}
+        )
+
+
+class SchemeView(APIView):
+    """Линейная схема коллекторов по пикетам (GeoJSON в схематических координатах)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from ..scheme import scheme
+
+        params = request.query_params
+        try:
+            complex_id = int(params["complex"]) if params.get("complex") else None
+            bin_size = int(params["bin"]) if params.get("bin") else None
+        except ValueError:
+            return Response({"detail": "Неверные параметры"}, status=400)
+        task = params.get("task") or None
+        return Response(scheme(request.user, complex_id=complex_id, task=task, bin_size=bin_size))
+
+
 class FloodView(APIView):
     """Снижение нагрузки: сигналы потока → эпизоды за период до «времени данных»."""
 

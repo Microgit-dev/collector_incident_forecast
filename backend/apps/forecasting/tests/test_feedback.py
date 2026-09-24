@@ -184,3 +184,51 @@ def test_analyst_reviews_labels_in_bulk_and_dispatcher_cannot(tree, make_user, r
     assert patched.status_code == 200
     settings = client.patch("/api/v1/forecasting/learning-settings/", {"auto_activate": False}, format="json")
     assert settings.json()["auto_activate"] is False
+
+
+def test_cause_takes_precedence_over_reason(tree, make_user, reasons):
+    """«Что произошло: потеря связи» важнее причины «неисправность датчика»: отказа не было."""
+    user = make_user("disp", "unit_dispatcher", tree["house"])
+    ch = Channel.objects.create(external_id=7, node=tree["house"], name="Газ 7")
+    incident = services.raise_alert(
+        type=IncidentType.SENSOR_FAILURE,
+        severity="medium",
+        node=tree["house"],
+        channel=ch,
+        title="Сбой",
+        source=Alert.Source.RULE,
+    ).incident
+    services.take(incident, user)
+    decision = services.decide(
+        incident,
+        user,
+        outcome=DecisionOutcome.FALSE_ALARM,
+        reason=DecisionReason.objects.get(code="false-sensor-fault"),
+        cause="communication",
+    )
+    label = FeedbackLabel.objects.get(decision=decision)
+    assert label.effect == "negative" and label.rule.code == "cause-communication"
+    assert decision.forecast_useful is None  # не прогнозная карточка
+    assert "потеря связи" in incident.events.order_by("-ts").first().text
+
+
+def test_neutral_cause_falls_back_to_reason(tree, make_user, reasons):
+    user = make_user("disp", "unit_dispatcher", tree["house"])
+    ch = Channel.objects.create(external_id=8, node=tree["house"], name="Дым 8")
+    incident = services.raise_alert(
+        type=IncidentType.FIRE,
+        severity="high",
+        node=tree["house"],
+        channel=ch,
+        title="x",
+        source=Alert.Source.RULE,
+    ).incident
+    services.take(incident, user)
+    decision = services.decide(
+        incident,
+        user,
+        outcome=DecisionOutcome.FALSE_ALARM,
+        reason=DecisionReason.objects.get(code="false-sensor-fault"),
+        cause="false_alarm",
+    )
+    assert FeedbackLabel.objects.get(decision=decision).rule.code == "false-sensor-fault"

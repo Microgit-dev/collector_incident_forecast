@@ -11,6 +11,7 @@ from .. import services
 from ..models import (
     Alert,
     Decision,
+    DecisionCause,
     DecisionOutcome,
     DecisionReason,
     EscalationPolicy,
@@ -53,6 +54,8 @@ class DecisionSerializer(serializers.ModelSerializer):
             "outcome",
             "reason",
             "comment",
+            "cause",
+            "forecast_useful",
             "decided_by",
             "decided_by_name",
             "decided_at",
@@ -139,6 +142,10 @@ class DecideSerializer(serializers.Serializer):
         queryset=DecisionReason.objects.filter(is_active=True), required=False, allow_null=True
     )
     comment = serializers.CharField(required=False, allow_blank=True, default="")
+    cause = serializers.ChoiceField(
+        choices=DecisionCause.choices, required=False, allow_blank=True, default=""
+    )
+    forecast_useful = serializers.BooleanField(required=False, allow_null=True, default=None)
 
 
 class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):

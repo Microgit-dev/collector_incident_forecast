@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
 import { DataQualityPage } from './pages/DataQualityPage'
+import { ForecastCardPage } from './pages/ForecastCardPage'
 import { ForecastsPage } from './pages/ForecastsPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
@@ -16,6 +17,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ModelsPage } from './pages/ModelsPage'
 import { PlannedPage } from './pages/PlannedPage'
 import { ReplayPage } from './pages/ReplayPage'
+import { SchemePage } from './pages/SchemePage'
 import { TeamsPage } from './pages/TeamsPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
 
@@ -45,17 +47,9 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
-        <Route
-          path="map"
-          element={
-            <PlannedPage
-              title="Схема объектов"
-              epic="E5"
-              description="Линейная схема коллекторов по пикетам с цветовой индикацией риска (GeoJSON, масштабирование)."
-            />
-          }
-        />
+        <Route path="map" element={<SchemePage />} />
         <Route path="forecasts" element={<ForecastsPage />} />
+        <Route path="forecasts/:id" element={<ForecastCardPage />} />
         <Route path="models" element={<ModelsPage />} />
         <Route path="learning" element={<LearningPage />} />
         <Route path="data-health" element={<DataHealthPage />} />

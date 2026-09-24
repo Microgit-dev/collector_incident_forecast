@@ -25,6 +25,19 @@ class DecisionOutcome(models.TextChoices):
     RESOLVED = "resolved", "Устранено"
 
 
+class DecisionCause(models.TextChoices):
+    """Что произошло по мнению диспетчера (ТЗ §12) — главная обратная связь для моделей и аналитики."""
+
+    SENSOR_FAULT = "sensor_fault", "Неисправность датчика"
+    COMMUNICATION = "communication", "Потеря связи"
+    POWER = "power", "Обесточивание"
+    FALSE_ALARM = "false_alarm", "Ложное срабатывание"
+    EXTERNAL = "external", "Внешнее воздействие"
+    WORKS = "works", "Работы на объекте"
+    REAL_EVENT = "real_event", "Реальное событие"
+    INSUFFICIENT_DATA = "insufficient_data", "Недостаточно данных"
+
+
 class DecisionReason(Catalog):
     """Справочник причин решения диспетчера (ТЗ §12, шаг 5)."""
 
@@ -206,6 +219,8 @@ class Decision(models.Model):
         DecisionReason, verbose_name="причина", null=True, blank=True, on_delete=models.PROTECT
     )
     comment = models.TextField("комментарий", blank=True)
+    cause = models.CharField("что произошло", max_length=32, choices=DecisionCause.choices, blank=True)
+    forecast_useful = models.BooleanField("прогноз помог", null=True, blank=True)
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, verbose_name="кто", on_delete=models.PROTECT, related_name="+"
     )

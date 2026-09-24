@@ -328,7 +328,14 @@ _OUTCOME_PREDICTION = {
 
 @transaction.atomic
 def decide(
-    incident: Incident, user, *, outcome: str, reason: DecisionReason | None = None, comment: str = ""
+    incident: Incident,
+    user,
+    *,
+    outcome: str,
+    reason: DecisionReason | None = None,
+    comment: str = "",
+    cause: str = "",
+    forecast_useful: bool | None = None,
 ) -> Decision:
     """Решение диспетчера: меняет статус, размечает связанные прогнозы (обратная связь для дообучения)."""
     incident = Incident.objects.select_for_update().get(pk=incident.pk)
@@ -344,7 +351,13 @@ def decide(
         raise IncidentError("Причина не соответствует виду решения")
 
     decision = Decision.objects.create(
-        incident=incident, outcome=outcome, reason=reason, comment=comment, decided_by=user
+        incident=incident,
+        outcome=outcome,
+        reason=reason,
+        comment=comment,
+        cause=cause,
+        forecast_useful=forecast_useful if incident.is_forecast else None,
+        decided_by=user,
     )
     now = timezone.now()
     incident.status = _OUTCOME_STATUS[outcome]
@@ -365,7 +378,8 @@ def decide(
         incident,
         IncidentEvent.Kind.DECISION,
         actor=user,
-        text=f"{decision.get_outcome_display()}{': ' + reason.name if reason else ''}",
+        text=f"{decision.get_outcome_display()}{': ' + reason.name if reason else ''}"
+        + (f" · что произошло: {decision.get_cause_display().lower()}" if cause else ""),
         decision_id=decision.pk,
         labels=labels,
     )

@@ -1,5 +1,4 @@
 import {
-  Anchor,
   Badge,
   Card,
   Group,
@@ -15,8 +14,8 @@ import {
 } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { Fragment, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { api, type Page } from '../api/client'
 import { PREDICTION_OUTCOME } from '../api/labels'
@@ -110,7 +109,7 @@ export function ForecastsPage() {
   const [task, setTask] = useState<string>('all')
   const [outcome, setOutcome] = useState<string>('all')
   const [page, setPage] = useState(1)
-  const [open, setOpen] = useState<number | null>(null)
+  const navigate = useNavigate()
   const filters = {
     is_backtest: mode === 'backtest',
     ...(task !== 'all' ? { task } : {}),
@@ -248,8 +247,7 @@ export function ForecastsPage() {
               </Table.Thead>
               <Table.Tbody>
                 {journal.data?.results.map((p) => (
-                  <Fragment key={p.id}>
-                    <Table.Tr style={{ cursor: 'pointer' }} onClick={() => setOpen(open === p.id ? null : p.id)}>
+                    <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/forecasts/${p.id}`)}>
                       <Table.Td>{dayjs(p.issued_at).format('DD.MM.YYYY HH:mm')}</Table.Td>
                       <Table.Td>
                         <Text size="xs">{TASK_LABEL[p.task] ?? p.task}</Text>
@@ -267,19 +265,6 @@ export function ForecastsPage() {
                         </Badge>
                       </Table.Td>
                     </Table.Tr>
-                    {open === p.id && (
-                      <Table.Tr>
-                        <Table.Td colSpan={8}>
-                          <Stack gap={4} py={4}>
-                            <Text size="sm">{p.summary}</Text>
-                            <Anchor component={Link} to={`/incidents?node=${p.node}`} size="xs">
-                              Инциденты объекта
-                            </Anchor>
-                          </Stack>
-                        </Table.Td>
-                      </Table.Tr>
-                    )}
-                  </Fragment>
                 ))}
               </Table.Tbody>
             </Table>
