@@ -68,6 +68,19 @@ docker compose run --rm backend python manage.py import_history --years 2025 202
 за оперативное окно и отчёт о качестве загрузки (интерфейс → «Качество данных»).
 Решение по контурам хранения описано в [docs/adr/0001-storage-contours.md](docs/adr/0001-storage-contours.md).
 
+### Прогноз
+
+После первого импорта истории модель отказа датчиков обучается и первый прогноз строится автоматически.
+Дальше прогноз пересчитывается раз в 15 минут. Переобучение, второй горизонт (7 суток) и бэктест
+запускаются в разделе «Модели» или из консоли:
+
+```bash
+docker compose exec worker python manage.py train_model --horizon 24
+docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59:59+03:00 2026-06-29T23:59:59+03:00
+```
+
+Методика, метрики на отложенном 2026 годе и ограничения описаны в [docs/forecasting.md](docs/forecasting.md).
+
 Демо-поток СМВУ: реальный журнал проигрывается в Kafka с ускорением.
 
 ```bash

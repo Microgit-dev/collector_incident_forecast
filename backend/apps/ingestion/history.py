@@ -240,5 +240,27 @@ def run_batch(batch: uuid.UUID, echo=None) -> None:
     registry = emulate_registry()
     if echo:
         echo(f"equipment registry: {registry}")
+    _first_model(batch)
     if failed:
         raise RuntimeError("Часть лет не загружена — подробности в заданиях импорта")
+
+
+def _first_model(batch: uuid.UUID) -> None:
+    """
+    После первой загрузки истории модели ещё нет — обучаем её и строим первый прогноз,
+    чтобы стенд сразу показывал риски. Дальше обучение запускает аналитик в разделе «Модели».
+    """
+    from apps.forecasting.models import ForecastTask, TrainingRun
+    from apps.forecasting.services import active_model
+    from apps.forecasting.tasks import run_forecast_cycle, train_model
+
+    if active_model() is not None:
+        return
+    if TrainingRun.objects.filter(
+        status__in=[TrainingRun.Status.PENDING, TrainingRun.Status.RUNNING]
+    ).exists():
+        return
+    run = TrainingRun.objects.create(
+        task=ForecastTask.SENSOR_FAILURE, params={"horizon_hours": 24, "reason": f"первый импорт {batch}"}
+    )
+    train_model.apply_async(args=[run.pk], link=run_forecast_cycle.si())

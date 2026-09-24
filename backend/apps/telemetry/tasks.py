@@ -5,7 +5,7 @@ from django.db import connection
 ROLLUP_SQL = """
 INSERT INTO telemetry_channeldaily (
     day, channel_id, readings, normal, warnings, alarms, faults, power_losses, unknowns, events,
-    invalid, numeric_avg, numeric_min, numeric_max, first_ts, last_ts
+    invalid, numeric_avg, numeric_min, numeric_max, first_ts, last_ts, last_state, first_fault_ts
 )
 SELECT
     (ts AT TIME ZONE 'Europe/Moscow')::date AS day,
@@ -23,7 +23,9 @@ SELECT
     min(numeric) FILTER (WHERE quality IN ('ok', 'drift')),
     max(numeric) FILTER (WHERE quality IN ('ok', 'drift')),
     min(ts),
-    max(ts)
+    max(ts),
+    coalesce((array_agg(state ORDER BY ts DESC) FILTER (WHERE facet = 'primary'))[1], ''),
+    min(ts) FILTER (WHERE state = 'fault')
 FROM telemetry_reading
 WHERE ts >= date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow'
       - make_interval(days => %(days)s)
@@ -33,7 +35,8 @@ ON CONFLICT (day, channel_id) DO UPDATE SET
     alarms = EXCLUDED.alarms, faults = EXCLUDED.faults, power_losses = EXCLUDED.power_losses,
     unknowns = EXCLUDED.unknowns, events = EXCLUDED.events, invalid = EXCLUDED.invalid,
     numeric_avg = EXCLUDED.numeric_avg, numeric_min = EXCLUDED.numeric_min,
-    numeric_max = EXCLUDED.numeric_max, first_ts = EXCLUDED.first_ts, last_ts = EXCLUDED.last_ts
+    numeric_max = EXCLUDED.numeric_max, first_ts = EXCLUDED.first_ts, last_ts = EXCLUDED.last_ts,
+    last_state = EXCLUDED.last_state, first_fault_ts = EXCLUDED.first_fault_ts
 """
 
 
