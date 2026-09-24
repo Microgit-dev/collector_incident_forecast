@@ -234,5 +234,11 @@ def run_batch(batch: uuid.UUID, echo=None) -> None:
             failed = True
     for job in (j for j in jobs if j.kind == ImportJob.Kind.WINDOW):
         run_window(job, echo)
+    # даты ввода эмулированного оборудования берутся из первого появления канала в журналах
+    from apps.assets.registry import emulate_registry
+
+    registry = emulate_registry()
+    if echo:
+        echo(f"equipment registry: {registry}")
     if failed:
         raise RuntimeError("Часть лет не загружена — подробности в заданиях импорта")

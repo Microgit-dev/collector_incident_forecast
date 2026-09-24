@@ -11,6 +11,7 @@ import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlannedPage } from './pages/PlannedPage'
+import { TeamsPage } from './pages/TeamsPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -78,6 +79,7 @@ export function App() {
             />
           }
         />
+        <Route path="teams" element={<TeamsPage />} />
         <Route path="data-import" element={<DataImportPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

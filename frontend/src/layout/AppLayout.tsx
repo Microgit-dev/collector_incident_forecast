@@ -30,6 +30,7 @@ import {
   IconSun,
   IconTimeline,
   IconUser,
+  IconUsersGroup,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import type { ComponentType } from 'react'
@@ -54,6 +55,7 @@ const NAV: NavItem[] = [
   { to: '/map', label: 'Схема объектов', icon: IconMap2, perm: 'topology.view_node' },
   { to: '/forecasts', label: 'Журнал прогнозов', icon: IconTimeline, perm: 'forecasting.view_prediction' },
   { to: '/workorders', label: 'Заявки', icon: IconClipboardList, perm: 'workorders.view_workorder' },
+  { to: '/teams', label: 'Команды', icon: IconUsersGroup },
   { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
   { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
@@ -119,6 +121,11 @@ export function AppLayout() {
                   <Text size="xs" c="dimmed">
                     {user?.roles.map((r) => ROLE[r] ?? r).join(', ') || 'Без роли'}
                   </Text>
+                  {user?.team && (
+                    <Text size="xs" c="dimmed">
+                      {user.team.name}
+                    </Text>
+                  )}
                 </Menu.Label>
                 <Menu.Divider />
                 <Menu.Item leftSection={<IconLogout size={16} />} onClick={logout}>

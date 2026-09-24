@@ -47,7 +47,13 @@ class IncidentError(Exception):
 
 
 def _users_with_scope(node: Node):
-    return User.objects.filter(is_active=True, scope_node=node)
+    """Кто на этом узле принимает тревоги: бригады и наблюдатели в зоне не считаются дежурной сменой."""
+    handles = Q(groups__permissions__codename="acknowledge_alert") | Q(
+        user_permissions__codename="acknowledge_alert"
+    )
+    return (
+        User.objects.filter(is_active=True, scope_node=node).filter(handles | Q(is_superuser=True)).distinct()
+    )
 
 
 def global_scope_users():

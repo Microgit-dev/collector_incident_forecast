@@ -213,21 +213,53 @@ export function IncidentDetailPage() {
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 5 }}>
-          <Card withBorder radius="md">
-            <Text fw={600} mb="sm">
-              Хронология
-            </Text>
-            <Timeline bulletSize={14} lineWidth={2}>
-              {incident.events.map((event) => (
-                <Timeline.Item key={event.id} title={event.text || event.kind}>
-                  <Text size="xs" c="dimmed">
-                    {dayjs(event.ts).format('DD.MM HH:mm:ss')}
-                    {event.actor_name && ` · ${event.actor_name}`}
-                  </Text>
-                </Timeline.Item>
-              ))}
-            </Timeline>
-          </Card>
+          <Stack>
+            <Card withBorder radius="md">
+              <Text fw={600} mb="sm">
+                Просмотрели карточку
+              </Text>
+              {incident.viewed_by.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Пока никто
+                </Text>
+              ) : (
+                <Stack gap={4}>
+                  {incident.viewed_by.map((v) => (
+                    <Group key={v.user} justify="space-between" gap="xs" wrap="nowrap">
+                      <Text size="sm">
+                        {v.name}
+                        {v.position && (
+                          <Text span size="xs" c="dimmed">
+                            {' '}
+                            · {v.position}
+                          </Text>
+                        )}
+                      </Text>
+                      <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                        {dayjs(v.first_viewed_at).format('DD.MM HH:mm')}
+                        {v.times > 1 && ` · ${v.times} раза`}
+                      </Text>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Card>
+            <Card withBorder radius="md">
+              <Text fw={600} mb="sm">
+                Хронология
+              </Text>
+              <Timeline bulletSize={14} lineWidth={2}>
+                {incident.events.map((event) => (
+                  <Timeline.Item key={event.id} title={event.text || event.kind}>
+                    <Text size="xs" c="dimmed">
+                      {dayjs(event.ts).format('DD.MM HH:mm:ss')}
+                      {event.actor_name && ` · ${event.actor_name}`}
+                    </Text>
+                  </Timeline.Item>
+                ))}
+              </Timeline>
+            </Card>
+          </Stack>
         </Grid.Col>
       </Grid>
 

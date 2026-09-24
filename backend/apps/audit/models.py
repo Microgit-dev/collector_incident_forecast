@@ -24,12 +24,16 @@ class ActionLog(models.Model):
     status_code = models.PositiveSmallIntegerField("код ответа", null=True, blank=True)
     ip = models.GenericIPAddressField("IP", null=True, blank=True)
     object_repr = models.CharField("объект", max_length=255, blank=True)
+    # Ссылка на объект для выборок «кто открывал карточку» (app_label.model + pk)
+    object_type = models.CharField("тип объекта", max_length=64, blank=True)
+    object_id = models.CharField("ид объекта", max_length=64, blank=True)
     payload = models.JSONField("детали", default=dict, blank=True)
 
     class Meta:
         verbose_name = "действие пользователя"
         verbose_name_plural = "журнал действий"
         ordering = ("-ts",)
+        indexes = [models.Index(fields=["object_type", "object_id", "ts"])]
 
     def __str__(self):
         return f"{self.ts:%Y-%m-%d %H:%M:%S} {self.username} {self.action}"

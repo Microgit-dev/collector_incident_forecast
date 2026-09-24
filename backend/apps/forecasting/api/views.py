@@ -2,7 +2,8 @@ from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.audit.services import log_action
+from apps.audit.selectors import viewers
+from apps.audit.services import log_action, log_view
 from apps.core.permissions import require_perm
 from apps.topology.mixins import ScopedQuerySetMixin
 
@@ -99,6 +100,13 @@ class PredictionViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         "issued_at": ["gte", "lt"],
     }
     ordering_fields = ("issued_at", "probability")
+
+    def retrieve(self, request, *args, **kwargs):
+        prediction = self.get_object()
+        log_view(request, prediction, "prediction.view")
+        return Response(
+            self.get_serializer(prediction).data | {"viewed_by": viewers(prediction, "prediction.view")}
+        )
 
 
 class TrainingRunViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
