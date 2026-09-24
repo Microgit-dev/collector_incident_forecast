@@ -2,7 +2,8 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.audit.services import log_action
+from apps.audit.selectors import viewers
+from apps.audit.services import log_action, log_view
 from apps.core.permissions import require_perm
 from apps.topology.mixins import ScopedQuerySetMixin
 
@@ -145,6 +146,14 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         if self.action == "retrieve":
             qs = qs.prefetch_related("alerts__channel", "decisions__decided_by", "events__actor")
         return qs
+
+    def retrieve(self, request, *args, **kwargs):
+        incident = self.get_object()
+        log_view(request, incident, "incident.view")
+        body = self.get_serializer(incident).data
+        # Кто уже открывал карточку — видно всей смене, чтобы не дублировать работу
+        body["viewed_by"] = viewers(incident, "incident.view")
+        return Response(body)
 
     def _run(self, request, action_name: str, fn, *args, **kwargs):
         incident = self.get_object()

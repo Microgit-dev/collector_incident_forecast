@@ -8,6 +8,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.demo import attach_missing_scopes
+from apps.assets.registry import emulate_registry
 from apps.assets.services import import_channels
 from apps.audit.services import log_action
 from apps.core.permissions import require_perm
@@ -197,6 +199,8 @@ class ReferenceView(APIView):
                     result["objects"] = import_objects(objects_path)
                 if channels or not objects:
                     result["channels"] = import_channels(channels_path)
+                    result["equipment"] = emulate_registry()
+                result["team_scopes"] = attach_missing_scopes()
             except (FileNotFoundError, KeyError, ValueError) as exc:
                 return Response({"detail": f"Не удалось загрузить справочник: {exc}"}, status=400)
         log_action(request, "ingestion.reference", payload=result)

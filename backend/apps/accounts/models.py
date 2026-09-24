@@ -2,6 +2,73 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+class TeamKind(models.TextChoices):
+    MANAGEMENT = "management", "Руководство"
+    ODS = "ods", "Объединённая диспетчерская служба"
+    UNIT = "unit", "Диспетчерская подразделения"
+    BRIGADE = "brigade", "Ремонтная бригада"
+    ANALYTICS = "analytics", "Аналитическая группа"
+    SUPPORT = "support", "Администрирование и смежные службы"
+
+
+class Team(models.Model):
+    """
+    Команда — звено командной вертикали: бригада → диспетчерская подразделения → ОДС → руководство.
+
+    Зона команды — поддерево топологии; участники получают её как свою зону ответственности.
+    Цепочка по `parent` показывает, кому подчиняется команда и куда уходит эскалация:
+    эскалация идёт вверх по дереву объектов, а у каждого уровня дерева есть своя команда.
+    """
+
+    code = models.SlugField(
+        "код", max_length=64, unique=True, help_text="совпадает с departmentNumber в LDAP"
+    )
+    name = models.CharField("название", max_length=255)
+    kind = models.CharField("вид", max_length=16, choices=TeamKind.choices)
+    scope_node = models.ForeignKey(
+        "topology.Node",
+        verbose_name="зона ответственности",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teams",
+    )
+    parent = models.ForeignKey(
+        "self",
+        verbose_name="вышестоящая команда",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="children",
+    )
+    lead = models.ForeignKey(
+        "User",
+        verbose_name="руководитель",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    is_active = models.BooleanField("активна", default=True)
+
+    class Meta:
+        verbose_name = "команда"
+        verbose_name_plural = "команды"
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+    def chain(self) -> list["Team"]:
+        """Команда и все вышестоящие до вершины вертикали."""
+        teams, seen, current = [], set(), self
+        while current is not None and current.pk not in seen:
+            teams.append(current)
+            seen.add(current.pk)
+            current = current.parent
+        return teams
+
+
 class User(AbstractUser):
     """
     Пользователь с зоной ответственности. Роль = Django Group (см. roles.py),
@@ -15,6 +82,14 @@ class User(AbstractUser):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="users",
+    )
+    team = models.ForeignKey(
+        Team,
+        verbose_name="команда",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="members",
     )
     position = models.CharField("должность", max_length=255, blank=True)
     phone = models.CharField("телефон", max_length=32, blank=True)

@@ -92,3 +92,11 @@ def test_observer_cannot_decide(tree, make_user):
     assert client.get(f"/api/v1/incidents/items/{incident_id}/").status_code == 200
     response = client.post(f"/api/v1/incidents/items/{incident_id}/decide/", {"outcome": "false_alarm"})
     assert response.status_code == 403
+
+
+def test_brigade_in_zone_does_not_hold_the_incident(tree, make_user):
+    # в зоне только бригада — инцидент уходит к ближайшей дежурной смене выше
+    make_user("brigade", "technician", tree["house"])
+    make_user("head_up", "head", tree["complex"])
+    incident = _raise(tree).incident
+    assert incident.responsible_node == tree["complex"]

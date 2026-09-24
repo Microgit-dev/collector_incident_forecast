@@ -18,9 +18,49 @@ export interface Me {
   position: string
   scope_node: number | null
   scope_node_name: string | null
+  team: TeamRef | null
+  command_chain: TeamRef[]
   roles: string[]
   permissions: string[]
   is_superuser: boolean
+}
+
+export type TeamKind = 'management' | 'ods' | 'unit' | 'brigade' | 'analytics' | 'support'
+
+export interface TeamRef {
+  id: number
+  code: string
+  name: string
+  kind: TeamKind
+}
+
+export interface TeamMember {
+  id: number
+  username: string
+  last_name: string
+  first_name: string
+  position: string
+  phone: string
+  roles: { code: string; title: string }[]
+}
+
+export interface Team extends TeamRef {
+  kind_display: string
+  scope_node: number | null
+  scope_node_name: string | null
+  parent: number | null
+  lead: number | null
+  members: TeamMember[]
+}
+
+export interface Viewer {
+  user: number
+  username: string
+  name: string
+  position: string
+  first_viewed_at: string
+  last_viewed_at: string
+  times: number
 }
 
 export interface Overview {
@@ -90,6 +130,7 @@ export interface IncidentDetail extends Incident {
   alerts: Alert[]
   decisions: Decision[]
   events: IncidentEvent[]
+  viewed_by: Viewer[]
 }
 
 export interface DecisionReason {

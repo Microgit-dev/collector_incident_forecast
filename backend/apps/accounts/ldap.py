@@ -3,7 +3,8 @@
 
 У заказчика тестового контура нет, поэтому в docker compose поднимается OpenLDAP с
 демо-учётками. Группы каталога cn=<role> в ou=roles маппятся на одноимённые Django Groups,
-то есть на роли из roles.py. Для реального AD достаточно поменять переменные окружения.
+то есть на роли из roles.py; атрибут departmentNumber — код команды (Team.code), из него
+берутся команда и зона ответственности. Для реального AD достаточно поменять переменные окружения.
 """
 
 
@@ -25,3 +26,15 @@ def configure_ldap(env, settings: dict) -> None:
     settings["AUTH_LDAP_MIRROR_GROUPS"] = True
     settings["AUTH_LDAP_USER_ATTR_MAP"] = {"first_name": "givenName", "last_name": "sn", "email": "mail"}
     settings["AUTH_LDAP_ALWAYS_UPDATE_USER"] = True
+
+
+def connect_signals() -> None:
+    """При каждом входе через каталог обновляем команду и зону по departmentNumber."""
+    from django_auth_ldap.backend import populate_user
+
+    from .services import apply_directory_attrs
+
+    def on_populate(sender, user, ldap_user, **kwargs):
+        apply_directory_attrs(user, ldap_user.attrs)
+
+    populate_user.connect(on_populate, weak=False, dispatch_uid="accounts.ldap.populate")

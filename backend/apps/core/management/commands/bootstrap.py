@@ -83,6 +83,7 @@ class Command(BaseCommand):
             DecisionReason.objects.get_or_create(code=code, defaults={"name": name, "outcome": outcome})
         self._schedules()
         self._reference()
+        self._demo()
         self._superuser()
         self.stdout.write(self.style.SUCCESS("bootstrap done"))
 
@@ -101,6 +102,8 @@ class Command(BaseCommand):
         """Справочники заказчика, если каталог данных смонтирован (идемпотентно)."""
         from django.conf import settings
 
+        from apps.assets.models import Equipment
+        from apps.assets.registry import emulate_registry
         from apps.assets.services import import_channels
         from apps.topology.services import import_objects
 
@@ -114,6 +117,16 @@ class Command(BaseCommand):
             return
         self.stdout.write(f"objects: {import_objects(objects)}")
         self.stdout.write(f"channels: {import_channels(channels)}")
+        if not Equipment.objects.exists():
+            self.stdout.write(f"equipment: {emulate_registry()}")
+
+    def _demo(self):
+        """Демо-команды и сотрудники: включены по умолчанию для стенда, в эксплуатации DEMO_USERS=false."""
+        if os.environ.get("DEMO_USERS", "true").lower() not in {"1", "true", "yes"}:
+            return
+        from apps.accounts.demo import seed_demo
+
+        self.stdout.write(f"demo: {seed_demo(os.environ.get('DEMO_PASSWORD', 'Passw0rd!'))}")
 
     def _superuser(self):
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")

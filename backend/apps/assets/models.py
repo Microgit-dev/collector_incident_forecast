@@ -89,6 +89,7 @@ class Channel(TimeStampedModel):
 
 class EquipmentKind(models.TextChoices):
     HATCH = "hatch", "Люк"
+    DOOR = "door", "Дверь / аварийный выход"
     VENT_SHAFT = "vent_shaft", "Вентшахта"
     CHAMBER = "chamber", "Камера"
     PUMP = "pump", "Насос"

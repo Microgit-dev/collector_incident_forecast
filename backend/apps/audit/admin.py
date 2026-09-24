@@ -5,7 +5,7 @@ from .models import ActionLog
 
 @admin.register(ActionLog)
 class ActionLogAdmin(admin.ModelAdmin):
-    list_display = ("ts", "username", "action", "method", "path", "status_code", "ip")
+    list_display = ("ts", "username", "action", "object_repr", "method", "path", "status_code", "ip")
     list_filter = ("action", "method", "status_code")
     search_fields = ("username", "path", "object_repr")
     date_hierarchy = "ts"

@@ -16,6 +16,8 @@ class ActionLogSerializer(serializers.ModelSerializer):
             "status_code",
             "ip",
             "object_repr",
+            "object_type",
+            "object_id",
             "payload",
         )
 
@@ -23,5 +25,5 @@ class ActionLogSerializer(serializers.ModelSerializer):
 class ActionLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ActionLog.objects.all()
     serializer_class = ActionLogSerializer
-    filterset_fields = ("action", "username", "method")
+    filterset_fields = ("action", "username", "method", "object_type", "object_id")
     search_fields = ("username", "path", "object_repr")
