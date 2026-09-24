@@ -21,6 +21,7 @@ import {
   IconChartBar,
   IconClipboardList,
   IconDatabase,
+  IconDatabaseImport,
   IconGauge,
   IconLogout,
   IconMap2,
@@ -54,6 +55,7 @@ const NAV: NavItem[] = [
   { to: '/forecasts', label: 'Журнал прогнозов', icon: IconTimeline, perm: 'forecasting.view_prediction' },
   { to: '/workorders', label: 'Заявки', icon: IconClipboardList, perm: 'workorders.view_workorder' },
   { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
+  { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
 ]
 

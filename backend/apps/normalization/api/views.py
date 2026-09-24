@@ -26,6 +26,7 @@ class SensorProfileSerializer(serializers.ModelSerializer):
             "unit",
             "valid_min",
             "valid_max",
+            "drift_tolerance",
             "warn_threshold",
             "alarm_threshold",
             "direction",

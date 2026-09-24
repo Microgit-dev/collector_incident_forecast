@@ -33,6 +33,7 @@ class Quality(StrEnum):
     EPOCH_ARTIFACT = "epoch_artifact"  # «01.01.1970 03:00:0x» — сбой даты, по заказчику = неисправность
     SENTINEL = "sentinel"  # служебный код производителя (-100, 255, -3276, -127…)
     OUT_OF_RANGE = "out_of_range"  # вне физически допустимого диапазона профиля
+    DRIFT = "drift"  # чуть ниже нуля шкалы — дрейф нуля, датчику нужна калибровка
     UNEXPECTED_NUMERIC = "unexpected_numeric"
     UNMAPPED_TEXT = "unmapped_text"
 
@@ -71,6 +72,8 @@ class Profile:
     value_kind: ValueKind = ValueKind.MIXED
     valid_min: float | None = None
     valid_max: float | None = None
+    # Допуск ниже valid_min, который считается дрейфом нуля, а не отказом (газ: −0,01…−0,1 %)
+    drift_tolerance: float | None = None
     warn_threshold: float | None = None
     alarm_threshold: float | None = None
     # above — тревога при росте (газ, температура), below — при падении
@@ -109,6 +112,12 @@ def _classify_numeric(value: float, profile: Profile) -> tuple[State, Quality]:
         return State.FAULT, Quality.SENTINEL
     if profile.value_kind == ValueKind.STATE:
         return State.UNKNOWN, Quality.UNEXPECTED_NUMERIC
+    if (
+        profile.valid_min is not None
+        and profile.drift_tolerance
+        and profile.valid_min - profile.drift_tolerance <= value < profile.valid_min
+    ):
+        return State.NORMAL, Quality.DRIFT
     if (profile.valid_min is not None and value < profile.valid_min) or (
         profile.valid_max is not None and value > profile.valid_max
     ):

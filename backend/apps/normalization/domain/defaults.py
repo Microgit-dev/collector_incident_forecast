@@ -78,6 +78,8 @@ DEFAULT_PROFILES: dict[str, dict] = {
         "valid_max": 100.0,
         "warn_threshold": 0.5,
         "alarm_threshold": 1.0,
+        # В 2020 году ~1 млн показаний −0,01…−0,09 % — дрейф нуля, а не неисправность
+        "drift_tolerance": 0.1,
         "expected_interval_s": 60,
         "sensor_types": ["Газовый датчик"],
     },

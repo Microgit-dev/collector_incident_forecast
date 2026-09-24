@@ -42,6 +42,7 @@ const STATUS = {
 const CATEGORY_COLOR: Record<string, string> = {
   valid: 'teal',
   technical: 'orange',
+  drift: 'cyan',
   invalid: 'red',
   time: 'grape',
   duplicates: 'gray',

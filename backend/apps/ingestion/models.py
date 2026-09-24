@@ -43,6 +43,16 @@ class ImportJob(TimeStampedModel):
         DONE = "done", "Завершён"
         FAILED = "failed", "Ошибка"
 
+    class Kind(models.TextChoices):
+        HISTORY = "history", "Журнал за год (архив)"
+        WINDOW = "window", "Оперативное окно"
+        FILE = "file", "Загруженный файл"
+
+    kind = models.CharField("вид", max_length=16, choices=Kind.choices, default=Kind.FILE)
+    # Пакет — задания одного запуска импорта (годы + оперативное окно), прогресс считается по пакету
+    batch = models.UUIDField("пакет", null=True, blank=True, db_index=True)
+    progress = models.FloatField("прогресс, %", default=0)
+    stage = models.CharField("этап", max_length=128, blank=True)
     source = models.ForeignKey(
         DataSource, verbose_name="источник", on_delete=models.PROTECT, related_name="jobs"
     )

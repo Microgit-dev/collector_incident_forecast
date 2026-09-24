@@ -23,6 +23,7 @@ def compiled_registry() -> CompiledRegistry:
             value_kind=ValueKind(p.value_kind),
             valid_min=p.valid_min,
             valid_max=p.valid_max,
+            drift_tolerance=p.drift_tolerance,
             warn_threshold=p.warn_threshold,
             alarm_threshold=p.alarm_threshold,
             direction=p.direction,

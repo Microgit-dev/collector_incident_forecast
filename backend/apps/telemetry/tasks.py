@@ -18,10 +18,10 @@ SELECT
     count(*) FILTER (WHERE state = 'power_loss'),
     count(*) FILTER (WHERE state = 'unknown'),
     count(*) FILTER (WHERE state = 'event'),
-    count(*) FILTER (WHERE quality <> 'ok'),
-    avg(numeric) FILTER (WHERE quality = 'ok'),
-    min(numeric) FILTER (WHERE quality = 'ok'),
-    max(numeric) FILTER (WHERE quality = 'ok'),
+    count(*) FILTER (WHERE quality NOT IN ('ok', 'drift')),
+    avg(numeric) FILTER (WHERE quality IN ('ok', 'drift')),
+    min(numeric) FILTER (WHERE quality IN ('ok', 'drift')),
+    max(numeric) FILTER (WHERE quality IN ('ok', 'drift')),
     min(ts),
     max(ts)
 FROM telemetry_reading

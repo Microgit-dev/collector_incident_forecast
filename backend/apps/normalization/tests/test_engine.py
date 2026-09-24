@@ -80,3 +80,10 @@ def test_datetime_value_is_timestamp_event_but_1970_is_fault():
     stamp = normalize("22.09.2019 20:01:31", DISCRETE, GLOBAL_RULES)
     assert (stamp.state, stamp.facet) == (State.EVENT, "timestamp")
     assert normalize("01.01.1970 03:00:00", DISCRETE, GLOBAL_RULES).state == State.FAULT
+
+
+def test_small_negative_gas_is_zero_drift_not_fault():
+    gas = Profile(code="gas", value_kind=ValueKind.MIXED, valid_min=0, valid_max=100, drift_tolerance=0.1)
+    drift = normalize("-0.03", gas, GLOBAL_RULES)
+    assert (drift.state, drift.quality) == (State.NORMAL, Quality.DRIFT)
+    assert normalize("-0.5", gas, GLOBAL_RULES).quality == Quality.OUT_OF_RANGE
