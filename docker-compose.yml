@@ -10,9 +10,11 @@ x-backend: &backend
   environment:
     DATA_DIR: /data
     ARTIFACTS_DIR: /artifacts
+    # Меньше потоков — меньше пиковая память пакетного импорта при почти той же скорости
+    POLARS_MAX_THREADS: "4"
   volumes:
     - ./data:/data:ro
-    - artifacts:/artifacts
+    - ./artifacts:/artifacts
     - media:/app/media
   restart: unless-stopped
   depends_on:
@@ -64,6 +66,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_NUM_PARTITIONS: 6
       KAFKA_LOG_RETENTION_HOURS: 168
+      # Однонодовому брокеру стенда хватает 512 МБ кучи; по умолчанию JVM берёт больше
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
     volumes:
       - kafkadata:/var/lib/kafka/data
     healthcheck:
@@ -91,6 +95,10 @@ services:
     image: collector-forecast/backend:local
     env_file: .env
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py bootstrap"]
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -207,6 +215,7 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      JAVA_OPTS: "-Xms128m -Xmx256m"
     ports:
       - "${KAFKA_UI_PORT:-8081}:8080"
     depends_on:
@@ -242,5 +251,4 @@ volumes:
   promdata:
   grafanadata:
   caddydata:
-  artifacts:
   media:

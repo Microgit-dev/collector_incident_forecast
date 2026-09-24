@@ -1,9 +1,10 @@
 import { BarChart, DonutChart } from '@mantine/charts'
-import { Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import { Alert, Button, Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { CHANNEL_STATE, INCIDENT_TYPE, RISK } from '../api/labels'
 import type { IncidentType, Overview, RiskLevel } from '../api/types'
 
@@ -35,6 +36,7 @@ function Kpi({ label, value, hint, color, to }: { label: string; value: number; 
 const LEVELS: RiskLevel[] = ['critical', 'high', 'medium', 'low']
 
 export function DashboardPage() {
+  const { can } = useAuth()
   const { data, isLoading } = useQuery({
     queryKey: ['overview'],
     queryFn: () => api<Overview>('/analytics/overview/'),
@@ -63,6 +65,18 @@ export function DashboardPage() {
   return (
     <Stack>
       <Title order={3}>Оперативная обстановка</Title>
+      {Object.keys(data.channels_by_state).length === 0 && (
+        <Alert color="blue" title="Данные ещё не загружены">
+          <Group justify="space-between">
+            <Text size="sm">Загрузите справочники и журналы СМВУ, чтобы увидеть состояние датчиков и прогнозы.</Text>
+            {can('ingestion.add_importjob') && (
+              <Button component={Link} to="/data-import" size="xs">
+                Загрузить данные
+              </Button>
+            )}
+          </Group>
+        </Alert>
+      )}
       <SimpleGrid cols={{ base: 2, md: 4 }}>
         <Kpi label="Открытые инциденты" value={data.incidents_open} color="red" to="/incidents" />
         <Kpi label="Не взяты в работу" value={data.incidents_unassigned} color="orange" hint="ожидают диспетчера" />

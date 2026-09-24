@@ -12,7 +12,7 @@ from ..selectors import compiled_registry
 class StateRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = StateRule
-        fields = ("id", "profile", "pattern", "is_regex", "state", "facet", "priority")
+        fields = ("id", "profile", "pattern", "is_regex", "state", "facet", "guarded", "priority")
 
 
 class SensorProfileSerializer(serializers.ModelSerializer):
@@ -26,6 +26,7 @@ class SensorProfileSerializer(serializers.ModelSerializer):
             "unit",
             "valid_min",
             "valid_max",
+            "drift_tolerance",
             "warn_threshold",
             "alarm_threshold",
             "direction",

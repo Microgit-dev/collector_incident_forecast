@@ -5,6 +5,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { AppLayout } from './layout/AppLayout'
 import { DashboardPage } from './pages/DashboardPage'
+import { DataImportPage } from './pages/DataImportPage'
+import { DataQualityPage } from './pages/DataQualityPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LoginPage } from './pages/LoginPage'
@@ -76,6 +78,8 @@ export function App() {
             />
           }
         />
+        <Route path="data-import" element={<DataImportPage />} />
+        <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

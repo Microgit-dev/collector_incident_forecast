@@ -17,7 +17,7 @@ env = environ.Env(
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:5173"]),
     LDAP_ENABLED=(bool, False),
 )
-environ.Env.read_env(BASE_DIR.parent / ".env", overwrite=False)
+# .env читает docker compose (env_file); локальные тесты работают на значениях по умолчанию
 
 SECRET_KEY = env("SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DEBUG")
@@ -185,6 +185,10 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_WORKER_SEND_TASK_EVENTS = True  # нужно celery-exporter для метрик
 CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Импорт истории идёт десятки минут: одна задача на воркер за раз, и Redis не должен
+# переотдавать «зависшую» задачу другому воркеру до её завершения (по умолчанию — через час)
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 12 * 3600}
 
 KAFKA = {
     "BOOTSTRAP_SERVERS": env("KAFKA_BOOTSTRAP_SERVERS", default="localhost:9092"),

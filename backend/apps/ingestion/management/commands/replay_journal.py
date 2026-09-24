@@ -19,7 +19,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("path", help="CSV журнала, например /data/dataset/журнал_событий_пример.csv")
         parser.add_argument("--adapter", default="smvu_csv")
-        parser.add_argument("--speed", type=float, default=60.0, help="Во сколько раз быстрее реального времени")
+        parser.add_argument(
+            "--speed", type=float, default=60.0, help="Во сколько раз быстрее реального времени"
+        )
         parser.add_argument("--limit", type=int, default=0)
         parser.add_argument(
             "--historical",

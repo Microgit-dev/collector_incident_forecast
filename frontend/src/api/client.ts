@@ -120,3 +120,31 @@ export interface Page<T> {
   previous: string | null
   results: T[]
 }
+
+/**
+ * Загрузка файла с прогрессом передачи (fetch его не отдаёт) — для многогигабайтных журналов.
+ * Перед отправкой обновляем access-токен, чтобы долгая загрузка не упёрлась в его истечение.
+ */
+export async function upload<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+  await refreshAccess()
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', buildUrl(path))
+    if (tokens.access) xhr.setRequestHeader('Authorization', `Bearer ${tokens.access}`)
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total)
+    }
+    xhr.onload = () => {
+      let body: unknown = null
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : null
+      } catch {
+        body = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T)
+      else reject(new ApiError(xhr.status, body))
+    }
+    xhr.onerror = () => reject(new ApiError(0, { detail: 'Сеть недоступна' }))
+    xhr.send(form)
+  })
+}

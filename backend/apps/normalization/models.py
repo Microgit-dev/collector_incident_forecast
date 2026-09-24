@@ -17,6 +17,12 @@ class SensorProfile(TimeStampedModel):
     unit = models.CharField("единица измерения", max_length=32, blank=True)
     valid_min = models.FloatField("мин. допустимое", null=True, blank=True)
     valid_max = models.FloatField("макс. допустимое", null=True, blank=True)
+    drift_tolerance = models.FloatField(
+        "допуск дрейфа нуля",
+        null=True,
+        blank=True,
+        help_text="Значения чуть ниже минимума считаются дрейфом (нужна калибровка), а не отказом",
+    )
     warn_threshold = models.FloatField("порог предупреждения", null=True, blank=True)
     alarm_threshold = models.FloatField("порог тревоги", null=True, blank=True)
     direction = models.CharField(
@@ -62,6 +68,11 @@ class StateRule(TimeStampedModel):
         max_length=32,
         default="primary",
         help_text="Составные устройства пишут несколько аспектов одновременно: основной, питание, охрана…",
+    )
+    guarded = models.BooleanField(
+        "тревога только под охраной",
+        default=False,
+        help_text="Если источник не пометил событие тревожным, это рабочая активность, а не тревога",
     )
     priority = models.PositiveSmallIntegerField("приоритет", default=100)
 

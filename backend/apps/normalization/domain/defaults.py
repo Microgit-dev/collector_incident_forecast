@@ -12,9 +12,14 @@ from .engine import Rule, State, ValueKind
 # Служебные значения производителей: по заказчику трактуются как неисправность
 DEFAULT_SENTINELS = ("-100", "255", "-3276", "-127", "-32768", "32767", "65535", "-999")
 
+# Охранные сработки: тревога только под охраной (см. Rule.guarded)
+GUARDED_PATTERNS = frozenset(
+    {"Обнаружено движение", r"^движение (вверх|вниз|влево|вправо)$", "Не замкнут", "Замкнут"}
+)
+
 # (pattern, state, facet, is_regex)
 GLOBAL_RULES: tuple[Rule, ...] = tuple(
-    Rule(pattern, state, facet, is_regex)
+    Rule(pattern, state, facet, is_regex, guarded=pattern in GUARDED_PATTERNS)
     for pattern, state, facet, is_regex in [
         # Норма
         ("Норма", State.NORMAL, "primary", False),
@@ -57,6 +62,8 @@ GLOBAL_RULES: tuple[Rule, ...] = tuple(
         ("Снято с охраны", State.EVENT, "guard", False),
         ("Разговор", State.EVENT, "intercom", False),
         ("Вызов", State.EVENT, "intercom", False),
+        # Дата-время в значении (кроме сбоя 1970, он ловится раньше) — метка постановки/снятия с охраны
+        (r"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}(:\d{2})?$", State.EVENT, "timestamp", True),
     ]
 )
 
@@ -71,6 +78,8 @@ DEFAULT_PROFILES: dict[str, dict] = {
         "valid_max": 100.0,
         "warn_threshold": 0.5,
         "alarm_threshold": 1.0,
+        # В 2020 году ~1 млн показаний −0,01…−0,09 % — дрейф нуля, а не неисправность
+        "drift_tolerance": 0.1,
         "expected_interval_s": 60,
         "sensor_types": ["Газовый датчик"],
     },

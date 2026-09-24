@@ -1,3 +1,4 @@
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from treebeard.mp_tree import MP_Node
 
@@ -27,6 +28,10 @@ class Node(MP_Node):
     picket_from = models.DecimalField("пикет от", max_digits=8, decimal_places=2, null=True, blank=True)
     picket_to = models.DecimalField("пикет до", max_digits=8, decimal_places=2, null=True, blank=True)
     geometry = models.JSONField("геометрия (GeoJSON, схематическая)", null=True, blank=True)
+    # Вес объекта в операционном приоритете риска: 1 — второстепенный, 5 — критичный
+    criticality = models.PositiveSmallIntegerField(
+        "критичность", default=3, validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
     is_active = models.BooleanField("активен", default=True)
 
     node_order_by = ["name"]
