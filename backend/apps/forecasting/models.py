@@ -231,3 +231,159 @@ class ChannelHealth(models.Model):
 
     def __str__(self):
         return f"{self.channel_id}: {self.score}"
+
+
+# ---------- обратная связь диспетчеров и управление обучением ----------
+
+
+class FeedbackEffect(models.TextChoices):
+    POSITIVE = "positive", "Подтверждает отказ датчика"
+    NEGATIVE = "negative", "Не отказ датчика"
+    EXCLUDE = "exclude", "Исключить из обучения"
+    IGNORE = "ignore", "Не влияет на обучение"
+
+
+class FeedbackRule(TimeStampedModel):
+    """
+    Как причина решения диспетчера превращается в метку для обучения. Настраивает аналитик:
+    правило можно выключить, поменять эффект и вес, включить ручную проверку каждой метки.
+    """
+
+    code = models.CharField("код причины", max_length=64, unique=True)
+    title = models.CharField("причина", max_length=255)
+    effect = models.CharField("эффект для обучения", max_length=16, choices=FeedbackEffect.choices)
+    weight = models.FloatField("вес метки", default=1.0, help_text="во сколько раз пример важнее обычного")
+    auto_accept = models.BooleanField("принимать без проверки", default=False)
+    enabled = models.BooleanField("включено", default=True)
+    description = models.TextField("обоснование", blank=True)
+
+    class Meta:
+        verbose_name = "правило разметки"
+        verbose_name_plural = "правила разметки"
+        ordering = ("code",)
+
+    def __str__(self):
+        return self.title
+
+
+class FeedbackLabel(TimeStampedModel):
+    """Метка обучения из решения диспетчера: канал, дата отказа, эффект, статус проверки аналитиком."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "На проверке"
+        ACCEPTED = "accepted", "Принята"
+        REJECTED = "rejected", "Отклонена"
+
+    task = models.CharField(
+        "задача", max_length=32, choices=ForecastTask.choices, default=ForecastTask.SENSOR_FAILURE
+    )
+
+    class Source(models.TextChoices):
+        DECISION = "decision", "Решение диспетчера"
+        EMULATED = "emulated", "Эмуляция для демонстрации"
+
+    source = models.CharField("источник", max_length=16, choices=Source.choices, default=Source.DECISION)
+    channel = models.ForeignKey(
+        "assets.Channel", verbose_name="канал", on_delete=models.CASCADE, related_name="+"
+    )
+    label_date = models.DateField("дата события", db_index=True)
+    effect = models.CharField("эффект", max_length=16, choices=FeedbackEffect.choices)
+    weight = models.FloatField("вес", default=1.0)
+    status = models.CharField(
+        "статус", max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True
+    )
+    rule = models.ForeignKey(
+        FeedbackRule, verbose_name="правило", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    decision = models.ForeignKey(
+        "incidents.Decision",
+        verbose_name="решение",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="labels",
+    )
+    incident = models.ForeignKey(
+        "incidents.Incident",
+        verbose_name="инцидент",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    prediction = models.ForeignKey(
+        Prediction, verbose_name="прогноз", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="диспетчер",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="проверил",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    reviewed_at = models.DateTimeField("проверено", null=True, blank=True)
+    review_comment = models.CharField("комментарий аналитика", max_length=512, blank=True)
+    # Заполняется при обучении: сколько строк выборки изменила метка и в какой версии модели
+    rows_affected = models.PositiveIntegerField("строк выборки изменено", default=0)
+    last_used_model = models.ForeignKey(
+        MLModel,
+        verbose_name="учтена в модели",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "метка обратной связи"
+        verbose_name_plural = "метки обратной связи"
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(fields=["decision", "channel"], name="uniq_label_per_decision_channel")
+        ]
+        permissions = [("review_feedback", "Проверять разметку диспетчеров и управлять обучением")]
+
+    def __str__(self):
+        return f"{self.channel_id}@{self.label_date}: {self.effect}"
+
+
+class LearningSettings(models.Model):
+    """Настройки дообучения (одна запись): что учитывать и когда переобучать."""
+
+    use_feedback = models.BooleanField("учитывать разметку диспетчеров", default=True)
+    retrain_weekly = models.BooleanField("переобучать раз в неделю", default=True)
+    auto_activate = models.BooleanField(
+        "автоматически активировать лучшую версию",
+        default=True,
+        help_text="новая версия заменяет действующую, только если не хуже неё на той же валидации",
+    )
+    retrain_on_degradation = models.BooleanField("переобучать при деградации", default=False)
+    degradation_ratio = models.FloatField(
+        "порог деградации",
+        default=0.6,
+        help_text="реализованная точность ниже этой доли от ожидаемой — тревога",
+    )
+    degradation_window_days = models.PositiveSmallIntegerField("окно контроля, сут", default=14)
+    degradation_min_resolved = models.PositiveSmallIntegerField("минимум прогнозов с исходом", default=30)
+    horizon_hours = models.PositiveSmallIntegerField("горизонт планового переобучения, ч", default=24)
+    last_check = models.JSONField("последняя проверка деградации", default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "настройки дообучения"
+        verbose_name_plural = "настройки дообучения"
+
+    def __str__(self):
+        return "Настройки дообучения"
+
+    @classmethod
+    def load(cls) -> "LearningSettings":
+        return cls.objects.get_or_create(pk=1)[0]

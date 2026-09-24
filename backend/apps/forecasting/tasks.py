@@ -37,6 +37,22 @@ def backtest_recent(days: int = 30) -> dict:
     return backtest(end - timedelta(days=days), end - timedelta(days=1))
 
 
+@shared_task
+def weekly_retrain() -> int | None:
+    """Плановое переобучение по настройкам дообучения (чемпион/претендент)."""
+    from .training import scheduled_retrain
+
+    return scheduled_retrain()
+
+
+@shared_task
+def check_model_degradation() -> dict:
+    """Раз в сутки: реализованная точность журнала против ожидаемой."""
+    from .training import check_degradation
+
+    return check_degradation()
+
+
 @shared_task(acks_late=True)
 def train_model(run_id: int) -> dict:
     from .training import execute

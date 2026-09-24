@@ -357,12 +357,17 @@ def decide(
         Prediction.objects.filter(alerts__incident=incident, outcome=Prediction.Outcome.PENDING).update(
             outcome=_OUTCOME_PREDICTION[outcome], outcome_at=now
         )
+    # Решение — метка для дообучения модели (правила разметки и проверка — у аналитика)
+    from apps.forecasting.feedback import labels_from_decision
+
+    labels = labels_from_decision(decision)
     _event(
         incident,
         IncidentEvent.Kind.DECISION,
         actor=user,
         text=f"{decision.get_outcome_display()}{': ' + reason.name if reason else ''}",
         decision_id=decision.pk,
+        labels=labels,
     )
     return decision
 
