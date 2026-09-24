@@ -86,7 +86,17 @@ EXTRA_SPECS = [
     FeatureSpec("days_since_alarm", "Суток с последней тревоги: {v}"),
 ]
 EXTRA_FEATURES = [s.name for s in EXTRA_SPECS]
-TITLES = {s.name: s.title for s in [*SPECS, *EXTRA_SPECS]}
+# Погода по Москве (Open-Meteo) — одна на все каналы в сутки; подмешивается соединением по дню
+WEATHER_SPECS = [
+    FeatureSpec("wx_precip_1", "Осадки за сутки: {v} мм"),
+    FeatureSpec("wx_precip_3", "Осадки за 3 суток: {v} мм"),
+    FeatureSpec("wx_precip_next", "Осадки на следующие сутки (прогноз): {v} мм"),
+    FeatureSpec("wx_thaw_3", "Оттепель за 3 суток (сумма плюсовых максимумов): {v} °C"),
+    FeatureSpec("wx_melt_3", "Таяние снега за 3 суток: {v} см покрова"),
+    FeatureSpec("wx_snow_depth", "Снежный покров: {v} см"),
+]
+WEATHER_FEATURES = [s.name for s in WEATHER_SPECS]
+TITLES = {s.name: s.title for s in [*SPECS, *EXTRA_SPECS, *WEATHER_SPECS]}
 EXCEED_LEVEL = 1.0  # порог превышения для числовых каналов (метан, %)
 CATEGORICAL = ["last_state", "sensor_type"]
 # Возраст канала, месяц и день недели проверены и исключены: на отложенном годе они ухудшали
@@ -245,6 +255,34 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
     return feats.with_columns(
         pl.col("last_state").cast(pl.Enum(STATES)),
         pl.col("sensor_type").fill_null("?"),
+    )
+
+
+def weather_features(weather: pl.DataFrame) -> pl.DataFrame:
+    """
+    weather — day, precipitation_mm, temperature_max_c, snow_depth_cm (сутки по Москве).
+    Прогноз осадков на завтра при обучении берётся фактом следующих суток: суточный прогноз осадков
+    достаточно точен, а в работе это поле заполняет прогнозный API.
+    """
+    if weather.is_empty():
+        return pl.DataFrame(schema={"day": pl.Date, **{name: pl.Float64 for name in WEATHER_FEATURES}})
+    days = pl.DataFrame({"day": pl.date_range(weather["day"].min(), weather["day"].max(), "1d", eager=True)})
+    w = days.join(weather, on="day", how="left").sort("day")
+    return w.select(
+        "day",
+        pl.col("precipitation_mm").alias("wx_precip_1"),
+        pl.col("precipitation_mm").rolling_sum(3, min_samples=1).alias("wx_precip_3"),
+        pl.col("precipitation_mm").shift(-1).alias("wx_precip_next"),
+        pl.col("temperature_max_c").clip(lower_bound=0).rolling_sum(3, min_samples=1).alias("wx_thaw_3"),
+        (pl.col("snow_depth_cm").shift(3) - pl.col("snow_depth_cm")).clip(lower_bound=0).alias("wx_melt_3"),
+        pl.col("snow_depth_cm").alias("wx_snow_depth"),
+    )
+
+
+def add_weather(frame: pl.DataFrame, weather: pl.DataFrame) -> pl.DataFrame:
+    """Одна и та же функция при обучении и в работе: соединение признаков погоды по дню."""
+    return frame.drop([c for c in WEATHER_FEATURES if c in frame.columns]).join(
+        weather_features(weather), on="day", how="left"
     )
 
 

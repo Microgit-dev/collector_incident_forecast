@@ -12,6 +12,7 @@ import {
   Tabs,
   Text,
   Title,
+  Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconClipboardPlus, IconRefresh } from '@tabler/icons-react'
@@ -55,6 +56,12 @@ interface WorkOrder {
   due_at: string
   assignee_name: string | null
   created_at: string
+  external_id: string
+  external_status: string
+  external_assignee: string
+  external_history: { status: string; label: string; at: string }[]
+  external_synced_at: string | null
+  report: string
 }
 
 type WorkOrderStatus = 'draft' | 'approved' | 'submitted' | 'in_progress' | 'done' | 'cancelled'
@@ -258,8 +265,21 @@ function Orders() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const sync = useMutation({
+    mutationFn: () =>
+      api<{ checked: number; changed: number; error?: string }>('/workorders/items/sync/', { method: 'POST' }),
+    onSuccess: (r) => {
+      notifications.show({
+        color: r.error ? 'red' : 'teal',
+        message: r.error ?? `Проверено заявок: ${r.checked}, изменилось: ${r.changed}`,
+      })
+      void queryClient.invalidateQueries({ queryKey: ['workorders'] })
+    },
+    onError: (e) => notifications.show({ color: 'red', message: e.message }),
+  })
   const orders = useQuery({
     queryKey: ['workorders', status, page],
+    refetchInterval: 30_000,
     queryFn: () =>
       api<Page<WorkOrder>>('/workorders/items/', {
         query: { ...(status ? { status } : {}), page, page_size: PAGE, ordering: '-created_at' },
@@ -288,6 +308,19 @@ function Orders() {
         clearable
         w={220}
       />
+      <Group gap="xs">
+        {can('workorders.change_workorder') && (
+          <Button size="xs" variant="light" loading={sync.isPending} onClick={() => sync.mutate()}>
+            Обновить из системы заявок
+          </Button>
+        )}
+        <Anchor href="/helpdesk/" target="_blank" size="xs">
+          Система заявок заказчика (эмуляция) ↗
+        </Anchor>
+        <Text size="xs" c="dimmed">
+          Переданные заявки живут в системе заявок: статусы, бригада и отчёт забираются оттуда раз в минуту.
+        </Text>
+      </Group>
       {orders.isLoading ? (
         <Loader />
       ) : orders.data?.results.length === 0 ? (
@@ -323,6 +356,11 @@ function Orders() {
                       <Text size="xs" c="dimmed">
                         {o.node_name}
                       </Text>
+                      {o.report && (
+                        <Text size="xs" c="teal.8">
+                          Отчёт: {o.report}
+                        </Text>
+                      )}
                     </Table.Td>
                     <Table.Td>
                       <RiskBadge level={o.priority} />
@@ -343,6 +381,34 @@ function Orders() {
                       <Badge variant="light" color={WO_STATUS[o.status].color}>
                         {WO_STATUS[o.status].label}
                       </Badge>
+                      {o.external_id && (
+                        <Tooltip
+                          multiline
+                          w={300}
+                          label={
+                            <Stack gap={2}>
+                              <Text size="xs" fw={600}>
+                                Путь в системе заявок
+                              </Text>
+                              {o.external_history.map((h) => (
+                                <Text key={h.status} size="xs">
+                                  {dayjs(h.at).format('DD.MM HH:mm')} — {h.label}
+                                </Text>
+                              ))}
+                              {o.external_synced_at && (
+                                <Text size="xs" c="dimmed">
+                                  обновлено {dayjs(o.external_synced_at).format('DD.MM HH:mm:ss')}
+                                </Text>
+                              )}
+                            </Stack>
+                          }
+                        >
+                          <Text size="xs" c="dimmed" mt={2} style={{ cursor: 'help' }}>
+                            {o.external_id} · {o.external_status}
+                            {o.external_assignee && ` · ${o.external_assignee}`}
+                          </Text>
+                        </Tooltip>
+                      )}
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">

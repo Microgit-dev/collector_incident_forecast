@@ -47,6 +47,10 @@ class TaskSpec:
     # Уровни риска по точности на валидации; для редких событий ориентиры ниже — иначе уровней не будет
     level_precision: dict = field(default_factory=lambda: {"critical": 0.7, "high": 0.4, "medium": 0.15})
 
+    @property
+    def uses_weather(self) -> bool:
+        return any(f in F.WEATHER_FEATURES for f in self.features)
+
 
 SENSOR_FAILURE = TaskSpec(
     task="sensor_failure",
@@ -88,7 +92,8 @@ FLOOD = TaskSpec(
     title="Подтопление",
     event_title="тревога затопления (насосы АНС, датчики затопления)",
     incident_type="flood",
-    features=[*F.FEATURES, *F.EXTRA_FEATURES],
+    # Погода (осадки, оттепель, таяние снега) — внешний фактор подтоплений, ТЗ §13
+    features=[*F.FEATURES, *F.EXTRA_FEATURES, *F.WEATHER_FEATURES],
     event=lambda: pl.col("alarms") > 0,
     healthy=lambda: pl.col("last_state") != "alarm",
     sensor_types=("Состояние насоса", "Датчик затопления"),

@@ -60,6 +60,8 @@ PERIODIC = [
     ("Контроль деградации модели", "apps.forecasting.tasks.check_model_degradation", 86400),
     ("Плановое переобучение модели", "apps.forecasting.tasks.weekly_retrain", 7 * 86400),
     ("Рекомендации по ТО", "apps.workorders.tasks.generate_recommendations", 86400),
+    ("Статусы заявок из help desk", "apps.workorders.tasks.sync_helpdesk", 60),
+    ("Погода Open-Meteo: последние сутки и прогноз", "apps.integrations.tasks.sync_weather", 6 * 3600),
 ]
 
 

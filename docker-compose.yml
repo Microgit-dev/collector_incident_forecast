@@ -149,6 +149,16 @@ services:
       kafka:
         condition: service_healthy
 
+  # Эмулятор системы учёта заявок заказчика (help desk): жизненный цикл заявок, страница /helpdesk/
+  mock-helpdesk:
+    build: ./infra/mock-helpdesk
+    image: collector-forecast/mock-helpdesk:local
+    environment:
+      STAGE_MINUTES: ${HELPDESK_STAGE_MINUTES:-2,5,20,10}
+    volumes:
+      - helpdeskdata:/data
+    restart: unless-stopped
+
   web:
     # Caddy: TLS (самоподписанный локальный CA), SPA и reverse proxy к API/WS/Grafana
     build: ./frontend
@@ -246,6 +256,7 @@ services:
 
 volumes:
   pgdata:
+  helpdeskdata:
   redisdata:
   kafkadata:
   promdata:

@@ -121,6 +121,9 @@ class WorkOrder(TimeStampedModel):
     external_id = models.CharField("ID во внешней системе", max_length=64, blank=True)
     external_status = models.CharField("статус во внешней системе", max_length=64, blank=True)
     external_synced_at = models.DateTimeField("синхронизировано", null=True, blank=True)
+    external_assignee = models.CharField("исполнитель во внешней системе", max_length=128, blank=True)
+    # [{"status", "label", "at"}] — путь заявки в help desk, как его видит внешняя система
+    external_history = models.JSONField("история во внешней системе", default=list, blank=True)
     report = models.TextField("отчёт исполнителя", blank=True)
 
     class Meta:

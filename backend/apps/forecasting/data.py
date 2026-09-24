@@ -131,6 +131,27 @@ def _normalize(frame: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def load_weather() -> pl.DataFrame:
+    """Суточная погода по Москве (Open-Meteo) для признаков подтопления."""
+    from apps.integrations.models import WeatherDaily
+
+    rows = list(
+        WeatherDaily.objects.order_by("day").values_list(
+            "day", "precipitation_mm", "temperature_max_c", "snow_depth_cm"
+        )
+    )
+    return pl.DataFrame(
+        rows,
+        schema={
+            "day": pl.Date,
+            "precipitation_mm": pl.Float64,
+            "temperature_max_c": pl.Float64,
+            "snow_depth_cm": pl.Float64,
+        },
+        orient="row",
+    )
+
+
 def load_meta() -> pl.DataFrame:
     return _query(META_SQL).with_columns(pl.col("first_day").cast(pl.Date))
 

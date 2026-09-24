@@ -106,8 +106,125 @@ def transition(order: WorkOrder, new_status: str, user=None) -> WorkOrder:
         raise WorkOrderError(
             f"Переход {order.get_status_display()} → {WorkOrder.Status(new_status).label} недопустим"
         )
+    if new_status == WorkOrder.Status.SUBMITTED:
+        return submit(order, user)
     order.status = new_status
     if new_status == WorkOrder.Status.APPROVED:
         order.approved_by = user
     order.save()
     return order
+
+
+# ---------- система учёта заявок заказчика (help desk) ----------
+
+# Статус help desk → наш статус; заявка двигается только вперёд
+_EXTERNAL = {
+    "accepted": WorkOrder.Status.SUBMITTED,
+    "assigned": WorkOrder.Status.SUBMITTED,
+    "in_progress": WorkOrder.Status.IN_PROGRESS,
+    "done": WorkOrder.Status.DONE,
+    "closed": WorkOrder.Status.DONE,
+}
+CLOSED_LABEL = "Закрыта"
+_ORDER = [
+    WorkOrder.Status.DRAFT,
+    WorkOrder.Status.APPROVED,
+    WorkOrder.Status.SUBMITTED,
+    WorkOrder.Status.IN_PROGRESS,
+    WorkOrder.Status.DONE,
+]
+
+
+def _client():
+    from apps.integrations.clients import HelpdeskClient
+
+    return HelpdeskClient()
+
+
+def submit(order: WorkOrder, user=None) -> WorkOrder:
+    """Передать утверждённую заявку в help desk: там она получает свой номер и живёт своим циклом."""
+    import httpx
+
+    payload = {
+        "number": order.number,
+        "title": order.title,
+        "description": order.description,
+        "priority": order.priority,
+        "work_type": order.work_type,
+        "node": order.node.name,
+        "due_at": order.due_at.isoformat(),
+    }
+    try:
+        ticket = _client().submit(payload)
+    except httpx.HTTPError as exc:
+        raise WorkOrderError(f"Система заявок недоступна: {exc}") from exc
+    order.status = WorkOrder.Status.SUBMITTED
+    _apply_external(order, ticket)
+    order.save()
+    _incident_event(order, user, f"Заявка {order.number} передана в систему заявок ({order.external_id})")
+    return order
+
+
+def _apply_external(order: WorkOrder, ticket: dict) -> None:
+    order.external_id = ticket["id"]
+    order.external_status = ticket.get("status_label", ticket.get("status", ""))
+    order.external_assignee = ticket.get("assignee") or ""
+    order.external_history = ticket.get("history", [])
+    order.external_synced_at = timezone.now()
+    if ticket.get("report"):
+        order.report = ticket["report"]
+
+
+def _incident_event(order: WorkOrder, user, text: str) -> None:
+    if order.incident_id:
+        IncidentEvent.objects.create(
+            incident_id=order.incident_id,
+            kind=IncidentEvent.Kind.WORKORDER,
+            actor=user,
+            text=text,
+            payload={"workorder_id": order.pk},
+        )
+
+
+def sync_external() -> dict:
+    """Забрать статусы заявок из help desk (только чтение) и продвинуть наши заявки."""
+    import httpx
+
+    from .models import MaintenanceRecommendation
+
+    # Опрашиваем, пока заявка не закрыта в help desk: «выполнена» ещё может закрыться с уточнённым отчётом
+    orders = {
+        o.external_id: o
+        for o in WorkOrder.objects.exclude(external_id="")
+        .filter(status__in=(WorkOrder.Status.SUBMITTED, WorkOrder.Status.IN_PROGRESS, WorkOrder.Status.DONE))
+        .exclude(external_status=CLOSED_LABEL)
+    }
+    if not orders:
+        return {"checked": 0, "changed": 0}
+    try:
+        tickets = _client().statuses(list(orders))
+    except httpx.HTTPError:
+        return {"checked": len(orders), "changed": 0, "error": "help desk недоступен"}
+    changed = 0
+    for external_id, ticket in tickets.items():
+        order = orders.get(external_id)
+        if order is None:
+            continue
+        before = (order.status, order.external_status, order.external_assignee)
+        _apply_external(order, ticket)
+        target = _EXTERNAL.get(ticket.get("status"))
+        if target and _ORDER.index(target) > _ORDER.index(order.status):
+            order.status = target
+            text = {
+                WorkOrder.Status.IN_PROGRESS: f"Заявка {order.number}: бригада приступила ({order.external_assignee})",
+                WorkOrder.Status.DONE: f"Заявка {order.number} выполнена: {order.report}",
+            }.get(target)
+            if text:
+                _incident_event(order, None, text)
+            if target == WorkOrder.Status.DONE and order.recommendation_id:
+                MaintenanceRecommendation.objects.filter(pk=order.recommendation_id).update(
+                    status=MaintenanceRecommendation.Status.DONE
+                )
+        order.save()
+        changed += before != (order.status, order.external_status, order.external_assignee)
+    return {"checked": len(orders), "changed": changed}
