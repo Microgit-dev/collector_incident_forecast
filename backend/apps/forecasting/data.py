@@ -15,7 +15,7 @@ from django.db import connection
 from apps.ingestion.history import EXCLUDED_YEARS
 
 DAILY_SQL = """
-SELECT channel_id, day, readings, warnings, alarms, faults, power_losses, unknowns, invalid,
+SELECT channel_id, day, readings, warnings, alarms, faults, power_losses, unknowns, invalid, events,
        numeric_avg, numeric_min, numeric_max, last_state, first_fault_ts, last_ts
 FROM telemetry_channeldaily
 WHERE day >= %(since)s AND day < %(until)s {channels}
@@ -31,6 +31,7 @@ SELECT channel_id,
        count(*) FILTER (WHERE state = 'power_loss') AS power_losses,
        count(*) FILTER (WHERE state = 'unknown') AS unknowns,
        count(*) FILTER (WHERE quality NOT IN ('ok', 'drift')) AS invalid,
+       count(*) FILTER (WHERE state = 'event') AS events,
        avg(numeric) FILTER (WHERE quality IN ('ok', 'drift')) AS numeric_avg,
        min(numeric) FILTER (WHERE quality IN ('ok', 'drift')) AS numeric_min,
        max(numeric) FILTER (WHERE quality IN ('ok', 'drift')) AS numeric_max,
@@ -61,6 +62,7 @@ SCHEMA = {
     "power_losses": pl.Int32,
     "unknowns": pl.Int32,
     "invalid": pl.Int32,
+    "events": pl.Int32,
     "numeric_avg": pl.Float64,
     "numeric_min": pl.Float64,
     "numeric_max": pl.Float64,
@@ -193,13 +195,19 @@ def last_complete_day() -> date | None:
 NODE_DAILY_SQL = """
 SELECT c.node_id, d.day, sum(d.faults)::int AS node_faults, sum(d.power_losses)::int AS node_power
 FROM telemetry_channeldaily d JOIN assets_channel c ON c.id = d.channel_id
+WHERE d.day >= %(since)s AND d.day < %(until)s
 GROUP BY c.node_id, d.day
 """
 
 
-def load_node_daily() -> pl.DataFrame:
-    """Объектные суточные счётчики за всю историю (для сборки обучающей выборки)."""
-    return _query(NODE_DAILY_SQL).with_columns(
+def load_node_daily(since: date = date(2000, 1, 1), until: date = date(2100, 1, 1)) -> pl.DataFrame:
+    """Объектные суточные счётчики по всем каналам объекта (и для обучения, и для прогноза)."""
+    frame = _query(NODE_DAILY_SQL, {"since": since, "until": until})
+    if frame.is_empty():
+        return pl.DataFrame(
+            schema={"node_id": pl.Int64, "day": pl.Date, "node_faults": pl.Int32, "node_power": pl.Int32}
+        )
+    return frame.with_columns(
         pl.col("day").cast(pl.Date), pl.col("node_faults").cast(pl.Int32), pl.col("node_power").cast(pl.Int32)
     )
 

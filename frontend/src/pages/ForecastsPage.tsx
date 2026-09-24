@@ -24,6 +24,13 @@ import type { ChannelRisk, Prediction, PredictionOutcome } from '../api/types'
 import { RiskBadge } from '../components/badges'
 
 const PAGE = 25
+const TASK_LABEL: Record<string, string> = {
+  sensor_failure: 'Отказ датчика',
+  gas: 'Газ',
+  flood: 'Подтопление',
+  fire: 'Пожар (индикатор)',
+  intrusion: 'НСД (индикатор)',
+}
 const pct = (p: number) => `${Math.round(p * 100)} %`
 
 interface JournalSummary {
@@ -100,11 +107,13 @@ function Watchlist() {
 
 export function ForecastsPage() {
   const [mode, setMode] = useState<'live' | 'backtest'>('live')
+  const [task, setTask] = useState<string>('all')
   const [outcome, setOutcome] = useState<string>('all')
   const [page, setPage] = useState(1)
   const [open, setOpen] = useState<number | null>(null)
   const filters = {
     is_backtest: mode === 'backtest',
+    ...(task !== 'all' ? { task } : {}),
     ...(outcome !== 'all' ? { outcome } : {}),
   }
 
@@ -117,8 +126,11 @@ export function ForecastsPage() {
     refetchInterval: 60_000,
   })
   const summary = useQuery({
-    queryKey: ['predictions', 'summary', mode],
-    queryFn: () => api<JournalSummary>('/forecasting/predictions/summary/', { query: { is_backtest: mode === 'backtest' } }),
+    queryKey: ['predictions', 'summary', mode, task],
+    queryFn: () =>
+      api<JournalSummary>('/forecasting/predictions/summary/', {
+        query: { is_backtest: mode === 'backtest', ...(task !== 'all' ? { task } : {}) },
+      }),
   })
 
   const s = summary.data
@@ -138,6 +150,21 @@ export function ForecastsPage() {
           ]}
         />
       </Group>
+      <SegmentedControl
+        value={task}
+        onChange={(v) => {
+          setTask(v)
+          setPage(1)
+        }}
+        data={[
+          { value: 'all', label: 'Все' },
+          { value: 'sensor_failure', label: 'Отказ датчика' },
+          { value: 'gas', label: 'Газ' },
+          { value: 'flood', label: 'Подтопление' },
+          { value: 'fire', label: 'Пожар' },
+          { value: 'intrusion', label: 'НСД' },
+        ]}
+      />
       {mode === 'backtest' && (
         <Text size="sm" c="dimmed">
           Прогнозы, выпущенные задним числом на исторических данных: так модель отработала бы на реальном периоде. Исход
@@ -186,7 +213,7 @@ export function ForecastsPage() {
 
       <Card withBorder radius="md">
         <Group justify="space-between" mb="xs">
-          <Text fw={600}>Прогнозы высокого и критического риска</Text>
+          <Text fw={600}>Прогнозы и индикаторы риска</Text>
           <SegmentedControl
             size="xs"
             value={outcome}
@@ -210,9 +237,10 @@ export function ForecastsPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Сформирован</Table.Th>
+                  <Table.Th>Задача</Table.Th>
                   <Table.Th>Канал</Table.Th>
                   <Table.Th>Объект</Table.Th>
-                  <Table.Th>Вероятность</Table.Th>
+                  <Table.Th>Вероятность / индекс</Table.Th>
                   <Table.Th>Уровень</Table.Th>
                   <Table.Th>Горизонт</Table.Th>
                   <Table.Th>Исход</Table.Th>
@@ -223,7 +251,10 @@ export function ForecastsPage() {
                   <Fragment key={p.id}>
                     <Table.Tr style={{ cursor: 'pointer' }} onClick={() => setOpen(open === p.id ? null : p.id)}>
                       <Table.Td>{dayjs(p.issued_at).format('DD.MM.YYYY HH:mm')}</Table.Td>
-                      <Table.Td>{p.channel_name}</Table.Td>
+                      <Table.Td>
+                        <Text size="xs">{TASK_LABEL[p.task] ?? p.task}</Text>
+                      </Table.Td>
+                      <Table.Td>{p.channel_name ?? '—'}</Table.Td>
                       <Table.Td>{p.node_name}</Table.Td>
                       <Table.Td>{pct(p.probability)}</Table.Td>
                       <Table.Td>
@@ -238,7 +269,7 @@ export function ForecastsPage() {
                     </Table.Tr>
                     {open === p.id && (
                       <Table.Tr>
-                        <Table.Td colSpan={7}>
+                        <Table.Td colSpan={8}>
                           <Stack gap={4} py={4}>
                             <Text size="sm">{p.summary}</Text>
                             <Anchor component={Link} to={`/incidents?node=${p.node}`} size="xs">

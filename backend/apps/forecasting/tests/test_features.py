@@ -3,8 +3,8 @@ from datetime import UTC, date, datetime
 import numpy as np
 import polars as pl
 
+from apps.forecasting.channel_model import pick_threshold
 from apps.forecasting.domain import features as F
-from apps.forecasting.sensor_failure import pick_threshold
 
 
 def _daily(rows):

@@ -20,7 +20,7 @@ from django.utils import timezone
 from apps.assets.models import Channel
 from apps.topology.models import Node
 
-from . import data, health
+from . import data, health, specs
 from .models import (
     ChannelHealth,
     ChannelRisk,
@@ -71,10 +71,12 @@ def activate(model: MLModel) -> MLModel:
 
 
 def forecaster_for(model: MLModel):
-    from .sensor_failure import SensorFailureForecaster
+    from .channel_model import ChannelForecaster
 
     policy = RiskPolicy.objects.filter(task=model.task).first()
-    return SensorFailureForecaster(model.artifact_path, policy.medium_threshold if policy else 0.3)
+    return ChannelForecaster(
+        specs.get(model.task), model.artifact_path, policy.medium_threshold if policy else 0.3
+    )
 
 
 # ---------- цикл ----------
@@ -90,12 +92,18 @@ def run_cycle(as_of: datetime | None = None, node_ids: list[int] | None = None) 
         summary["stream"] = check_stream(as_of)
         summary["health"] = update_health(as_of)
         summary["resolved"] = resolve_outcomes(as_of)
-    model = active_model()
-    if model is None:
-        summary["forecast"] = "нет активной модели — обучите модель в разделе «Модели»"
-        return summary
-    results = forecaster_for(model).predict(as_of, node_ids)
-    summary["forecast"] = store_forecast(model, as_of, results, full=node_ids is None)
+    summary["forecast"] = {}
+    for task in specs.SPECS:
+        model = active_model(task)
+        if model is None:
+            summary["forecast"][task] = "нет активной модели — обучите её в разделе «Модели»"
+            continue
+        results = forecaster_for(model).predict(as_of, node_ids)
+        summary["forecast"][task] = store_forecast(model, as_of, results, full=node_ids is None)
+    if node_ids is None:
+        from .scenarios import run_scenarios
+
+        summary["scenarios"] = run_scenarios(as_of)
     summary["seconds"] = round(time.monotonic() - started, 1)
     logger.info("forecast cycle %s", summary)
     return summary
@@ -168,7 +176,7 @@ def _journal(
     model: MLModel, policy: RiskPolicy, as_of: datetime, risky: list[ChannelRisk], backtest: bool = False
 ) -> tuple[int, int]:
     """Журнал прогнозов: новая запись — только если по каналу нет действующего прогноза или риск вырос."""
-    from apps.incidents.models import Alert, IncidentType
+    from apps.incidents.models import Alert
     from apps.incidents.services import raise_alert
 
     open_predictions = {
@@ -180,6 +188,7 @@ def _journal(
             channel_id__in=[k.channel_id for k in risky],
         )
     }
+    spec = specs.get(model.task)
     channels = Channel.objects.select_related("node").in_bulk([k.channel_id for k in risky])
     alert_rank = _rank(policy.alert_from_level)
     issued = alerts = 0
@@ -188,7 +197,7 @@ def _journal(
         current = open_predictions.get(risk.channel_id)
         if current and _rank(risk.risk_level) <= _rank(current.risk_level):
             continue
-        summary = _summary(channel, risk)
+        summary = _summary(spec, channel, risk)
         if current:
             crossed = _rank(current.risk_level) < alert_rank <= _rank(risk.risk_level)
             current.probability, current.risk_level = risk.probability, risk.risk_level
@@ -214,12 +223,12 @@ def _journal(
             issued += 1
         if crossed and policy.enabled and not backtest:
             raise_alert(
-                type=IncidentType.SENSOR_FAILURE,
+                type=spec.incident_type,
                 severity=risk.risk_level,
                 node=channel.node,
                 channel=channel,
                 prediction=prediction,
-                title=f"Прогноз: риск отказа «{channel.name}» в ближайшие {model.horizon_hours} ч",
+                title=f"Прогноз: {spec.event_title} — «{channel.name}», ближайшие {model.horizon_hours} ч",
                 source=Alert.Source.FORECAST,
                 raised_at=as_of,
                 probability=risk.probability,
@@ -230,10 +239,10 @@ def _journal(
     return issued, alerts
 
 
-def _summary(channel: Channel, risk: ChannelRisk) -> str:
+def _summary(spec, channel: Channel, risk: ChannelRisk) -> str:
     reasons = "; ".join(f["title"] for f in risk.factors) or "совокупность признаков"
     return (
-        f"Вероятность начала неисправности канала «{channel.name}» в ближайшие 24 ч — "
+        f"Вероятность события «{spec.event_title}» по каналу «{channel.name}» в горизонте прогноза — "
         f"{risk.probability:.0%}. Основные факторы: {reasons}."
     )
 
@@ -244,31 +253,45 @@ UPDATE forecasting_prediction p SET outcome = CASE WHEN EXISTS (
         WHERE d.channel_id = p.channel_id
           AND d.day BETWEEN (p.issued_at AT TIME ZONE 'Europe/Moscow')::date
                         AND (p.valid_until AT TIME ZONE 'Europe/Moscow')::date
-          AND d.first_fault_ts > p.issued_at AND d.first_fault_ts <= p.valid_until
+          AND {daily}
     ) OR EXISTS (
         SELECT 1 FROM telemetry_reading r
-        WHERE r.channel_id = p.channel_id AND r.state = 'fault'
+        WHERE r.channel_id = p.channel_id AND {reading}
           AND r.ts > p.issued_at AND r.ts <= p.valid_until
     ) THEN 'confirmed' ELSE 'not_confirmed' END,
     outcome_at = %(as_of)s
-WHERE p.outcome = 'pending' AND p.task = 'sensor_failure' AND p.valid_until <= %(as_of)s
+WHERE p.outcome = 'pending' AND p.task = %(task)s AND p.channel_id IS NOT NULL AND p.valid_until <= %(as_of)s
 """
 
 
 def resolve_outcomes(as_of: datetime) -> int:
-    """Исход прогноза по факту: была ли неисправность канала в горизонте. Решение диспетчера приоритетнее."""
+    """Исход прогноза по факту: было ли событие в горизонте. Решение диспетчера приоритетнее."""
+    resolved = 0
     with connection.cursor() as cursor:
-        cursor.execute(RESOLVE_SQL, {"as_of": as_of})
-        return cursor.rowcount
+        for spec in specs.SPECS.values():
+            sql = RESOLVE_SQL.format(daily=spec.resolve_daily, reading=spec.resolve_reading)
+            cursor.execute(sql, {"as_of": as_of, "task": spec.task})
+            resolved += cursor.rowcount
+    from .scenarios import resolve_scenarios
+
+    return resolved + resolve_scenarios(as_of)
 
 
-def backtest(start: datetime, end: datetime, step: timedelta = timedelta(days=1), echo=None) -> dict:
+def backtest(
+    start: datetime,
+    end: datetime,
+    step: timedelta = timedelta(days=1),
+    echo=None,
+    task: str = ForecastTask.SENSOR_FAILURE,
+) -> dict:
     """
     Прогон активной модели по истории: прогноз на каждый шаг, журнал с пометкой «бэктест»
     и разметка исходов по факту. Инциденты не создаются. Показывает, как модель отработала бы
     на реальном периоде, — это и проверка, и наполнение журнала прогнозов для демонстрации.
     """
-    model = active_model()
+    if task in (ForecastTask.FIRE, ForecastTask.INTRUSION):
+        return _backtest_scenarios(start, end, step, echo, task)
+    model = active_model(task)
     if model is None:
         raise ValueError("Нет активной модели")
     forecaster = forecaster_for(model)
@@ -289,6 +312,32 @@ def backtest(start: datetime, end: datetime, step: timedelta = timedelta(days=1)
         "steps": steps,
         "predictions": issued,
         "resolved": resolved,
+        "precision": round(confirmed / total, 3) if total else None,
+    }
+
+
+def _backtest_scenarios(start, end, step, echo, task) -> dict:
+    """Индикаторы пожара и НСД по истории оперативного контура (шаг лучше брать 1–3 часа)."""
+    from .scenarios import HORIZON_HOURS, resolve_scenarios, run_scenarios
+
+    moment, issued, steps = start, 0, 0
+    while moment <= end:
+        counts = run_scenarios(moment, backtest=True)
+        issued += counts[task]["predictions"]
+        resolve_scenarios(moment)
+        steps += 1
+        if echo and counts[task]["nodes"]:
+            echo(
+                f"{moment:%Y-%m-%d %H:%M}  объектов: {counts[task]['nodes']}, прогнозов: {counts[task]['predictions']}"
+            )
+        moment += step
+    resolve_scenarios(end + timedelta(hours=HORIZON_HOURS))
+    qs = Prediction.objects.filter(is_backtest=True, task=task)
+    confirmed = qs.filter(outcome=Prediction.Outcome.CONFIRMED).count()
+    total = qs.exclude(outcome=Prediction.Outcome.PENDING).count()
+    return {
+        "steps": steps,
+        "predictions": issued,
         "precision": round(confirmed / total, 3) if total else None,
     }
 

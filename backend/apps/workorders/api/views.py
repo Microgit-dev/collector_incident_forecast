@@ -45,11 +45,26 @@ class WorkOrderSerializer(serializers.ModelSerializer):
 
 
 class RecommendationSerializer(serializers.ModelSerializer):
+    node_name = serializers.CharField(source="node.name", read_only=True)
+    channel_name = serializers.CharField(source="channel.name", default=None, read_only=True)
+    equipment_name = serializers.CharField(source="equipment.name", default=None, read_only=True)
+    work_type_display = serializers.CharField(source="get_work_type_display", read_only=True)
+    workorders = serializers.SerializerMethodField()
+
+    def get_workorders(self, obj):
+        return [{"id": w.pk, "number": w.number, "status": w.status} for w in obj.workorders.all()]
+
     class Meta:
         model = MaintenanceRecommendation
         fields = (
             "id",
             "node",
+            "node_name",
+            "channel_name",
+            "equipment_name",
+            "work_type_display",
+            "workorders",
+            "created_at",
             "equipment",
             "channel",
             "prediction",
@@ -114,7 +129,28 @@ class WorkOrderViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
 
 
 class RecommendationViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
-    queryset = MaintenanceRecommendation.objects.select_related("node")
+    queryset = MaintenanceRecommendation.objects.select_related(
+        "node", "channel", "equipment"
+    ).prefetch_related("workorders")
     serializer_class = RecommendationSerializer
     filterset_fields = ("status", "work_type", "priority", "node")
-    http_method_names = ["get", "patch", "head", "options"]
+    ordering_fields = ("due_date", "priority", "created_at")
+    http_method_names = ["get", "patch", "post", "head", "options"]
+
+    def create(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @action(detail=True, methods=["post"], permission_classes=[require_perm("workorders.add_workorder")])
+    def draft(self, request, pk=None):
+        rec = self.get_object()
+        order = services.draft_from_recommendation(rec, request.user)
+        log_action(request, "workorder.draft", obj=order, payload={"recommendation": rec.pk})
+        return Response(WorkOrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], permission_classes=[require_perm("workorders.add_workorder")])
+    def generate(self, request):
+        from ..recommendations import generate
+
+        result = generate()
+        log_action(request, "workorder.recommendations", payload=result)
+        return Response(result)

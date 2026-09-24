@@ -69,6 +69,30 @@ def draft_from_incident(incident: Incident, user) -> WorkOrder:
     return order
 
 
+@transaction.atomic
+def draft_from_recommendation(rec, user) -> WorkOrder:
+    """Черновик заявки из рекомендации по ТО; рекомендация становится принятой."""
+    from datetime import datetime, time
+
+    from .models import MaintenanceRecommendation
+
+    order = WorkOrder.objects.create(
+        number=next_number(),
+        node=rec.node,
+        recommendation=rec,
+        equipment=rec.equipment,
+        work_type=rec.work_type,
+        priority=rec.priority,
+        title=f"{rec.get_work_type_display()} — {rec.node.name}",
+        description=f"Основание: рекомендация по ТО #{rec.pk}.\n{rec.rationale}",
+        due_at=timezone.make_aware(datetime.combine(rec.due_date, time(18, 0))),
+        created_by=user,
+    )
+    rec.status = MaintenanceRecommendation.Status.ACCEPTED
+    rec.save(update_fields=["status", "updated_at"])
+    return order
+
+
 _TRANSITIONS = {
     WorkOrder.Status.DRAFT: {WorkOrder.Status.APPROVED, WorkOrder.Status.CANCELLED},
     WorkOrder.Status.APPROVED: {WorkOrder.Status.SUBMITTED, WorkOrder.Status.CANCELLED},

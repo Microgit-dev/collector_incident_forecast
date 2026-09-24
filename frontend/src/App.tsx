@@ -15,7 +15,9 @@ import { LearningPage } from './pages/LearningPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModelsPage } from './pages/ModelsPage'
 import { PlannedPage } from './pages/PlannedPage'
+import { ReplayPage } from './pages/ReplayPage'
 import { TeamsPage } from './pages/TeamsPage'
+import { WorkOrdersPage } from './pages/WorkOrdersPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -57,16 +59,8 @@ export function App() {
         <Route path="models" element={<ModelsPage />} />
         <Route path="learning" element={<LearningPage />} />
         <Route path="data-health" element={<DataHealthPage />} />
-        <Route
-          path="workorders"
-          element={
-            <PlannedPage
-              title="Заявки"
-              epic="E4/E7"
-              description="Черновики и заявки на работы, утверждение, статусы из системы учёта заявок."
-            />
-          }
-        />
+        <Route path="workorders" element={<WorkOrdersPage />} />
+        <Route path="replay" element={<ReplayPage />} />
         <Route
           path="analytics"
           element={

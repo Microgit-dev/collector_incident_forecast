@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 import polars as pl
 
 from . import data
-from .sensor_failure import MSK
+from .channel_model import MSK
 
 # Периодический канал — числовое измерение (газ, температура), приходящее не реже раза в час.
 # Дискретные каналы (движение, двери, модули) шлют сообщения по событию: их тишина — норма.
