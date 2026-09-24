@@ -22,3 +22,29 @@ class WeatherObservation(models.Model):
 
     def __str__(self):
         return f"{self.ts:%Y-%m-%d %H:%M}"
+
+
+class WeatherDaily(models.Model):
+    """
+    Суточная погода по Москве (Open-Meteo): архив ERA5 для истории, прогноз — на ближайшие сутки.
+    Источник признаков модели подтопления: осадки, оттепель, таяние снежного покрова.
+    """
+
+    day = models.DateField("сутки", unique=True)
+    precipitation_mm = models.FloatField("осадки, мм", null=True)
+    rain_mm = models.FloatField("дождь, мм", null=True)
+    snowfall_cm = models.FloatField("снег, см", null=True)
+    temperature_mean_c = models.FloatField("средняя температура, °C", null=True)
+    temperature_max_c = models.FloatField("максимальная температура, °C", null=True)
+    snow_depth_cm = models.FloatField("снежный покров, см", null=True)
+    is_forecast = models.BooleanField("прогноз", default=False)
+    source = models.CharField("источник", max_length=32, default="open-meteo")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "погода за сутки"
+        verbose_name_plural = "погода по суткам"
+        ordering = ("-day",)
+
+    def __str__(self):
+        return f"{self.day:%Y-%m-%d}"

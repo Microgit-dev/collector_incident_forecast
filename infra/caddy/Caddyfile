@@ -20,6 +20,11 @@ localhost, 127.0.0.1 {
 		reverse_proxy grafana:3000
 	}
 
+	# Эмулятор help desk заказчика (страница заявок «с их стороны»)
+	handle_path /helpdesk* {
+		reverse_proxy mock-helpdesk:8080
+	}
+
 	# SPA: неизвестные пути отдаются index.html, маршрутизирует React Router
 	handle {
 		root * /srv

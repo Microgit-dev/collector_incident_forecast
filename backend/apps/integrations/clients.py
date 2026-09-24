@@ -44,7 +44,7 @@ class HelpdeskClient:
         response.raise_for_status()
         return response.json()
 
-    def statuses(self, external_ids: list[str]) -> dict[str, str]:
+    def statuses(self, external_ids: list[str]) -> dict[str, dict]:
         response = httpx.get(
             f"{self.base_url}/api/tickets/statuses/",
             params={"ids": ",".join(external_ids)},

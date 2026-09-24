@@ -102,12 +102,18 @@ def build_dataset(
     if use_cache and cache.exists() and stats_file.exists():
         progress(1, "Выборка взята из кеша")
         saved = json.loads(stats_file.read_text(encoding="utf-8"))
-        return pl.read_parquet(cache), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
+        frame = pl.read_parquet(cache)
+        return _with_weather(frame, spec), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
     frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels)
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
     stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
-    return frame, stats, per_label
+    return _with_weather(frame, spec), stats, per_label
+
+
+def _with_weather(frame: pl.DataFrame, spec: TaskSpec) -> pl.DataFrame:
+    """Погода — по дню, одна на все каналы: присоединяется после кеша, выборку не пересобирает."""
+    return F.add_weather(frame, data.load_weather()) if spec.uses_weather else frame
 
 
 def _collect(
@@ -157,7 +163,7 @@ def _collect(
                 "weight",
                 "weight_orig",
                 "next_fault_ts",
-                *spec.features,
+                *[f for f in spec.features if f not in F.WEATHER_FEATURES],
             )
         )
     progress(1, "Выборка собрана")
@@ -495,7 +501,8 @@ def inference_features(
         )
     nodes = nodes.with_columns(pl.col("node_faults").cast(pl.Int32), pl.col("node_power").cast(pl.Int32))
     feats = F.compute_features(grid, nodes, meta)
-    return feats.filter((pl.col("day") == end_day) & spec.healthy().fill_null(True))
+    feats = feats.filter((pl.col("day") == end_day) & spec.healthy().fill_null(True))
+    return F.add_weather(feats, data.load_weather()) if spec.uses_weather else feats
 
 
 class ChannelForecaster:

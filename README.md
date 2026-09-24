@@ -84,6 +84,7 @@ docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59
 склейка сигналов, гипотезы и приоритет — в [docs/correlation.md](docs/correlation.md).
 Метрики диспетчеров и качества прогнозов, эмуляция смен, отчёты PDF/XLSX и дашборд Grafana — в
 [docs/analytics.md](docs/analytics.md).
+Система учёта заявок (эмулятор, https://localhost/helpdesk/) и погода Open-Meteo — в [docs/integrations.md](docs/integrations.md).
 
 Демо-поток СМВУ: реальный журнал проигрывается в Kafka с ускорением.
 

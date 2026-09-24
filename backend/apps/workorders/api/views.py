@@ -37,11 +37,21 @@ class WorkOrderSerializer(serializers.ModelSerializer):
             "assignee_name",
             "external_id",
             "external_status",
+            "external_assignee",
+            "external_history",
             "external_synced_at",
             "report",
             "created_at",
         )
-        read_only_fields = ("number", "status", "external_id", "external_status", "external_synced_at")
+        read_only_fields = (
+            "number",
+            "status",
+            "external_id",
+            "external_status",
+            "external_assignee",
+            "external_history",
+            "external_synced_at",
+        )
 
 
 class RecommendationSerializer(serializers.ModelSerializer):
@@ -107,6 +117,13 @@ class WorkOrderViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
         order = services.draft_from_incident(incident, request.user)
         log_action(request, "workorder.draft", obj=order)
         return Response(WorkOrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], permission_classes=[require_perm("workorders.change_workorder")])
+    def sync(self, request):
+        """Забрать статусы из системы учёта заявок сейчас, не дожидаясь периодической задачи."""
+        result = services.sync_external()
+        log_action(request, "workorder.sync", payload=result)
+        return Response(result)
 
     # Право проверяется внутри: оно зависит от целевого статуса (утвердить / исполнить / отменить)
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
