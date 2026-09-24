@@ -59,6 +59,7 @@ PERIODIC = [
     ("Суточная витрина телеметрии", "apps.telemetry.tasks.rollup_daily", 3600),
     ("Контроль деградации модели", "apps.forecasting.tasks.check_model_degradation", 86400),
     ("Плановое переобучение модели", "apps.forecasting.tasks.weekly_retrain", 7 * 86400),
+    ("Рекомендации по ТО", "apps.workorders.tasks.generate_recommendations", 86400),
 ]
 
 

@@ -21,9 +21,12 @@ from datetime import date
 import polars as pl
 
 STATES = ["normal", "warning", "alarm", "fault", "power_loss", "unknown", "event", ""]
-COUNTS = ["readings", "warnings", "alarms", "faults", "power_losses", "unknowns", "invalid"]
+COUNTS = ["readings", "warnings", "alarms", "faults", "power_losses", "unknowns", "invalid", "events"]
 KEYS = ["channel_id", "segment"]
 NO_EVENT = 999  # «давно / никогда» для признаков «дней с последнего…»
+# Горизонт признаков «суток с последнего…»: дальше — «давно». Прогноз видит 100 суток истории,
+# поэтому и при обучении давность ограничена, иначе признак на обучении и в работе различался бы
+LOOKBACK = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +70,24 @@ SPECS = [
     FeatureSpec("node_power_7", "Потерь питания на объекте за 7 суток: {v}"),
     FeatureSpec("sensor_type", "Тип датчика: {v}"),
 ]
+# Базовый набор — модель отказа датчика; дополнительные признаки — для газа и подтопления
 FEATURES = [s.name for s in SPECS]
-TITLES = {s.name: s.title for s in SPECS}
+EXTRA_SPECS = [
+    FeatureSpec("num_max_1", "Максимум за сутки: {v}"),
+    FeatureSpec("num_max_7", "Максимум за 7 суток: {v}"),
+    FeatureSpec("num_max_trend", "Рост суточного максимума к среднему за 7 суток: {v}"),
+    FeatureSpec("high_days_30", "Суток с уровнем ≥ 0,5 за 30 суток: {v}"),
+    FeatureSpec("exceed_days_90", "Суток с превышением порога за 90 суток: {v}"),
+    FeatureSpec("days_since_exceed", "Суток с последнего превышения: {v}"),
+    FeatureSpec("events_1", "Рабочих событий за сутки (пуски, переключения): {v}"),
+    FeatureSpec("events_mean_7", "Рабочих событий в сутки (среднее за 7 суток): {v}"),
+    FeatureSpec("events_ratio", "Рабочих событий к обычному: {v}"),
+    FeatureSpec("alarm_days_30", "Суток с тревогой за 30 суток: {v}"),
+    FeatureSpec("days_since_alarm", "Суток с последней тревоги: {v}"),
+]
+EXTRA_FEATURES = [s.name for s in EXTRA_SPECS]
+TITLES = {s.name: s.title for s in [*SPECS, *EXTRA_SPECS]}
+EXCEED_LEVEL = 1.0  # порог превышения для числовых каналов (метан, %)
 CATEGORICAL = ["last_state", "sensor_type"]
 # Возраст канала, месяц и день недели проверены и исключены: на отложенном годе они ухудшали
 # качество — модель запоминала конкретные каналы и периоды вместо признаков деградации.
@@ -87,6 +106,9 @@ def build_grid(daily: pl.DataFrame, end_day: date, excluded: tuple[date, date] |
     Календарная сетка «канал × сутки» от первого появления канала до end_day включительно.
     Дни без сообщений: счётчики 0, состояние — последнее известное.
     """
+    missing = [c for c in COUNTS if c not in daily.columns]
+    if missing:  # старые выгрузки без части счётчиков (например, events)
+        daily = daily.with_columns(*[pl.lit(0, dtype=pl.Int32).alias(c) for c in missing])
     spans = daily.group_by("channel_id").agg(pl.col("day").min().alias("start"))
     grid = spans.select(
         "channel_id", pl.date_ranges("start", pl.lit(end_day), interval="1d").alias("day")
@@ -121,7 +143,11 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
     """
     fault_day = (pl.col("faults") > 0).cast(pl.Int32)
     g = grid.with_columns(
-        fault_day.alias("_fault_day"), (pl.col("readings") == 0).cast(pl.Int32).alias("_silent")
+        fault_day.alias("_fault_day"),
+        (pl.col("readings") == 0).cast(pl.Int32).alias("_silent"),
+        (pl.col("numeric_max") >= 0.5).fill_null(False).cast(pl.Int32).alias("_high"),
+        (pl.col("numeric_max") >= EXCEED_LEVEL).fill_null(False).cast(pl.Int32).alias("_exceed"),
+        (pl.col("alarms") > 0).cast(pl.Int32).alias("_alarm_day"),
     )
     g = g.with_columns(
         pl.when(pl.col("_fault_day") == 1)
@@ -130,6 +156,18 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
         .forward_fill()
         .over(KEYS)
         .alias("_last_fault_day"),
+        pl.when(pl.col("_exceed") == 1)
+        .then(pl.col("day"))
+        .otherwise(None)
+        .forward_fill()
+        .over(KEYS)
+        .alias("_last_exceed_day"),
+        pl.when(pl.col("_alarm_day") == 1)
+        .then(pl.col("day"))
+        .otherwise(None)
+        .forward_fill()
+        .over(KEYS)
+        .alias("_last_alarm_day"),
     )
     g = g.join(meta, on="channel_id", how="left").join(node_daily, on=["node_id", "day"], how="left")
     g = g.with_columns(pl.col("node_faults").fill_null(0), pl.col("node_power").fill_null(0))
@@ -138,7 +176,11 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
         (pl.col("node_faults") - pl.col("faults")).alias("_node_faults"),
         (pl.col("node_power") - pl.col("power_losses")).alias("_node_power"),
     )
-    days_between = lambda a, b: (pl.col(a) - pl.col(b)).dt.total_days()  # noqa: E731
+
+    def days_between(a: str, b: str) -> pl.Expr:
+        gap = (pl.col(a) - pl.col(b)).dt.total_days()
+        return pl.when(gap <= LOOKBACK).then(gap).otherwise(None)
+
     feats = g.with_columns(
         pl.col("faults").alias("faults_1"),
         _roll("faults", 7).alias("faults_7"),
@@ -179,6 +221,26 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
         pl.col("_node_faults").rolling_sum(7, min_samples=1).over(KEYS).alias("node_faults_7"),
         pl.col("_node_power").alias("node_power_1"),
         pl.col("_node_power").rolling_sum(7, min_samples=1).over(KEYS).alias("node_power_7"),
+        # дополнительные признаки (газ, подтопление)
+        pl.col("numeric_max").alias("num_max_1"),
+        pl.col("numeric_max").rolling_max(7, min_samples=1).over(KEYS).alias("num_max_7"),
+        (pl.col("numeric_max") - pl.col("numeric_max").rolling_mean(7, min_samples=1).over(KEYS)).alias(
+            "num_max_trend"
+        ),
+        _roll("_high", 30).alias("high_days_30"),
+        _roll("_exceed", 90).alias("exceed_days_90"),
+        days_between("day", "_last_exceed_day")
+        .fill_null(NO_EVENT)
+        .clip(upper_bound=NO_EVENT)
+        .alias("days_since_exceed"),
+        pl.col("events").alias("events_1"),
+        (_roll("events", 7) / 7).alias("events_mean_7"),
+        (pl.col("events") / (_roll("events", 30) / 30 + 1)).alias("events_ratio"),
+        _roll("_alarm_day", 30).alias("alarm_days_30"),
+        days_between("day", "_last_alarm_day")
+        .fill_null(NO_EVENT)
+        .clip(upper_bound=NO_EVENT)
+        .alias("days_since_alarm"),
     )
     return feats.with_columns(
         pl.col("last_state").cast(pl.Enum(STATES)),
@@ -186,26 +248,41 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
     )
 
 
-def with_label(feats: pl.DataFrame, horizon_days: int = 1, sustained: bool = False) -> pl.DataFrame:
+def fault_event() -> pl.Expr:
+    return pl.col("faults") > 0
+
+
+def not_faulty() -> pl.Expr:
+    return pl.col("last_state") != "fault"
+
+
+def with_label(
+    feats: pl.DataFrame,
+    horizon_days: int = 1,
+    event: pl.Expr | None = None,
+    healthy: pl.Expr | None = None,
+    event_ts: str | None = "first_fault_ts",
+) -> pl.DataFrame:
     """
-    Метка «неисправность в ближайшие horizon_days суток» и время первой из них;
-    только каналы, исправные на конец суток, и только строки с полностью наблюдаемым горизонтом.
-    sustained — считать только устойчивый отказ: канал остаётся неисправным на конец суток
-    (кратковременные сбои с восстановлением тогда не цель, а предвестник).
+    Метка «событие в ближайшие horizon_days суток» и время первого из них (если известно);
+    только строки, где канал «в норме» на конец суток (healthy), и только с полностью наблюдаемым
+    горизонтом. По умолчанию событие — неисправность, норма — канал не неисправен.
     """
-    if sustained:
-        fault_day = (pl.col("last_state") == "fault").cast(pl.Int32)
+    event = fault_event() if event is None else event
+    healthy = not_faulty() if healthy is None else healthy
+    day_event = event.fill_null(False).cast(pl.Int32)
+    ahead = [day_event.shift(-k).over(KEYS) for k in range(1, horizon_days + 1)]
+    if event_ts:
+        next_ts = pl.coalesce([pl.col(event_ts).shift(-k).over(KEYS) for k in range(1, horizon_days + 1)])
     else:
-        fault_day = (pl.col("faults") > 0).cast(pl.Int32)
-    ahead = [fault_day.shift(-k).over(KEYS) for k in range(1, horizon_days + 1)]
-    first_ts = [pl.col("first_fault_ts").shift(-k).over(KEYS) for k in range(1, horizon_days + 1)]
+        next_ts = pl.lit(None, dtype=pl.Datetime("us", "UTC"))
     return (
         feats.with_columns(
             (pl.sum_horizontal(ahead) > 0).alias("y"),
-            pl.coalesce(first_ts).alias("next_fault_ts"),
+            next_ts.alias("next_fault_ts"),
             pl.col("day").shift(-horizon_days).over(KEYS).alias("_horizon_end"),
         )
-        .filter(pl.col("_horizon_end").is_not_null() & (pl.col("last_state") != "fault"))
+        .filter(pl.col("_horizon_end").is_not_null() & healthy.fill_null(True))
         .drop("_horizon_end")
     )
 

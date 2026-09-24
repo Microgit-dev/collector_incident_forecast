@@ -18,11 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def execute(run: TrainingRun, echo=None) -> MLModel:
-    from . import feedback, sensor_failure
+    from . import channel_model, feedback, specs
     from .domain.feedback import empty_labels
 
-    if run.task != ForecastTask.SENSOR_FAILURE:
-        raise ValueError(f"Для задачи {run.get_task_display()} используется правило, обучение не требуется")
+    spec = specs.get(run.task)
     settings = LearningSettings.load()
     last = [0.0]
 
@@ -38,14 +37,15 @@ def execute(run: TrainingRun, echo=None) -> MLModel:
     run.status, run.stage, run.progress = TrainingRun.Status.RUNNING, "Старт", 0
     run.save(update_fields=["status", "stage", "progress", "updated_at"])
     try:
-        horizon = int(run.params.get("horizon_hours", sensor_failure.HORIZON_HOURS))
-        use_feedback = bool(run.params.get("use_feedback", settings.use_feedback))
+        horizon = int(run.params.get("horizon_hours", channel_model.HORIZON_HOURS))
+        use_feedback = spec.uses_feedback and bool(run.params.get("use_feedback", settings.use_feedback))
         labels = feedback.accepted_labels(run.task) if use_feedback else empty_labels()
         current = active_model(run.task)
         same_horizon = current if current and current.horizon_hours == horizon else None
-        result = sensor_failure.train(
+        result = channel_model.train(
+            spec,
             progress,
-            neg_rate=run.params.get("neg_rate", sensor_failure.NEG_RATE),
+            neg_rate=run.params.get("neg_rate"),
             horizon_hours=horizon,
             labels=labels,
             champion_artifact=same_horizon.artifact_path if same_horizon else None,
@@ -58,15 +58,15 @@ def execute(run: TrainingRun, echo=None) -> MLModel:
             horizon_hours=horizon,
             status=MLModel.Status.READY,
             artifact_path=str(result.artifact),
-            features=sensor_failure.matrix_columns(),
+            features=result.columns,
             params=result.params
             | {"use_feedback": use_feedback, "trigger": run.params.get("trigger", "manual")},
             metrics=result.metrics,
             train_period=result.train_period,
             notes=(
-                f"Слабые метки: неисправность канала в ближайшие {horizon} ч (fault, служебные коды, дата 1970)"
+                f"Событие: {spec.event_title} в ближайшие {horizon} ч"
                 + (f", уточнённые разметкой диспетчеров ({labels.height} меток)" if labels.height else "")
-                + ". Выборка — каналы, исправные на конец суток. Валидация по времени: обучение до 2025, "
+                + ". Выборка — каналы в норме на конец суток. Валидация по времени: обучение до 2025, "
                 "подбор порогов на 2025, тест на 2026."
             ),
         )

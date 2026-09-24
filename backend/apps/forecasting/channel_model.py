@@ -1,5 +1,6 @@
 """
-Прогноз начала отказа канала на 24 часа (LightGBM).
+Прогноз события по каналу на горизонт 24 ч (или больше) — LightGBM. Общий конвейер для задач
+из specs.py: отказ датчика, превышение 1 % метана, подтопление.
 
 Обучение — на суточной витрине за всю историю, валидация строго по времени:
 обучение до 2025 года, 2025 год — подбор порогов и ранняя остановка, 2026 год — отложенный тест.
@@ -27,11 +28,11 @@ from django.conf import settings
 from . import data
 from .domain import features as F
 from .domain.contracts import Factor, ForecastResult
+from .specs import SENSOR_FAILURE, TaskSpec
 
 logger = logging.getLogger(__name__)
 
 MSK = ZoneInfo("Europe/Moscow")
-TASK = "sensor_failure"
 HORIZON_HOURS = 24
 HISTORY_DAYS = 100  # глубина истории для признаков при прогнозе (окна до 90 суток)
 CHUNK = 1500  # каналов за проход при сборке выборки — ограничивает пиковую память
@@ -39,8 +40,6 @@ NEG_RATE = 0.05
 VALID_FROM, TEST_FROM = date(2025, 1, 1), date(2026, 1, 1)
 TARGET_PRECISION, TARGET_RECALL = 0.7, 0.5
 
-# Уровни риска — по точности на валидационном годе: доля подтвердившихся прогнозов уровня
-LEVEL_PRECISION = {"critical": 0.7, "high": 0.4, "medium": 0.15}
 
 PARAMS = {
     "objective": "binary",
@@ -73,11 +72,15 @@ def _keep_negative(frame: pl.DataFrame, rate: float) -> pl.Expr:
     return pl.col("y") | pl.col("y_orig") | pl.col("fb") | (bucket < int(rate * 1000))
 
 
+def _task_meta(meta: pl.DataFrame, spec: TaskSpec) -> pl.DataFrame:
+    return meta.filter(pl.col("sensor_type").is_in(spec.sensor_types)) if spec.sensor_types else meta
+
+
 def build_dataset(
+    spec: TaskSpec = SENSOR_FAILURE,
     progress: Progress = _noop,
-    neg_rate: float = NEG_RATE,
+    neg_rate: float | None = None,
     horizon_days: int = 1,
-    sustained: bool = False,
     use_cache: bool = True,
     labels: pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, dict, dict]:
@@ -89,20 +92,18 @@ def build_dataset(
     from .feedback import labels_fingerprint
 
     labels = labels if labels is not None else empty_labels()
+    neg_rate = neg_rate or spec.neg_rate
     # Конец выборки — последние полные сутки: одиночные сутки после них (тестовый прогон) дали бы
-    # месяцы «пустых» дней без отказов и завысили бы метрики
+    # месяцы «пустых» дней без событий и завысили бы метрики
     last = data.last_complete_day() or data.last_daily_day()
-    cache = (
-        settings.ARTIFACTS_DIR
-        / "models"
-        / f"dataset_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}{'s' if sustained else ''}_{labels_fingerprint(labels)}.parquet"
-    )
+    name = f"dataset_{spec.task}_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}_{labels_fingerprint(labels)}"
+    cache = settings.ARTIFACTS_DIR / "models" / f"{name}.parquet"
     stats_file = cache.with_suffix(".json")
     if use_cache and cache.exists() and stats_file.exists():
         progress(1, "Выборка взята из кеша")
         saved = json.loads(stats_file.read_text(encoding="utf-8"))
         return pl.read_parquet(cache), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
-    frame, stats, per_label = _collect(progress, neg_rate, last, horizon_days, sustained, labels)
+    frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels)
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
     stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
@@ -110,11 +111,12 @@ def build_dataset(
 
 
 def _collect(
-    progress: Progress, neg_rate: float, last: date, horizon_days: int, sustained: bool, labels: pl.DataFrame
+    spec: TaskSpec, progress: Progress, neg_rate: float, last: date, horizon_days: int, labels: pl.DataFrame
 ) -> tuple[pl.DataFrame, dict, dict]:
     from .domain.feedback import apply_labels, merge_stats
 
-    meta = data.load_meta()
+    all_meta = data.load_meta()
+    meta = _task_meta(all_meta, spec)
     excluded = data.excluded_range()
     first = meta["first_day"].min()
     nodes = data.load_node_daily()
@@ -128,7 +130,7 @@ def _collect(
             continue
         grid = F.build_grid(daily, last, excluded)
         feats = F.compute_features(grid, nodes, meta.filter(pl.col("channel_id").is_in(chunk)))
-        labelled = F.with_label(feats, horizon_days, sustained)
+        labelled = F.with_label(feats, horizon_days, spec.event(), spec.healthy(), spec.event_ts)
         chunk_labels = labels.filter(pl.col("channel_id").is_in(chunk))
         labelled, part_stats, part_rows = apply_labels(labelled, chunk_labels, horizon_days)
         merge_stats(stats, part_stats)
@@ -155,7 +157,7 @@ def _collect(
                 "weight",
                 "weight_orig",
                 "next_fault_ts",
-                *F.FEATURES,
+                *spec.features,
             )
         )
     progress(1, "Выборка собрана")
@@ -165,17 +167,18 @@ def _collect(
 # ---------- матрица признаков ----------
 
 
-def to_matrix(frame: pl.DataFrame, sensor_types: list[str]) -> np.ndarray:
+def matrix_columns(features: list[str] = F.FEATURES) -> list[str]:
+    return [f for f in features if f not in F.CATEGORICAL] + F.CATEGORICAL
+
+
+def to_matrix(frame: pl.DataFrame, sensor_types: list[str], columns: list[str] | None = None) -> np.ndarray:
+    columns = columns or matrix_columns()
     codes = {name: i for i, name in enumerate(sensor_types)}
     return frame.select(
-        *[pl.col(f).cast(pl.Float32) for f in F.FEATURES if f not in F.CATEGORICAL],
+        *[pl.col(f).cast(pl.Float32) for f in columns if f not in F.CATEGORICAL],
         pl.col("last_state").to_physical().cast(pl.Float32),
         pl.col("sensor_type").replace_strict(codes, default=-1).cast(pl.Float32),
     ).to_numpy()
-
-
-def matrix_columns() -> list[str]:
-    return [f for f in F.FEATURES if f not in F.CATEGORICAL] + F.CATEGORICAL
 
 
 # ---------- метрики ----------
@@ -217,11 +220,11 @@ def evaluate(y, p, w, threshold: float, frame: pl.DataFrame | None = None) -> di
     if frame is not None:
         days = frame["day"].n_unique()
         result["alerts_per_day"] = round(float((w * pred).sum()) / max(days, 1), 1)
-        # Упреждение: от момента прогноза (конец суток d) до первой неисправности в сутки d+1
+        # Упреждение: от момента прогноза (конец суток d) до первого события в горизонте
         issued = frame["day"].cast(pl.Datetime("us")).dt.replace_time_zone(str(MSK)).dt.convert_time_zone(
             "UTC"
         ) + timedelta(days=1)
-        lead = ((frame["next_fault_ts"] - issued).dt.total_minutes() / 60).to_numpy()
+        lead = ((frame["next_fault_ts"] - issued).dt.total_minutes() / 60).fill_null(np.nan).to_numpy()
         hits = pred & y & ~np.isnan(lead)
         if hits.any():
             result["lead_time_hours"] = {
@@ -230,11 +233,6 @@ def evaluate(y, p, w, threshold: float, frame: pl.DataFrame | None = None) -> di
                 "p75": round(float(np.percentile(lead[hits], 75)), 1),
             }
     return result
-
-
-def baseline(frame: pl.DataFrame) -> np.ndarray:
-    """Наивное правило для сравнения: «была неисправность за последние 7 суток»."""
-    return (frame["faults_7"] > 0).to_numpy()
 
 
 # ---------- обучение ----------
@@ -248,10 +246,11 @@ class TrainResult:
     params: dict
     train_period: dict
     sensor_types: list[str]
-    per_label: dict = None
+    columns: list[str]
+    per_label: dict | None = None
 
 
-def _fit(xy: dict, columns: list[str]):
+def _fit(xy: dict, columns: list[str], params: dict):
     import lightgbm as lgb
 
     cat_idx = [columns.index(c) for c in F.CATEGORICAL]
@@ -260,7 +259,7 @@ def _fit(xy: dict, columns: list[str]):
     )
     valid_set = lgb.Dataset(*xy["valid"][:2], weight=xy["valid"][2], reference=train_set)
     return lgb.train(
-        PARAMS,
+        params,
         train_set,
         num_boost_round=2000,
         valid_sets=[valid_set],
@@ -279,39 +278,46 @@ def champion_score(champion_artifact: str | None, frame: pl.DataFrame, y, w) -> 
     if not champion_artifact or not Path(champion_artifact).exists():
         return None
     booster, meta = _load(champion_artifact)
-    return _pr_auc(y, booster.predict(to_matrix(frame, meta["sensor_types"])), w)
+    missing = [c for c in meta["columns"] if c not in frame.columns]
+    if missing:
+        return None
+    return _pr_auc(y, booster.predict(to_matrix(frame, meta["sensor_types"], meta["columns"])), w)
 
 
 def train(
+    spec: TaskSpec = SENSOR_FAILURE,
     progress: Progress = _noop,
-    neg_rate: float = NEG_RATE,
+    neg_rate: float | None = None,
     horizon_hours: int = HORIZON_HOURS,
     labels: pl.DataFrame | None = None,
     champion_artifact: str | None = None,
 ) -> TrainResult:
     started = time.monotonic()
     horizon_days = max(1, horizon_hours // 24)
+    params = PARAMS | spec.params
+    neg_rate = neg_rate or spec.neg_rate
     dataset, fb_stats, per_label = build_dataset(
-        lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels
+        spec, lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels
     )
     sensor_types = sorted(dataset["sensor_type"].unique().to_list())
+    columns = matrix_columns(spec.features)
     parts = {
         "train": dataset.filter(pl.col("day") < VALID_FROM),
         "valid": dataset.filter(pl.col("day").is_between(VALID_FROM, TEST_FROM, closed="left")),
         "test": dataset.filter(pl.col("day") >= TEST_FROM),
     }
     xy = {
-        k: (to_matrix(v, sensor_types), v["y"].to_numpy(), v["weight"].to_numpy()) for k, v in parts.items()
+        k: (to_matrix(v, sensor_types, columns), v["y"].to_numpy(), v["weight"].to_numpy())
+        for k, v in parts.items()
     }
     progress(0.62, f"Обучение LightGBM: {len(parts['train']):,} примеров".replace(",", " "))
-    columns = matrix_columns()
-    booster = _fit(xy, columns)
+    booster = _fit(xy, columns, params)
     progress(0.9, "Подбор порогов и оценка на отложенном 2026 году")
     scores = {k: booster.predict(v[0], num_iteration=booster.best_iteration) for k, v in xy.items()}
 
     yv, wv = xy["valid"][1], xy["valid"][2]
     # Порог уровня — наименьший, при котором точность на 2025 годе не ниже заданной
-    found = {k: pick_threshold(yv, scores["valid"], wv, prec) for k, prec in LEVEL_PRECISION.items()}
+    found = {k: pick_threshold(yv, scores["valid"], wv, prec) for k, prec in spec.level_precision.items()}
     fallback = float(np.quantile(scores["valid"], 0.999))
     levels = {"medium": found["medium"] or fallback / 4}
     levels["high"] = max(found["high"] or fallback / 2, levels["medium"])
@@ -321,8 +327,7 @@ def train(
     target_met = found["critical"] is not None
 
     test = parts["test"]
-    base_pred = baseline(test)
-    base_p, base_r = _pr(xy["test"][1], base_pred, xy["test"][2])
+    base_p, base_r = _pr(xy["test"][1], spec.baseline(test), xy["test"][2])
     importance = dict(zip(columns, booster.feature_importance("gain").tolist(), strict=True))
     by_type = {}
     for stype in sensor_types:
@@ -336,8 +341,11 @@ def train(
             }
 
     metrics = {
+        "task": spec.task,
+        "event": spec.event_title,
         "threshold": levels["high"],
         "levels": levels,
+        "level_precision": spec.level_precision,
         "target": {
             "precision": TARGET_PRECISION,
             "recall": TARGET_RECALL,
@@ -351,18 +359,21 @@ def train(
             k: evaluate(xy["test"][1], scores["test"], xy["test"][2], t, test) for k, t in levels.items()
         },
         "baseline_test": {
-            "rule": "неисправность за последние 7 суток",
+            "rule": spec.baseline_rule,
             "precision": round(base_p, 3),
             "recall": round(base_r, 3),
         },
         "by_sensor_type_test": by_type,
         "feature_importance": dict(sorted(importance.items(), key=lambda kv: -kv[1])[:15]),
         "rows": {k: len(v) for k, v in parts.items()},
+        "channels": int(dataset["channel_id"].n_unique()),
         "negative_sampling": neg_rate,
         "best_iteration": booster.best_iteration,
         "train_seconds": round(time.monotonic() - started),
     }
-    metrics["feedback"] = _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, progress)
+    metrics["feedback"] = _feedback_metrics(
+        parts, xy, scores, columns, params, fb_stats, per_label, labels, progress
+    )
     champion = champion_score(champion_artifact, parts["valid"], xy["valid"][1], xy["valid"][2])
     metrics["comparison"] = {
         "valid_pr_auc": _pr_auc(xy["valid"][1], scores["valid"], xy["valid"][2]),
@@ -371,11 +382,12 @@ def train(
     version = datetime.now(MSK).strftime("%Y.%m.%d-%H%M") + f"-h{horizon_hours}"
     folder = settings.ARTIFACTS_DIR / "models"
     folder.mkdir(parents=True, exist_ok=True)
-    artifact = folder / f"{TASK}_{version}.txt"
+    artifact = folder / f"{spec.task}_{version}.txt"
     booster.save_model(str(artifact), num_iteration=booster.best_iteration)
     artifact.with_suffix(".json").write_text(
         json.dumps(
             {
+                "task": spec.task,
                 "columns": columns,
                 "sensor_types": sensor_types,
                 "levels": levels,
@@ -396,14 +408,15 @@ def train(
         version,
         artifact,
         metrics,
-        PARAMS | {"rounds": booster.best_iteration},
+        params | {"rounds": booster.best_iteration},
         period,
         sensor_types,
+        columns,
         per_label=per_label,
     )
 
 
-def _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, progress) -> dict:
+def _feedback_metrics(parts, xy, scores, columns, params, fb_stats, per_label, labels, progress) -> dict:
     """
     Что дала разметка диспетчеров: контрольная модель на тех же строках, но с исходными
     (слабыми) метками. Обе модели оцениваются на выборках с учётом разметки — это лучшая
@@ -420,7 +433,7 @@ def _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, p
         k: (xy[k][0], parts[k]["y_orig"].to_numpy(), parts[k]["weight_orig"].to_numpy())
         for k in ("train", "valid")
     }
-    control = _fit(xy_orig, columns)
+    control = _fit(xy_orig, columns, params)
     result["ablation"] = {
         part: {
             "with_feedback": _pr_auc(xy[part][1], scores[part], xy[part][2]),
@@ -436,7 +449,7 @@ def _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, p
 # ---------- прогноз ----------
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=8)
 def _load(artifact: str):
     import lightgbm as lgb
 
@@ -444,16 +457,21 @@ def _load(artifact: str):
     return lgb.Booster(model_file=artifact), meta
 
 
-def inference_features(as_of: datetime, node_ids: list[int] | None = None) -> pl.DataFrame:
+def inference_features(
+    as_of: datetime, node_ids: list[int] | None = None, spec: TaskSpec = SENSOR_FAILURE
+) -> pl.DataFrame:
     """Признаки на момент as_of: суточная витрина до вчера + скользящие последние 24 часа."""
-    meta = data.load_meta()
+    all_meta = data.load_meta()
+    meta = _task_meta(all_meta, spec)
     if node_ids:
         meta = meta.filter(pl.col("node_id").is_in(node_ids))
+    if meta.is_empty():
+        return pl.DataFrame()
     today = as_of.astimezone(MSK).date()
-    history = data.load_daily(
-        today - timedelta(days=HISTORY_DAYS), today, meta["channel_id"].to_list() if node_ids else None
-    )
-    window = data.load_window(as_of)
+    restrict = meta["channel_id"].to_list() if (node_ids or spec.sensor_types) else None
+    history = data.load_daily(today - timedelta(days=HISTORY_DAYS), today, restrict)
+    window_all = data.load_window(as_of)
+    window = window_all
     if not window.is_empty():
         window = window.with_columns(pl.lit(today).alias("day")).select(
             history.columns if not history.is_empty() else window.columns
@@ -464,33 +482,42 @@ def inference_features(as_of: datetime, node_ids: list[int] | None = None) -> pl
     daily = pl.concat(frames, how="vertical_relaxed").filter(
         pl.col("channel_id").is_in(meta["channel_id"].implode())
     )
+    if daily.is_empty():
+        return pl.DataFrame()
     end_day = today if not window.is_empty() else today - timedelta(days=1)
     grid = F.build_grid(daily, end_day, data.excluded_range())
-    nodes = data.node_daily(daily, meta)
+    # Каскадные признаки объекта — по всем его каналам, как при обучении, а не только по каналам задачи
+    nodes = data.load_node_daily(today - timedelta(days=HISTORY_DAYS), today)
+    if not window_all.is_empty():
+        nodes = pl.concat(
+            [nodes, data.node_daily(window_all.with_columns(pl.lit(today).alias("day")), all_meta)],
+            how="vertical_relaxed",
+        )
+    nodes = nodes.with_columns(pl.col("node_faults").cast(pl.Int32), pl.col("node_power").cast(pl.Int32))
     feats = F.compute_features(grid, nodes, meta)
-    return feats.filter((pl.col("day") == end_day) & (pl.col("last_state") != "fault"))
+    return feats.filter((pl.col("day") == end_day) & spec.healthy().fill_null(True))
 
 
-class SensorFailureForecaster:
-    task = TASK
-    horizon_hours = HORIZON_HOURS
-
-    def __init__(self, artifact: str, medium_threshold: float):
+class ChannelForecaster:
+    def __init__(self, spec: TaskSpec, artifact: str, medium_threshold: float):
+        self.spec = spec
+        self.task = spec.task
         self.booster, self.meta = _load(artifact)
         self.medium_threshold = medium_threshold
         self.horizon_hours = self.meta.get("horizon_hours", HORIZON_HOURS)
 
     def predict(self, as_of: datetime, node_ids: list[int] | None = None) -> list[ForecastResult]:
-        feats = inference_features(as_of, node_ids)
+        feats = inference_features(as_of, node_ids, self.spec)
         if feats.is_empty():
             return []
-        x = to_matrix(feats, self.meta["sensor_types"])
+        columns = self.meta["columns"]
+        x = to_matrix(feats, self.meta["sensor_types"], columns)
         p = self.booster.predict(x)
         # Вклады признаков (SHAP) считаем только там, где риск заметен: карточку откроют только для них
         risky = np.where(p >= self.medium_threshold)[0]
         contrib = self.booster.predict(x[risky], pred_contrib=True) if len(risky) else np.empty((0, 0))
-        columns = self.meta["columns"]
-        rows = feats.select("channel_id", "node_id", *F.FEATURES).with_columns(
+        names = [c for c in columns if c in feats.columns]
+        rows = feats.select("channel_id", "node_id", *names).with_columns(
             pl.col("last_state").cast(pl.String)
         )
         by_row = {int(i): c for i, c in zip(risky, contrib, strict=True)}
@@ -498,7 +525,7 @@ class SensorFailureForecaster:
         for i, row in enumerate(rows.iter_rows(named=True)):
             factors = []
             if i in by_row:
-                values = {k: row[k] for k in F.FEATURES}
+                values = {k: row[k] for k in names}
                 factors = [
                     Factor(**f)
                     for f in F.explain(values, dict(zip(columns, by_row[i][:-1].tolist(), strict=True)))

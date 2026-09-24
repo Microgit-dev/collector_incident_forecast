@@ -32,6 +32,11 @@ const STATUS: Record<MLModel['status'], { label: string; color: string }> = {
   failed: { label: 'Ошибка', color: 'red' },
 }
 const LEVEL_LABEL = { critical: 'Критический', high: 'Высокий', medium: 'Средний' } as const
+const TASK_TITLE: Record<string, string> = {
+  sensor_failure: 'Отказ датчика',
+  gas: 'Превышение 1 % метана',
+  flood: 'Подтопление',
+}
 const pct = (v?: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10} %`)
 const horizon = (h: number) => (h % 24 === 0 && h > 24 ? `${h / 24} сут` : `${h} ч`)
 
@@ -61,7 +66,9 @@ function ModelCard({ model, canTrain }: { model: MLModel; canTrain: boolean }) {
     <Card withBorder radius="md">
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
-          <Text fw={600}>Отказ датчика · горизонт {horizon(model.horizon_hours)}</Text>
+          <Text fw={600}>
+            {TASK_TITLE[model.task] ?? model.task} · горизонт {horizon(model.horizon_hours)}
+          </Text>
           <Badge color={STATUS[model.status].color} variant={model.status === 'active' ? 'filled' : 'light'}>
             {STATUS[model.status].label}
           </Badge>
@@ -175,6 +182,7 @@ function ModelCard({ model, canTrain }: { model: MLModel; canTrain: boolean }) {
 function TrainingPanel() {
   const queryClient = useQueryClient()
   const [hours, setHours] = useState('24')
+  const [task, setTask] = useState('sensor_failure')
   const runs = useQuery({
     queryKey: ['training-runs'],
     queryFn: () => api<Page<TrainingRun>>('/forecasting/training-runs/', { query: { page_size: 5 } }),
@@ -186,7 +194,7 @@ function TrainingPanel() {
     mutationFn: () =>
       api<TrainingRun>('/forecasting/training-runs/', {
         method: 'POST',
-        body: { task: 'sensor_failure', params: { horizon_hours: Number(hours) } },
+        body: { task, params: { horizon_hours: Number(hours) } },
       }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['training-runs'] }),
     onError: (e) => notifications.show({ color: 'red', message: e.message }),
@@ -210,6 +218,12 @@ function TrainingPanel() {
       <Group justify="space-between" mb="sm">
         <Text fw={600}>Обучение и запуск прогноза</Text>
         <Group gap="xs">
+          <SegmentedControl
+            size="xs"
+            value={task}
+            onChange={setTask}
+            data={Object.entries(TASK_TITLE).map(([value, label]) => ({ value, label }))}
+          />
           <SegmentedControl
             size="xs"
             value={hours}
@@ -278,14 +292,16 @@ export function ModelsPage() {
   const canTrain = can('forecasting.retrain_model')
   if (models.isLoading) return <Loader />
   const list = (models.data?.results ?? []).filter((m) => m.status !== 'archived' || m.metrics.test)
-  const shown = [...list.filter((m) => m.status === 'active'), ...list.filter((m) => m.status !== 'active')].slice(0, 4)
+  // Сначала активные версии каждой задачи, затем последние обученные
+  const shown = [...list.filter((m) => m.status === 'active'), ...list.filter((m) => m.status !== 'active')].slice(0, 6)
 
   return (
     <Stack>
       <Title order={3}>Модели прогнозирования</Title>
       <Alert color="gray" variant="light">
-        Цели ТЗ по точности и полноте (P &gt; 0,7, R &gt; 0,5) одновременно на этих данных недостижимы: отказ начинается
-        в среднем у 0,4 % каналов в сутки, журналов ремонтов нет, метки слабые. Поэтому уровни риска настроены по
+        Три модели на LightGBM: отказ датчика, превышение 1 % метана, подтопление (пожар и проникновение — правила-индикаторы,
+        см. журнал прогнозов). Цели ТЗ по точности и полноте (P &gt; 0,7, R &gt; 0,5) одновременно на этих данных
+        недостижимы: события редки (доли процента каналов в сутки), журналов ремонтов нет, метки слабые. Поэтому уровни риска настроены по
         точности: «критический» — самые надёжные прогнозы, «средний» — список наблюдения для планового ТО. Модель
         сравнивается с простым правилом, чтобы было видно, что она даёт сверх него.
       </Alert>

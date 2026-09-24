@@ -1,11 +1,13 @@
 from django.core.management.base import BaseCommand
 
-from apps.forecasting.models import ForecastTask, TrainingRun
+from apps.forecasting.models import TrainingRun
 from apps.forecasting.training import execute
 
 
 class Command(BaseCommand):
-    help = "Обучение модели отказа датчиков на всей истории (валидация по времени, метрики в реестре моделей)"
+    help = (
+        "Обучение модели прогноза (отказ датчика, газ, подтопление) на всей истории с валидацией по времени"
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -15,12 +17,13 @@ class Command(BaseCommand):
             "--activate", action="store_true", help="сделать активной даже при худшей валидации"
         )
         parser.add_argument("--horizon", type=int, default=24, help="горизонт прогноза, ч (кратно 24)")
+        parser.add_argument("--task", default="sensor_failure", choices=["sensor_failure", "gas", "flood"])
 
-    def handle(self, *args, neg_rate, activate, horizon, **options):
+    def handle(self, *args, neg_rate, activate, horizon, task, **options):
         params = {"activate": activate, "horizon_hours": horizon} | (
             {"neg_rate": neg_rate} if neg_rate else {}
         )
-        run = TrainingRun.objects.create(task=ForecastTask.SENSOR_FAILURE, params=params)
+        run = TrainingRun.objects.create(task=task, params=params)
         model = execute(run, echo=self.stdout.write)
         m = model.metrics
         self.stdout.write(self.style.SUCCESS(f"model {model} [{model.status}]"))

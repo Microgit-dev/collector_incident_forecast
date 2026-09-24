@@ -75,11 +75,13 @@ docker compose run --rm backend python manage.py import_history --years 2025 202
 запускаются в разделе «Модели» или из консоли:
 
 ```bash
-docker compose exec worker python manage.py train_model --horizon 24
+docker compose exec worker python manage.py train_model --task sensor_failure   # также gas, flood
 docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59:59+03:00 2026-06-29T23:59:59+03:00
 ```
 
-Методика, метрики на отложенном 2026 годе и ограничения описаны в [docs/forecasting.md](docs/forecasting.md).
+Методика, метрики на отложенном 2026 годе и ограничения описаны в [docs/forecasting.md](docs/forecasting.md);
+сценарии газа, подтопления, пожара и НСД, рекомендации по ТО и разбор эпизодов — в [docs/scenarios.md](docs/scenarios.md),
+склейка сигналов, гипотезы и приоритет — в [docs/correlation.md](docs/correlation.md).
 
 Демо-поток СМВУ: реальный журнал проигрывается в Kafka с ускорением.
 
