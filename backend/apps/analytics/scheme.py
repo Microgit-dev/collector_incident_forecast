@@ -32,6 +32,14 @@ def _nice_bin(span: float) -> int:
     return next((b for b in NICE_BINS if b >= raw), NICE_BINS[-1])
 
 
+def to_wkt(geometry: dict) -> str:
+    """GeoJSON-геометрия схемы → WKT (ТЗ §7: геоданные GeoJSON и WKT)."""
+    coords = geometry["coordinates"]
+    if geometry["type"] == "Point":
+        return f"POINT ({coords[0]:g} {coords[1]:g})"
+    return "LINESTRING (" + ", ".join(f"{x:g} {y:g}" for x, y in coords) + ")"
+
+
 def _line(a: float, b: float, y: float) -> dict:
     return {"type": "LineString", "coordinates": [[a, y], [b, y]]}
 

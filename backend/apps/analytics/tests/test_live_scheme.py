@@ -129,3 +129,12 @@ def test_prediction_card_explains_forecast(tree, make_user):
     assert body["history"][0]["id"] == older.pk
     assert body["realized"]["live"] == {"confirmed": 1, "resolved": 1, "precision": 1.0}
     assert body["actions"] and body["model_info"]["method"] == "model"
+
+
+def test_scheme_wkt_and_xml(tree, make_user):
+    _channel(tree["house"], 1, 12)
+    client = _client(make_user("disp", "unit_dispatcher", tree["complex"]))
+    body = client.get("/api/v1/analytics/scheme/", {"geometry": "wkt"}).json()
+    assert body["features"][0]["geometry"].startswith("LINESTRING (")
+    xml = client.get("/api/v1/analytics/scheme/", HTTP_ACCEPT="application/xml")
+    assert xml.status_code == 200 and xml["Content-Type"].startswith("application/xml")

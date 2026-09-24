@@ -209,7 +209,7 @@ def test_cause_takes_precedence_over_reason(tree, make_user, reasons):
     label = FeedbackLabel.objects.get(decision=decision)
     assert label.effect == "negative" and label.rule.code == "cause-communication"
     assert decision.forecast_useful is None  # не прогнозная карточка
-    assert "потеря связи" in incident.events.order_by("-ts").first().text
+    assert "потеря связи" in incident.events.get(kind="decision").text
 
 
 def test_neutral_cause_falls_back_to_reason(tree, make_user, reasons):

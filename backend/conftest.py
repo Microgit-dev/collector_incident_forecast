@@ -7,6 +7,9 @@ def _isolated_infra(settings):
     settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
     settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
     settings.CELERY_TASK_ALWAYS_EAGER = True
+    from django.core.cache import cache
+
+    cache.clear()  # кеш в памяти общий для процесса: результаты одного теста не должны попадать в другой
 
 
 @pytest.fixture
