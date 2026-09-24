@@ -1,8 +1,14 @@
-from rest_framework import permissions
+from datetime import timedelta
+
+from rest_framework import permissions, serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import require_perm
+
 from ..flood import flood_reduction
+from ..models import ReportExport
 from ..selectors import overview
 
 
@@ -93,3 +99,156 @@ class ReplayView(APIView):
             request, "analytics.replay", obj=node, payload={"from": start.isoformat(), "to": end.isoformat()}
         )
         return Response(result)
+
+
+def _period(request):
+    """Период из ?from=YYYY-MM-DD&to=YYYY-MM-DD (включительно, по Москве); по умолчанию — 30 суток."""
+    from datetime import date, datetime, time
+    from zoneinfo import ZoneInfo
+
+    from ..efficiency import default_period
+
+    msk = ZoneInfo("Europe/Moscow")
+    params = request.query_params if request.method == "GET" else request.data
+    if params.get("from") and params.get("to"):
+        start = datetime.combine(date.fromisoformat(params["from"]), time(), msk)
+        end = datetime.combine(date.fromisoformat(params["to"]), time(), msk) + timedelta(days=1)
+        if end <= start or end - start > timedelta(days=366):
+            raise ValueError("Период — от суток до года")
+        return start, end
+    return default_period(request.user)
+
+
+def _flag(request, name: str, default: bool) -> bool:
+    params = request.query_params if request.method == "GET" else request.data
+    value = params.get(name)
+    return default if value in (None, "") else str(value).lower() in ("1", "true", "yes")
+
+
+class EfficiencyView(APIView):
+    """Эффективность диспетчеров за период (ТЗ §8)."""
+
+    permission_classes = [require_perm("analytics.view_reportexport")]
+
+    def get(self, request):
+        from ..efficiency import efficiency
+
+        try:
+            since, until = _period(request)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(efficiency(request.user, since, until, _flag(request, "include_emulated", True)))
+
+
+class QualityView(APIView):
+    """Качество прогнозов за период (ТЗ §9)."""
+
+    permission_classes = [require_perm("analytics.view_reportexport")]
+
+    def get(self, request):
+        from ..quality import quality
+
+        try:
+            since, until = _period(request)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(quality(request.user, since, until, _flag(request, "backtest", False)))
+
+
+class RangesView(APIView):
+    """Какие периоды есть в данных: реальная работа, эмуляция смен, оперативный журнал, бэктест."""
+
+    permission_classes = [require_perm("analytics.view_reportexport")]
+
+    def get(self, request):
+        from django.db.models import Count, Max, Min
+
+        from apps.forecasting.models import Prediction
+        from apps.incidents.models import Incident
+        from apps.topology.selectors import scope_queryset
+
+        def span(qs, field):
+            row = qs.aggregate(a=Min(field), b=Max(field), n=Count("pk"))
+            return {"from": row["a"], "to": row["b"], "count": row["n"]} if row["n"] else None
+
+        incidents = scope_queryset(Incident.objects.all(), request.user, "node")
+        journal = scope_queryset(Prediction.objects.all(), request.user, "node")
+        return Response(
+            {
+                "live": span(incidents.filter(is_emulated=False), "opened_at"),
+                "emulated": span(incidents.filter(is_emulated=True), "opened_at"),
+                "journal": span(journal.filter(is_backtest=False), "issued_at"),
+                "backtest": span(journal.filter(is_backtest=True), "issued_at"),
+            }
+        )
+
+
+class ReportSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source="created_by.get_full_name", default=None, read_only=True)
+    size = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReportExport
+        fields = ("id", "kind", "format", "params", "created_by_name", "created_at", "size")
+
+    def get_size(self, obj):
+        try:
+            return obj.file.size
+        except (OSError, ValueError):
+            return None
+
+
+class ReportViewSet(viewsets.ReadOnlyModelViewSet):
+    """Отчёты PDF/XLSX за период: сформировать, список, скачать. Каждый видит свои отчёты."""
+
+    serializer_class = ReportSerializer
+    permission_classes = [require_perm("analytics.view_reportexport")]
+
+    def get_queryset(self):
+        return ReportExport.objects.filter(created_by=self.request.user).select_related("created_by")
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [require_perm("analytics.export_report")()]
+        return super().get_permissions()
+
+    def create(self, request):
+        from django.core.files.base import ContentFile
+
+        from apps.audit.services import log_action
+
+        from ..reports import collect, to_pdf, to_xlsx
+
+        fmt = request.data.get("format", "pdf")
+        if fmt not in ("pdf", "xlsx"):
+            return Response({"detail": "Формат — pdf или xlsx"}, status=400)
+        try:
+            since, until = _period(request)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        include_emulated = _flag(request, "include_emulated", False)
+        backtest = _flag(request, "backtest", False)
+        data = collect(request.user, since, until, include_emulated, backtest)
+        content = to_pdf(data) if fmt == "pdf" else to_xlsx(data, request.user)
+        from zoneinfo import ZoneInfo
+
+        msk = ZoneInfo("Europe/Moscow")
+        params = {
+            "from": since.astimezone(msk).date().isoformat(),
+            "to": (until - timedelta(seconds=1)).astimezone(msk).date().isoformat(),
+            "include_emulated": include_emulated,
+            "backtest": backtest,
+            "scope": data["scope"],
+        }
+        report = ReportExport(kind="period", format=fmt, params=params, created_by=request.user)
+        report.file.save(f"report_{params['from']}_{params['to']}.{fmt}", ContentFile(content), save=True)
+        log_action(request, "analytics.report", obj=report, payload=params)
+        return Response(ReportSerializer(report).data, status=201)
+
+    @action(detail=True)
+    def download(self, request, pk=None):
+        from django.http import FileResponse
+
+        report = self.get_object()
+        name = f"Отчёт {report.params.get('from')} — {report.params.get('to')}.{report.format}"
+        return FileResponse(report.file.open("rb"), as_attachment=True, filename=name)

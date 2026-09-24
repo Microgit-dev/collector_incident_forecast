@@ -1,0 +1,572 @@
+{
+  "uid": "collector-business",
+  "title": "Бизнес-показатели: инциденты, диспетчеры, прогнозы",
+  "tags": [
+    "collector",
+    "business"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-120d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "emulated",
+        "label": "Эмуляция смен",
+        "type": "custom",
+        "query": "нет : false, да : true",
+        "current": {
+          "text": "да",
+          "value": "true"
+        },
+        "options": []
+      },
+      {
+        "name": "backtest",
+        "label": "Журнал прогнозов",
+        "type": "custom",
+        "query": "оперативный : false, бэктест : true",
+        "current": {
+          "text": "бэктест",
+          "value": "true"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Карточек за период",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM incidents_incident i WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Сигналов потока",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT sum(i.signals_count) FROM incidents_incident i WHERE NOT i.is_forecast AND $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "До решения, медиана",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM d.decided_at - i.opened_at) / 60) FROM incidents_decision d JOIN incidents_incident i ON i.id = d.incident_id WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Эскалаций по таймауту",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT e.incident_id)::float / nullif(count(DISTINCT i.id), 0) FROM incidents_incident i LEFT JOIN incidents_incidentevent e ON e.incident_id = i.id AND e.kind = 'escalated' AND e.text LIKE '%нет реакции%' WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Точность журнала прогнозов",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT sum((outcome = 'confirmed')::int)::float / nullif(sum((outcome IN ('confirmed', 'not_confirmed'))::int), 0) FROM forecasting_prediction WHERE $__timeFilter(issued_at) AND is_backtest = ${backtest:raw}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Прогноз помог (по решениям)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT sum((d.forecast_useful)::int)::float / nullif(count(d.forecast_useful), 0) FROM incidents_decision d JOIN incidents_incident i ON i.id = d.incident_id WHERE i.is_forecast AND $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "teal"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Карточки по типу угрозы, в сутки",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(i.opened_at, '1d'), CASE WHEN i.type = 'sensor_failure' THEN 'Отказ датчика' WHEN i.type = 'fire' THEN 'Пожар' WHEN i.type = 'gas' THEN 'Газ' WHEN i.type = 'flood' THEN 'Подтопление' WHEN i.type = 'intrusion' THEN 'НСД' WHEN i.type = 'power' THEN 'Питание' WHEN i.type = 'equipment' THEN 'Оборудование' WHEN i.type = 'communication' THEN 'Связь' ELSE i.type END AS metric, count(*) AS value FROM incidents_incident i WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw}) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Сигналы потока → карточки, в сутки",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(i.opened_at, '1d'), sum(i.signals_count) AS \"сигналов\", count(*) AS \"карточек\" FROM incidents_incident i WHERE NOT i.is_forecast AND $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw}) GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Время реакции, медиана по суткам (мин)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(i.opened_at, '1d'), percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM d.decided_at - i.opened_at) / 60) AS \"до решения\", percentile_cont(0.9) WITHIN GROUP (ORDER BY extract(epoch FROM d.decided_at - i.opened_at) / 60) AS \"до решения, 90 %\" FROM incidents_incident i JOIN incidents_decision d ON d.incident_id = i.id WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw}) GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "piechart",
+      "title": "Что происходило на самом деле (по решениям)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN d.cause = 'sensor_fault' THEN 'Неисправность датчика' WHEN d.cause = 'communication' THEN 'Потеря связи' WHEN d.cause = 'power' THEN 'Обесточивание' WHEN d.cause = 'false_alarm' THEN 'Ложное срабатывание' WHEN d.cause = 'external' THEN 'Внешнее воздействие' WHEN d.cause = 'works' THEN 'Работы на объекте' WHEN d.cause = 'real_event' THEN 'Реальное событие' WHEN d.cause = 'insufficient_data' THEN 'Недостаточно данных' WHEN d.cause = '' THEN 'Не указано' ELSE d.cause END AS metric, count(*) AS value FROM incidents_decision d JOIN incidents_incident i ON i.id = d.incident_id WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw}) GROUP BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Сотрудники",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 13,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT concat(u.last_name, ' ', u.first_name) AS \"сотрудник\", count(*) AS \"решений\", round((percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM d.decided_at - i.opened_at) / 60))::numeric, 1) AS \"до решения, мин\", round(avg((d.cause <> '')::int)::numeric * 100) AS \"с причиной, %\" FROM incidents_decision d JOIN incidents_incident i ON i.id = d.incident_id JOIN accounts_user u ON u.id = d.decided_by_id WHERE $__timeFilter(i.opened_at) AND (i.is_emulated = false OR ${emulated:raw}) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Журнал прогнозов: записей в сутки по задаче",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(issued_at, '1d'), CASE WHEN task = 'sensor_failure' THEN 'Отказ датчика' WHEN task = 'gas' THEN 'Газ' WHEN task = 'flood' THEN 'Подтопление' WHEN task = 'fire' THEN 'Пожар' WHEN task = 'intrusion' THEN 'НСД' ELSE task END AS metric, count(*) AS value FROM forecasting_prediction WHERE $__timeFilter(issued_at) AND is_backtest = ${backtest:raw} GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Качество прогнозов по задачам",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN task = 'sensor_failure' THEN 'Отказ датчика' WHEN task = 'gas' THEN 'Газ' WHEN task = 'flood' THEN 'Подтопление' WHEN task = 'fire' THEN 'Пожар' WHEN task = 'intrusion' THEN 'НСД' ELSE task END AS \"задача\", count(*) AS \"записей\", sum((outcome = 'confirmed')::int) AS \"подтвердилось\", sum((outcome = 'not_confirmed')::int) AS \"не подтвердилось\", sum((outcome = 'prevented')::int) AS \"предотвращено\", round(100.0 * sum((outcome = 'confirmed')::int) / nullif(sum((outcome IN ('confirmed', 'not_confirmed'))::int), 0), 1) AS \"точность, %\" FROM forecasting_prediction WHERE $__timeFilter(issued_at) AND is_backtest = ${backtest:raw} GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    }
+  ]
+}

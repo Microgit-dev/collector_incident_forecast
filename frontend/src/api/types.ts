@@ -87,6 +87,7 @@ export interface Incident {
   severity: RiskLevel
   status: IncidentStatus
   is_forecast: boolean
+  is_emulated: boolean
   node: number
   node_name: string
   responsible_node: number

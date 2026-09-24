@@ -41,6 +41,9 @@ class TaskSpec:
     resolve_daily: str = "d.first_fault_ts > p.issued_at AND d.first_fault_ts <= p.valid_until"
     resolve_reading: str = "r.state = 'fault'"
     uses_feedback: bool = False
+    # То же событие и «канал в норме» на суточной витрине (SQL) — для фактической полноты журнала
+    event_sql: str = "d.first_fault_ts IS NOT NULL"
+    healthy_sql: str = "d.last_state <> 'fault'"
     # Уровни риска по точности на валидации; для редких событий ориентиры ниже — иначе уровней не будет
     level_precision: dict = field(default_factory=lambda: {"critical": 0.7, "high": 0.4, "medium": 0.15})
 
@@ -76,6 +79,8 @@ GAS = TaskSpec(
     level_precision={"critical": 0.3, "high": 0.12, "medium": 0.05},
     resolve_daily=f"d.numeric_max >= {F.EXCEED_LEVEL} AND d.day > (p.issued_at AT TIME ZONE 'Europe/Moscow')::date",
     resolve_reading=f"r.numeric >= {F.EXCEED_LEVEL} AND r.quality IN ('ok', 'drift')",
+    event_sql=f"d.numeric_max >= {F.EXCEED_LEVEL}",
+    healthy_sql=f"coalesce(d.numeric_max, 0) < {F.EXCEED_LEVEL} AND d.last_state <> 'alarm'",
 )
 
 FLOOD = TaskSpec(
@@ -93,6 +98,8 @@ FLOOD = TaskSpec(
     params={"min_data_in_leaf": 200},
     resolve_daily="d.alarms > 0 AND d.day > (p.issued_at AT TIME ZONE 'Europe/Moscow')::date",
     resolve_reading="r.state = 'alarm'",
+    event_sql="d.alarms > 0",
+    healthy_sql="d.last_state <> 'alarm'",
 )
 
 SPECS: dict[str, TaskSpec] = {s.task: s for s in (SENSOR_FAILURE, GAS, FLOOD)}

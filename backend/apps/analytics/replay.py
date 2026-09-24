@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import polars as pl
@@ -92,6 +92,7 @@ def _signal_type(state: str, domain: str) -> str:
 def replay(node: Node, start: datetime, end: datetime, with_forecast: bool = True) -> dict:
     if end <= start or end - start > MAX_SPAN:
         raise ReplayError("Интервал — от минуты до 24 часов")
+    start, end = start.astimezone(UTC), end.astimezone(UTC)  # столбец ts в Polars — UTC
     channels = {
         c.pk: c
         for c in Channel.objects.filter(node__path__startswith=node.path, is_active=True).select_related(
@@ -211,6 +212,7 @@ def _episodes(signals: list[dict], channels: dict) -> list[dict]:
         out.append(
             {
                 "node": ep["node"],
+                "node_id": ep["node_id"],
                 "type": kind,
                 "contour": contour(kind),
                 "severity": severity,

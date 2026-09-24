@@ -83,6 +83,7 @@ class IncidentSerializer(serializers.ModelSerializer):
             "severity",
             "status",
             "is_forecast",
+            "is_emulated",
             "node",
             "node_name",
             "responsible_node",

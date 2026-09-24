@@ -108,6 +108,11 @@ export function IncidentsPage() {
                             прогноз
                           </Badge>
                         )}
+                        {incident.is_emulated && (
+                          <Badge size="xs" color="orange" variant="light">
+                            эмуляция
+                          </Badge>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>

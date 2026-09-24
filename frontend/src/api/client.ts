@@ -148,3 +148,21 @@ export async function upload<T>(path: string, form: FormData, onProgress?: (frac
     xhr.send(form)
   })
 }
+
+/** Скачивание файла с авторизацией: имя берётся из Content-Disposition (RFC 5987) или задаётся явно. */
+export async function download(path: string, fallbackName: string, retry = true): Promise<void> {
+  const headers: Record<string, string> = {}
+  if (tokens.access) headers.Authorization = `Bearer ${tokens.access}`
+  const response = await fetch(buildUrl(path), { headers })
+  if (response.status === 401 && retry && (await refreshAccess())) return download(path, fallbackName, false)
+  if (!response.ok) throw new ApiError(response.status, null)
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const encoded = /filename\*=utf-8''([^;]+)/i.exec(disposition)?.[1]
+  const name = encoded ? decodeURIComponent(encoded) : fallbackName
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+}

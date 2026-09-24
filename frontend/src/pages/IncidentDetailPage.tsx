@@ -176,6 +176,11 @@ export function IncidentDetailPage() {
             <RiskBadge level={incident.severity} />
             <StatusBadge status={incident.status} />
             {incident.is_forecast && <Badge variant="outline">прогноз</Badge>}
+            {incident.is_emulated && (
+              <Badge color="orange" variant="light">
+                эмуляция смены
+              </Badge>
+            )}
             {incident.escalation_level > 0 && <Badge color="grape">эскалация ×{incident.escalation_level}</Badge>}
           </Group>
           <Title order={3}>{incident.title}</Title>
