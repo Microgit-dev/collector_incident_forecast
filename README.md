@@ -30,6 +30,20 @@ docker compose up -d --build      # первая сборка ~5–10 минут
 
 Сырые данные заказчика кладутся в `data/` (в git не хранятся), см. [data/README.md](data/README.md).
 
+### Данные
+
+Справочники (дерево объектов, 11 485 каналов, пикеты) загружаются автоматически при первом запуске.
+Историю журналов загружает отдельная команда — примерно минута на год данных:
+
+```bash
+docker compose run --rm backend python manage.py import_history            # все годы, кроме 2021
+docker compose run --rm backend python manage.py import_history --years 2025 2026 --raw-days 30
+```
+
+Результат: Parquet-архив в `artifacts/archive/`, суточная витрина за всю историю, сырые показания
+за оперативное окно и отчёт о качестве загрузки (интерфейс → «Качество данных»).
+Решение по контурам хранения описано в [docs/adr/0001-storage-contours.md](docs/adr/0001-storage-contours.md).
+
 Демо-поток СМВУ: реальный журнал проигрывается в Kafka с ускорением.
 
 ```bash

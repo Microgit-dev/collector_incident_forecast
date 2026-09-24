@@ -56,6 +56,8 @@ class ImportJob(TimeStampedModel):
     started_at = models.DateTimeField("начат", null=True, blank=True)
     finished_at = models.DateTimeField("завершён", null=True, blank=True)
     error = models.TextField("ошибка", blank=True)
+    # Отчёт о качестве загрузки: корректные / технические / невалидные / ошибки времени / дубли
+    quality = models.JSONField("качество данных", default=dict, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, verbose_name="инициатор", null=True, blank=True, on_delete=models.SET_NULL
     )

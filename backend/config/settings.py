@@ -17,7 +17,7 @@ env = environ.Env(
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:5173"]),
     LDAP_ENABLED=(bool, False),
 )
-environ.Env.read_env(BASE_DIR.parent / ".env", overwrite=False)
+# .env читает docker compose (env_file); локальные тесты работают на значениях по умолчанию
 
 SECRET_KEY = env("SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DEBUG")

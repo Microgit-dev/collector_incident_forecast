@@ -6,7 +6,7 @@ from .models import SensorProfile, StateRule
 class StateRuleInline(admin.TabularInline):
     model = StateRule
     extra = 0
-    fields = ("pattern", "is_regex", "state", "facet", "priority")
+    fields = ("pattern", "is_regex", "state", "facet", "guarded", "priority")
 
 
 @admin.register(SensorProfile)
@@ -26,7 +26,7 @@ class SensorProfileAdmin(admin.ModelAdmin):
 
 @admin.register(StateRule)
 class StateRuleAdmin(admin.ModelAdmin):
-    list_display = ("pattern", "state", "facet", "profile", "is_regex", "priority")
+    list_display = ("pattern", "state", "facet", "guarded", "profile", "is_regex", "priority")
     list_filter = ("state", "facet", "profile")
     list_editable = ("state", "facet", "priority")
     search_fields = ("pattern",)

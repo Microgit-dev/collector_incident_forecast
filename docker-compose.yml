@@ -12,7 +12,7 @@ x-backend: &backend
     ARTIFACTS_DIR: /artifacts
   volumes:
     - ./data:/data:ro
-    - artifacts:/artifacts
+    - ./artifacts:/artifacts
     - media:/app/media
   restart: unless-stopped
   depends_on:
@@ -91,6 +91,10 @@ services:
     image: collector-forecast/backend:local
     env_file: .env
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py bootstrap"]
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -242,5 +246,4 @@ volumes:
   promdata:
   grafanadata:
   caddydata:
-  artifacts:
   media:

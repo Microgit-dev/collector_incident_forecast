@@ -23,6 +23,7 @@ def seed_default_taxonomy() -> dict[str, int]:
                 "state": rule.state,
                 "facet": rule.facet,
                 "is_regex": rule.is_regex,
+                "guarded": rule.guarded,
                 "priority": priority,
             },
         )

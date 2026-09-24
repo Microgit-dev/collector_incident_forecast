@@ -11,7 +11,7 @@ class CompiledRegistry:
 
 
 def _rule(r: StateRule) -> Rule:
-    return Rule(r.pattern, State(r.state), r.facet, r.is_regex)
+    return Rule(r.pattern, State(r.state), r.facet, r.is_regex, r.guarded)
 
 
 def compiled_registry() -> CompiledRegistry:

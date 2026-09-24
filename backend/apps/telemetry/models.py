@@ -60,3 +60,44 @@ class ChannelState(models.Model):
 
     def __str__(self):
         return f"{self.channel_id}/{self.facet}: {self.state}"
+
+
+class ChannelDaily(models.Model):
+    """
+    Суточная витрина по каналу за всю историю (ТЗ §13, аналитический контур).
+
+    Сырые показания всех лет в БД не держим — это сотни миллионов строк; они лежат в Parquet
+    (архив для обучения). Витрина заполняется из архива при импорте и ежесуточно из hypertable.
+    """
+
+    pk = models.CompositePrimaryKey("day", "channel")
+    day = models.DateField("сутки")
+    channel = models.ForeignKey(
+        "assets.Channel",
+        verbose_name="канал",
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        related_name="+",
+    )
+    readings = models.PositiveIntegerField("показаний")
+    normal = models.PositiveIntegerField("норма", default=0)
+    warnings = models.PositiveIntegerField("предупреждений", default=0)
+    alarms = models.PositiveIntegerField("тревог", default=0)
+    faults = models.PositiveIntegerField("неисправностей", default=0)
+    power_losses = models.PositiveIntegerField("потерь питания", default=0)
+    unknowns = models.PositiveIntegerField("неопределённых", default=0)
+    events = models.PositiveIntegerField("рабочих событий", default=0)
+    invalid = models.PositiveIntegerField("невалидных значений", default=0)
+    numeric_avg = models.FloatField("среднее", null=True)
+    numeric_min = models.FloatField("минимум", null=True)
+    numeric_max = models.FloatField("максимум", null=True)
+    first_ts = models.DateTimeField("первое сообщение")
+    last_ts = models.DateTimeField("последнее сообщение")
+
+    class Meta:
+        verbose_name = "суточная сводка канала"
+        verbose_name_plural = "суточные сводки каналов"
+        indexes = [models.Index(fields=["channel", "-day"], name="channeldaily_channel_day")]
+
+    def __str__(self):
+        return f"{self.channel_id}@{self.day}"

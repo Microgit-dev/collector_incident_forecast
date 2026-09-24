@@ -63,6 +63,11 @@ class StateRule(TimeStampedModel):
         default="primary",
         help_text="Составные устройства пишут несколько аспектов одновременно: основной, питание, охрана…",
     )
+    guarded = models.BooleanField(
+        "тревога только под охраной",
+        default=False,
+        help_text="Если источник не пометил событие тревожным, это рабочая активность, а не тревога",
+    )
     priority = models.PositiveSmallIntegerField("приоритет", default=100)
 
     class Meta:

@@ -18,6 +18,7 @@ class NodeSerializer(serializers.ModelSerializer):
             "path",
             "parent_path",
             "picket_from",
+            "criticality",
             "picket_to",
             "geometry",
             "is_active",

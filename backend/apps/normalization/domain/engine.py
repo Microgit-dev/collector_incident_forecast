@@ -55,6 +55,9 @@ class Rule:
     state: State
     facet: str = "primary"
     is_regex: bool = False
+    # Охранная сработка — тревога, только если источник пометил её тревожной (объект под охраной).
+    # Иначе это рабочая активность: в журнале миллионы «Обнаружено движение» с тревожное=false.
+    guarded: bool = False
 
     def matches(self, text_lower: str) -> bool:
         if self.is_regex:
@@ -123,7 +126,12 @@ def _classify_numeric(value: float, profile: Profile) -> tuple[State, Quality]:
     return State.NORMAL, Quality.OK
 
 
-def normalize(raw: str | None, profile: Profile, global_rules: tuple[Rule, ...] = ()) -> Normalized:
+def normalize(
+    raw: str | None,
+    profile: Profile,
+    global_rules: tuple[Rule, ...] = (),
+    raw_alarm: bool | None = None,
+) -> Normalized:
     """Главная точка входа. Правила профиля имеют приоритет над глобальными."""
     text = (raw or "").strip().strip('"')
     if not text:
@@ -140,5 +148,7 @@ def normalize(raw: str | None, profile: Profile, global_rules: tuple[Rule, ...] 
     lowered = text.lower()
     for rule in (*profile.rules, *global_rules):
         if rule.matches(lowered):
+            if rule.guarded and raw_alarm is False:
+                return Normalized(State.EVENT, text=text, facet=rule.facet, flags=("unguarded",))
             return Normalized(rule.state, text=text, facet=rule.facet)
     return Normalized(State.UNKNOWN, text=text, quality=Quality.UNMAPPED_TEXT)

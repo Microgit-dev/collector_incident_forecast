@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections
 import logging
 import time
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ class BatchResult:
     received: int = 0
     stored: int = 0
     skipped_unknown_channel: int = 0
+    by_quality: collections.Counter = field(default_factory=collections.Counter)
+    by_state: collections.Counter = field(default_factory=collections.Counter)
     changes: list[StateChange] = field(default_factory=list)
 
 
@@ -86,11 +89,16 @@ class Pipeline:
                     ts=event.ts,
                     raw_value=event.raw_value,
                     raw_alarm=event.raw_alarm,
-                    value=normalize(event.raw_value, profile, registry.global_rules),
+                    value=normalize(event.raw_value, profile, registry.global_rules, event.raw_alarm),
                 )
             )
+        for item in items:
+            result.by_quality[item.value.quality.value] += 1
+            result.by_state[item.value.state.value] += 1
         result.changes = store_readings(items)
         result.stored = len(items)
+        for quality, count in result.by_quality.items():
+            EVENTS_TOTAL.labels(f"quality_{quality}").inc(count)
         EVENTS_TOTAL.labels("stored").inc(result.stored)
         EVENTS_TOTAL.labels("unknown_channel").inc(result.skipped_unknown_channel)
         return result

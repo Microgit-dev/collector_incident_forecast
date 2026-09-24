@@ -66,3 +66,17 @@ def test_unmapped_text_and_numeric_on_state_profile():
     assert normalize("Что-то новое", DISCRETE, GLOBAL_RULES).quality == Quality.UNMAPPED_TEXT
     assert normalize("12", DISCRETE, GLOBAL_RULES).quality == Quality.UNEXPECTED_NUMERIC
     assert normalize("-127", DISCRETE, GLOBAL_RULES).state == State.FAULT
+
+
+def test_guarded_detection_is_activity_when_source_not_alarming():
+    unguarded = normalize("Обнаружено движение", DISCRETE, GLOBAL_RULES, raw_alarm=False)
+    assert (unguarded.state, unguarded.flags) == (State.EVENT, ("unguarded",))
+    assert normalize("Обнаружено движение", DISCRETE, GLOBAL_RULES, raw_alarm=True).state == State.ALARM
+    # Физическая угроза — тревога независимо от флага источника
+    assert normalize("Обнаружен дым", DISCRETE, GLOBAL_RULES, raw_alarm=False).state == State.ALARM
+
+
+def test_datetime_value_is_timestamp_event_but_1970_is_fault():
+    stamp = normalize("22.09.2019 20:01:31", DISCRETE, GLOBAL_RULES)
+    assert (stamp.state, stamp.facet) == (State.EVENT, "timestamp")
+    assert normalize("01.01.1970 03:00:00", DISCRETE, GLOBAL_RULES).state == State.FAULT

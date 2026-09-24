@@ -29,6 +29,7 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "started_at",
             "finished_at",
             "error",
+            "quality",
             "created_at",
         )
         read_only_fields = (
@@ -39,6 +40,7 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "started_at",
             "finished_at",
             "error",
+            "quality",
         )
 
     def validate_file_path(self, value: str) -> str:

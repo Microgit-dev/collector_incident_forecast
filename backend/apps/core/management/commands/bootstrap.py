@@ -56,6 +56,7 @@ PERIODIC = [
     # (name, task, seconds)
     ("Эскалация инцидентов без реакции", "apps.incidents.tasks.escalate_overdue_incidents", 60),
     ("Цикл прогнозирования", "apps.forecasting.tasks.run_forecast_cycle", 900),
+    ("Суточная витрина телеметрии", "apps.telemetry.tasks.rollup_daily", 3600),
 ]
 
 
@@ -81,6 +82,7 @@ class Command(BaseCommand):
         for code, name, outcome in REASONS:
             DecisionReason.objects.get_or_create(code=code, defaults={"name": name, "outcome": outcome})
         self._schedules()
+        self._reference()
         self._superuser()
         self.stdout.write(self.style.SUCCESS("bootstrap done"))
 
@@ -94,6 +96,24 @@ class Command(BaseCommand):
             PeriodicTask.objects.get_or_create(
                 name=name, defaults={"task": task, "interval": interval, "kwargs": json.dumps({})}
             )
+
+    def _reference(self):
+        """Справочники заказчика, если каталог данных смонтирован (идемпотентно)."""
+        from django.conf import settings
+
+        from apps.assets.services import import_channels
+        from apps.topology.services import import_objects
+
+        base = settings.DATA_DIR / "dataset"
+        objects, channels = (
+            base / "справочник_объектов_диспетчер.csv",
+            base / "справочник_каналов_датчиков.csv",
+        )
+        if not (objects.exists() and channels.exists()):
+            self.stdout.write("reference: data dir not mounted, skipped")
+            return
+        self.stdout.write(f"objects: {import_objects(objects)}")
+        self.stdout.write(f"channels: {import_channels(channels)}")
 
     def _superuser(self):
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")

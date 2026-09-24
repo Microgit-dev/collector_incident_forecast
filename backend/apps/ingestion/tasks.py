@@ -45,4 +45,9 @@ def _flush(job: ImportJob, pipeline: Pipeline, batch: list) -> None:
     job.rows_total += result.received
     job.rows_ok += result.stored
     job.rows_skipped += result.skipped_unknown_channel
-    job.save(update_fields=["rows_total", "rows_ok", "rows_skipped"])
+    quality = job.quality or {"by_quality": {}, "by_state": {}}
+    for key, counter in (("by_quality", result.by_quality), ("by_state", result.by_state)):
+        for name, count in counter.items():
+            quality[key][name] = quality[key].get(name, 0) + count
+    job.quality = quality
+    job.save(update_fields=["rows_total", "rows_ok", "rows_skipped", "quality"])
