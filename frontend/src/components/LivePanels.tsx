@@ -21,7 +21,7 @@ import { INCIDENT_TYPE, RISK, TASK } from '../api/labels'
 import type { Live, LiveIncident, RiskLevel } from '../api/types'
 import { PriorityBadge } from './badges'
 
-export const WINDOWS = [
+const WINDOWS = [
   { value: '10', label: '10 мин' },
   { value: '60', label: '1 ч' },
   { value: '1440', label: '24 ч' },
