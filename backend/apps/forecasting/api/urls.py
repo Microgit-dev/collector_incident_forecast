@@ -1,5 +1,7 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .learning import FeedbackLabelViewSet, FeedbackRuleViewSet, LearningSettingsView
 from .views import (
     ChannelHealthViewSet,
     ChannelRiskViewSet,
@@ -20,5 +22,10 @@ router.register("forecasting/channel-risk", ChannelRiskViewSet)
 router.register("forecasting/health", ChannelHealthViewSet)
 router.register("forecasting/node-risk", NodeRiskViewSet, basename="node-risk")
 router.register("forecasting/cycle", CycleViewSet, basename="forecast-cycle")
+router.register("forecasting/feedback-rules", FeedbackRuleViewSet, basename="feedback-rule")
+router.register("forecasting/feedback-labels", FeedbackLabelViewSet, basename="feedback-label")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("forecasting/learning-settings/", LearningSettingsView.as_view(), name="learning-settings"),
+    *router.urls,
+]

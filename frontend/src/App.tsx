@@ -11,6 +11,7 @@ import { DataQualityPage } from './pages/DataQualityPage'
 import { ForecastsPage } from './pages/ForecastsPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
+import { LearningPage } from './pages/LearningPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModelsPage } from './pages/ModelsPage'
 import { PlannedPage } from './pages/PlannedPage'
@@ -54,6 +55,7 @@ export function App() {
         />
         <Route path="forecasts" element={<ForecastsPage />} />
         <Route path="models" element={<ModelsPage />} />
+        <Route path="learning" element={<LearningPage />} />
         <Route path="data-health" element={<DataHealthPage />} />
         <Route
           path="workorders"

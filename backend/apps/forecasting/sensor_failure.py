@@ -68,8 +68,9 @@ def _noop(fraction: float, stage: str) -> None:
 
 
 def _keep_negative(frame: pl.DataFrame, rate: float) -> pl.Expr:
+    """Все положительные, все размеченные диспетчерами и доля rate отрицательных (по хешу)."""
     bucket = (pl.col("channel_id") * 1_000_003 + pl.col("day").dt.epoch("d")) % 1000
-    return pl.col("y") | (bucket < int(rate * 1000))
+    return pl.col("y") | pl.col("y_orig") | pl.col("fb") | (bucket < int(rate * 1000))
 
 
 def build_dataset(
@@ -78,35 +79,48 @@ def build_dataset(
     horizon_days: int = 1,
     sustained: bool = False,
     use_cache: bool = True,
-) -> pl.DataFrame:
-    """Выборка кешируется в artifacts/models: повторное обучение на тех же данных её не пересобирает."""
+    labels: pl.DataFrame | None = None,
+) -> tuple[pl.DataFrame, dict, dict]:
+    """
+    Выборка кешируется в artifacts/models: повторное обучение на тех же данных и той же разметке
+    её не пересобирает. Возвращает (выборка, статистика разметки по эффектам, строк по каждой метке).
+    """
+    from .domain.feedback import empty_labels
+    from .feedback import labels_fingerprint
+
+    labels = labels if labels is not None else empty_labels()
     # Конец выборки — последние полные сутки: одиночные сутки после них (тестовый прогон) дали бы
     # месяцы «пустых» дней без отказов и завысили бы метрики
     last = data.last_complete_day() or data.last_daily_day()
     cache = (
         settings.ARTIFACTS_DIR
         / "models"
-        / f"dataset_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}{'s' if sustained else ''}.parquet"
+        / f"dataset_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}{'s' if sustained else ''}_{labels_fingerprint(labels)}.parquet"
     )
-    if use_cache and cache.exists():
+    stats_file = cache.with_suffix(".json")
+    if use_cache and cache.exists() and stats_file.exists():
         progress(1, "Выборка взята из кеша")
-        return pl.read_parquet(cache)
-    frame = _collect(progress, neg_rate, last, horizon_days, sustained)
+        saved = json.loads(stats_file.read_text(encoding="utf-8"))
+        return pl.read_parquet(cache), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
+    frame, stats, per_label = _collect(progress, neg_rate, last, horizon_days, sustained, labels)
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
-    return frame
+    stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
+    return frame, stats, per_label
 
 
 def _collect(
-    progress: Progress, neg_rate: float, last: date, horizon_days: int, sustained: bool
-) -> pl.DataFrame:
+    progress: Progress, neg_rate: float, last: date, horizon_days: int, sustained: bool, labels: pl.DataFrame
+) -> tuple[pl.DataFrame, dict, dict]:
+    from .domain.feedback import apply_labels, merge_stats
+
     meta = data.load_meta()
     excluded = data.excluded_range()
     first = meta["first_day"].min()
     nodes = data.load_node_daily()
     ids = sorted(meta.filter(pl.col("first_day").is_not_null())["channel_id"].to_list())
     chunks = [ids[i : i + CHUNK] for i in range(0, len(ids), CHUNK)]
-    parts = []
+    parts, stats, per_label = [], {}, {}
     for i, chunk in enumerate(chunks):
         progress(i / len(chunks), f"Признаки: каналы {i * CHUNK + 1}–{i * CHUNK + len(chunk)} из {len(ids)}")
         daily = data.load_daily(first, last + timedelta(days=1), chunk)
@@ -115,12 +129,37 @@ def _collect(
         grid = F.build_grid(daily, last, excluded)
         feats = F.compute_features(grid, nodes, meta.filter(pl.col("channel_id").is_in(chunk)))
         labelled = F.with_label(feats, horizon_days, sustained)
-        sampled = labelled.filter(_keep_negative(labelled, neg_rate)).with_columns(
-            pl.when(pl.col("y")).then(1.0).otherwise(1 / neg_rate).alias("weight")
+        chunk_labels = labels.filter(pl.col("channel_id").is_in(chunk))
+        labelled, part_stats, part_rows = apply_labels(labelled, chunk_labels, horizon_days)
+        merge_stats(stats, part_stats)
+        per_label.update(part_rows)
+        # Вес прореживания считается по исходной метке: строки, которые попали бы в выборку и без
+        # разметки, весят так же; размеченные дополнительно умножаются на вес правила
+        sampled = (
+            labelled.filter(_keep_negative(labelled, neg_rate))
+            .with_columns(
+                pl.when(pl.col("y_orig") | pl.col("fb"))
+                .then(1.0)
+                .otherwise(1 / neg_rate)
+                .alias("weight_orig")
+            )
+            .with_columns((pl.col("weight_orig") * pl.col("fb_weight")).alias("weight"))
         )
-        parts.append(sampled.select("channel_id", "day", "y", "weight", "next_fault_ts", *F.FEATURES))
+        parts.append(
+            sampled.select(
+                "channel_id",
+                "day",
+                "y",
+                "y_orig",
+                "fb",
+                "weight",
+                "weight_orig",
+                "next_fault_ts",
+                *F.FEATURES,
+            )
+        )
     progress(1, "Выборка собрана")
-    return pl.concat(parts)
+    return pl.concat(parts), stats, per_label
 
 
 # ---------- матрица признаков ----------
@@ -209,16 +248,52 @@ class TrainResult:
     params: dict
     train_period: dict
     sensor_types: list[str]
+    per_label: dict = None
+
+
+def _fit(xy: dict, columns: list[str]):
+    import lightgbm as lgb
+
+    cat_idx = [columns.index(c) for c in F.CATEGORICAL]
+    train_set = lgb.Dataset(
+        *xy["train"][:2], weight=xy["train"][2], feature_name=columns, categorical_feature=cat_idx
+    )
+    valid_set = lgb.Dataset(*xy["valid"][:2], weight=xy["valid"][2], reference=train_set)
+    return lgb.train(
+        PARAMS,
+        train_set,
+        num_boost_round=2000,
+        valid_sets=[valid_set],
+        callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(0)],
+    )
+
+
+def _pr_auc(y, p, w) -> float:
+    from sklearn.metrics import average_precision_score
+
+    return round(float(average_precision_score(y, p, sample_weight=w)), 4)
+
+
+def champion_score(champion_artifact: str | None, frame: pl.DataFrame, y, w) -> float | None:
+    """PR-AUC действующей версии на той же валидации, что и новая: сравнение на равных."""
+    if not champion_artifact or not Path(champion_artifact).exists():
+        return None
+    booster, meta = _load(champion_artifact)
+    return _pr_auc(y, booster.predict(to_matrix(frame, meta["sensor_types"])), w)
 
 
 def train(
-    progress: Progress = _noop, neg_rate: float = NEG_RATE, horizon_hours: int = HORIZON_HOURS
+    progress: Progress = _noop,
+    neg_rate: float = NEG_RATE,
+    horizon_hours: int = HORIZON_HOURS,
+    labels: pl.DataFrame | None = None,
+    champion_artifact: str | None = None,
 ) -> TrainResult:
-    import lightgbm as lgb
-
     started = time.monotonic()
     horizon_days = max(1, horizon_hours // 24)
-    dataset = build_dataset(lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days)
+    dataset, fb_stats, per_label = build_dataset(
+        lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels
+    )
     sensor_types = sorted(dataset["sensor_type"].unique().to_list())
     parts = {
         "train": dataset.filter(pl.col("day") < VALID_FROM),
@@ -230,18 +305,7 @@ def train(
     }
     progress(0.62, f"Обучение LightGBM: {len(parts['train']):,} примеров".replace(",", " "))
     columns = matrix_columns()
-    cat_idx = [columns.index(c) for c in F.CATEGORICAL]
-    train_set = lgb.Dataset(
-        *xy["train"][:2], weight=xy["train"][2], feature_name=columns, categorical_feature=cat_idx
-    )
-    valid_set = lgb.Dataset(*xy["valid"][:2], weight=xy["valid"][2], reference=train_set)
-    booster = lgb.train(
-        PARAMS,
-        train_set,
-        num_boost_round=2000,
-        valid_sets=[valid_set],
-        callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(0)],
-    )
+    booster = _fit(xy, columns)
     progress(0.9, "Подбор порогов и оценка на отложенном 2026 году")
     scores = {k: booster.predict(v[0], num_iteration=booster.best_iteration) for k, v in xy.items()}
 
@@ -298,6 +362,12 @@ def train(
         "best_iteration": booster.best_iteration,
         "train_seconds": round(time.monotonic() - started),
     }
+    metrics["feedback"] = _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, progress)
+    champion = champion_score(champion_artifact, parts["valid"], xy["valid"][1], xy["valid"][2])
+    metrics["comparison"] = {
+        "valid_pr_auc": _pr_auc(xy["valid"][1], scores["valid"], xy["valid"][2]),
+        "champion_valid_pr_auc": champion,
+    }
     version = datetime.now(MSK).strftime("%Y.%m.%d-%H%M") + f"-h{horizon_hours}"
     folder = settings.ARTIFACTS_DIR / "models"
     folder.mkdir(parents=True, exist_ok=True)
@@ -323,8 +393,44 @@ def train(
     }
     progress(1, "Модель обучена")
     return TrainResult(
-        version, artifact, metrics, PARAMS | {"rounds": booster.best_iteration}, period, sensor_types
+        version,
+        artifact,
+        metrics,
+        PARAMS | {"rounds": booster.best_iteration},
+        period,
+        sensor_types,
+        per_label=per_label,
     )
+
+
+def _feedback_metrics(parts, xy, scores, columns, fb_stats, per_label, labels, progress) -> dict:
+    """
+    Что дала разметка диспетчеров: контрольная модель на тех же строках, но с исходными
+    (слабыми) метками. Обе модели оцениваются на выборках с учётом разметки — это лучшая
+    доступная «правда», поэтому разница показывает вклад решений диспетчеров.
+    """
+    used = int(labels.height) if labels is not None else 0
+    result = {"labels": used, "labels_matched": len(per_label), "effects": fb_stats}
+    changed = sum(v.get("rows", 0) for v in fb_stats.values())
+    if not used or not changed:
+        result["ablation"] = None
+        return result
+    progress(0.95, "Контрольная модель без разметки диспетчеров")
+    xy_orig = {
+        k: (xy[k][0], parts[k]["y_orig"].to_numpy(), parts[k]["weight_orig"].to_numpy())
+        for k in ("train", "valid")
+    }
+    control = _fit(xy_orig, columns)
+    result["ablation"] = {
+        part: {
+            "with_feedback": _pr_auc(xy[part][1], scores[part], xy[part][2]),
+            "without_feedback": _pr_auc(
+                xy[part][1], control.predict(xy[part][0], num_iteration=control.best_iteration), xy[part][2]
+            ),
+        }
+        for part in ("valid", "test")
+    }
+    return result
 
 
 # ---------- прогноз ----------

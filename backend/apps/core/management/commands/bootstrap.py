@@ -57,6 +57,8 @@ PERIODIC = [
     ("Эскалация инцидентов без реакции", "apps.incidents.tasks.escalate_overdue_incidents", 60),
     ("Цикл прогнозирования", "apps.forecasting.tasks.run_forecast_cycle", 900),
     ("Суточная витрина телеметрии", "apps.telemetry.tasks.rollup_daily", 3600),
+    ("Контроль деградации модели", "apps.forecasting.tasks.check_model_degradation", 86400),
+    ("Плановое переобучение модели", "apps.forecasting.tasks.weekly_retrain", 7 * 86400),
 ]
 
 
@@ -81,6 +83,11 @@ class Command(BaseCommand):
             RiskPolicy.objects.get_or_create(task=task)
         for code, name, outcome in REASONS:
             DecisionReason.objects.get_or_create(code=code, defaults={"name": name, "outcome": outcome})
+        from apps.forecasting.feedback import seed_rules
+        from apps.forecasting.models import LearningSettings
+
+        self.stdout.write(f"feedback rules created: {seed_rules()}")
+        LearningSettings.load()
         self._schedules()
         self._reference()
         self._demo()
