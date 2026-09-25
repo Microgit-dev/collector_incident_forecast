@@ -4,6 +4,9 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     EfficiencyView,
     FloodView,
+    HistoryChannelView,
+    HistoryCoverageView,
+    HistoryNodeView,
     LiveView,
     OverviewView,
     QualityView,
@@ -24,6 +27,9 @@ urlpatterns = [
     path("analytics/ranges/", RangesView.as_view(), name="analytics-ranges"),
     path("analytics/flood/", FloodView.as_view(), name="analytics-flood"),
     path("analytics/replay/", ReplayView.as_view(), name="analytics-replay"),
+    path("history/channel/", HistoryChannelView.as_view(), name="history-channel"),
+    path("history/node/", HistoryNodeView.as_view(), name="history-node"),
+    path("history/coverage/", HistoryCoverageView.as_view(), name="history-coverage"),
 ]
 
 router = DefaultRouter()

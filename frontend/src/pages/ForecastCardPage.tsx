@@ -298,6 +298,18 @@ export function ForecastCardPage() {
         <Text size="sm" c="dimmed">
           {card.node_name} · сформирован {dayjs(card.issued_at).format('DD.MM.YYYY HH:mm')} · действует до{' '}
           {dayjs(card.valid_until).format('DD.MM.YYYY HH:mm')}
+          {card.channel && (
+            <>
+              {' · '}
+              <Anchor
+                component={Link}
+                to={`/history?node=${card.node}&channel=${card.channel}&from=${dayjs(card.issued_at).subtract(6, 'day').format('YYYY-MM-DD')}&to=${dayjs(card.valid_until).format('YYYY-MM-DD')}`}
+                size="sm"
+              >
+                история канала
+              </Anchor>
+            </>
+          )}
         </Text>
       </Stack>
 

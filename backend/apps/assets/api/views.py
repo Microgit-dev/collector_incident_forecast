@@ -65,6 +65,16 @@ class ChannelViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
     filterset_fields = ("node", "sensor_type", "sensor_type__domain", "is_active", "in_catalog")
     search_fields = ("name", "tag", "=external_id")
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # ?within=<узел> — каналы всего поддерева (у комплекса каналы лежат во вложенных объектах)
+        if within := self.request.query_params.get("within"):
+            from apps.topology.models import Node
+
+            node = Node.objects.filter(pk=within).first()
+            qs = qs.filter(node__path__startswith=node.path) if node else qs.none()
+        return qs
+
 
 class EquipmentViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Equipment.objects.select_related("node").prefetch_related("channels")

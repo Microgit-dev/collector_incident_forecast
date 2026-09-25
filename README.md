@@ -96,6 +96,8 @@ docker compose --profile demo up -d replay
 учебного контура — https://localhost:8443, симулятор (консоль и веб) — http://localhost:8095.
 Подробности в [simulator/README.md](simulator/README.md); учебные задания по ролям — в [docs/training.md](docs/training.md).
 
+Режим просмотра истории (показания объекта и канала за любой период с 2019 года) — в [docs/history.md](docs/history.md).
+
 ```bash
 docker compose --profile training up -d --build
 ```

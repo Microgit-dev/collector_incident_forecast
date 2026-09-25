@@ -11,6 +11,7 @@ import { DataImportPage } from './pages/DataImportPage'
 import { DataQualityPage } from './pages/DataQualityPage'
 import { ForecastCardPage } from './pages/ForecastCardPage'
 import { ForecastsPage } from './pages/ForecastsPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LearningPage } from './pages/LearningPage'
@@ -58,6 +59,7 @@ export function App() {
         <Route path="data-health" element={<DataHealthPage />} />
         <Route path="workorders" element={<WorkOrdersPage />} />
         <Route path="replay" element={<ReplayPage />} />
+        <Route path="history" element={<HistoryPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="training" element={<TrainingPage />} />
