@@ -120,3 +120,6 @@ export const WO_STATUS: Record<WorkOrderStatus, { label: string; color: string }
   done: { label: 'Выполнена', color: 'teal' },
   cancelled: { label: 'Отменена', color: 'gray' },
 }
+
+// Пожар и НСД — индикаторы по правилам (подтверждённых событий в данных нет): индекс 0–1, не вероятность
+export const isIndicator = (task: string) => task === 'fire' || task === 'intrusion'
