@@ -18,6 +18,7 @@ import { useDisclosure } from '@mantine/hooks'
 import {
   IconAlertTriangle,
   IconBrain,
+  IconCalendarStats,
   IconCertificate,
   IconSchool,
   IconHeartRateMonitor,
@@ -68,6 +69,7 @@ const NAV: NavItem[] = [
   { to: '/models', label: 'Модели', icon: IconBrain, perm: 'forecasting.view_mlmodel' },
   { to: '/learning', label: 'Обучение и обратная связь', icon: IconSchool, perm: 'forecasting.review_feedback' },
   { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
+  { to: '/history', label: 'История', icon: IconCalendarStats, perm: 'telemetry.view_channeldaily' },
   { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
   { to: '/teams', label: 'Команды', icon: IconUsersGroup },
   { to: '/training', label: 'Учебные задания', icon: IconCertificate },

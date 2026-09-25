@@ -259,9 +259,20 @@ export function IncidentDetailPage() {
                 {incident.alerts.map((alert) => (
                   <Group key={alert.id} justify="space-between" wrap="nowrap">
                     <Text size="sm">{alert.title}</Text>
-                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                      {dayjs(alert.raised_at).format('DD.MM HH:mm:ss')}
-                    </Text>
+                    <Group gap={6} wrap="nowrap">
+                      {alert.channel && (
+                        <Anchor
+                          component={Link}
+                          size="xs"
+                          to={`/history?node=${incident.node}&channel=${alert.channel}&from=${dayjs(alert.raised_at).subtract(1, 'day').format('YYYY-MM-DD')}&to=${dayjs(alert.raised_at).format('YYYY-MM-DD')}`}
+                        >
+                          история
+                        </Anchor>
+                      )}
+                      <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                        {dayjs(alert.raised_at).format('DD.MM HH:mm:ss')}
+                      </Text>
+                    </Group>
                   </Group>
                 ))}
               </Stack>

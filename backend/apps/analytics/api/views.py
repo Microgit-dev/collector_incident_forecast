@@ -103,6 +103,85 @@ class FloodView(APIView):
         return Response(flood_reduction(end, days))
 
 
+def _history_period(request):
+    from datetime import date
+
+    from ..history import period
+
+    return period(
+        date.fromisoformat(request.query_params["from"]), date.fromisoformat(request.query_params["to"])
+    )
+
+
+class HistoryChannelView(APIView):
+    """Режим просмотра истории: канал за период (сырые показания до месяца, дальше — по суткам)."""
+
+    permission_classes = [require_perm("telemetry.view_channeldaily")]
+
+    def get(self, request):
+        from django.shortcuts import get_object_or_404
+
+        from apps.assets.models import Channel
+        from apps.audit.services import log_action
+        from apps.topology.selectors import scope_queryset
+
+        from ..history import HistoryError, channel_history
+
+        channel = get_object_or_404(
+            scope_queryset(
+                Channel.objects.select_related("node", "sensor_type__profile", "profile_override"),
+                request.user,
+                "node",
+            ),
+            pk=request.query_params.get("channel"),
+        )
+        try:
+            start, end = _history_period(request)
+        except (KeyError, ValueError, HistoryError) as exc:
+            return Response({"detail": f"Неверный период: {exc}"}, status=400)
+        log_action(
+            request,
+            "history.channel",
+            obj=channel,
+            payload={"from": start.isoformat(), "to": end.isoformat()},
+        )
+        return Response(channel_history(channel, start, end))
+
+
+class HistoryNodeView(APIView):
+    """Режим просмотра истории: объект за период — каналы × сутки по худшему состоянию, карточки."""
+
+    permission_classes = [require_perm("telemetry.view_channeldaily")]
+
+    def get(self, request):
+        from django.shortcuts import get_object_or_404
+
+        from apps.topology.models import Node
+        from apps.topology.selectors import scope_queryset
+
+        from ..history import HistoryError, node_history
+
+        node = get_object_or_404(
+            scope_queryset(Node.objects.all(), request.user, ""), pk=request.query_params.get("node")
+        )
+        try:
+            start, end = _history_period(request)
+        except (KeyError, ValueError, HistoryError) as exc:
+            return Response({"detail": f"Неверный период: {exc}"}, status=400)
+        if end - start > timedelta(days=366):
+            return Response({"detail": "Для объекта период — не больше года"}, status=400)
+        return Response(node_history(node, start, end))
+
+
+class HistoryCoverageView(APIView):
+    permission_classes = [require_perm("telemetry.view_channeldaily")]
+
+    def get(self, request):
+        from ..history import coverage
+
+        return Response(cached("history-coverage", request.user, (), coverage, ttl=600))
+
+
 class ReplayView(APIView):
     """Разбор исторического эпизода: объект и интервал до 24 часов."""
 

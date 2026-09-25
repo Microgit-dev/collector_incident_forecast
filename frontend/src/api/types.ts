@@ -567,3 +567,111 @@ export interface TrainingLesson {
   available: boolean
   best: { finished_at: string; elapsed_s: number; mistakes: number } | null
 }
+
+export interface HistoryPoint {
+  t: string
+  v: number
+  min?: number
+  max?: number
+}
+
+export interface HistoryInterval {
+  from: string
+  to: string
+  state: string
+  raw: string
+}
+
+export interface HistoryIncident {
+  id: number
+  title: string
+  type: IncidentType
+  severity: RiskLevel
+  status: IncidentStatus
+  is_forecast: boolean
+  is_emulated: boolean
+  opened_at: string
+  resolved_at: string | null
+  node: string
+  assigned_to: string | null
+  decision: { outcome: string; cause: string | null; by: string | null; at: string } | null
+}
+
+export interface HistoryPrediction {
+  t: string
+  task: string
+  p: number
+  level: RiskLevel
+  outcome: string
+}
+
+export interface HistoryDaily {
+  day: string
+  readings: number
+  normal: number
+  warnings: number
+  alarms: number
+  faults: number
+  power_losses: number
+  unknowns: number
+  events: number
+  invalid: number
+  numeric_avg: number | null
+  numeric_min: number | null
+  numeric_max: number | null
+  last_state: string
+}
+
+export interface ChannelHistory {
+  channel: {
+    id: number
+    external_id: number
+    name: string
+    node: string
+    node_id: number
+    sensor_type: string
+    picket: number | null
+    unit: string
+    warn: number | null
+    alarm: number | null
+  }
+  period: { from: string; to: string }
+  resolution: 'raw' | 'bucket' | 'daily'
+  bucket_s: number | null
+  sources: string[]
+  readings: number
+  numeric: HistoryPoint[]
+  states: Record<string, HistoryInterval[]>
+  invalid: { t: string; quality: string; raw: string }[]
+  invalid_total?: number
+  daily: HistoryDaily[]
+  incidents: HistoryIncident[]
+  node_incidents: HistoryIncident[]
+  predictions: HistoryPrediction[]
+}
+
+export interface NodeHistory {
+  node: { id: number; name: string; channels: number }
+  period: { from: string; to: string }
+  days: string[]
+  totals: ({ day: string } & Record<string, number | string>)[]
+  rows: {
+    channel: number
+    name: string
+    sensor_type: string
+    object: string
+    abnormal_days: number
+    cells: Record<string, string>
+  }[]
+  shown: number
+  reporting: number
+  silent: number
+  incidents: HistoryIncident[]
+}
+
+export interface HistoryCoverage {
+  archive_years: number[]
+  daily: { from: string; to: string } | null
+  operational_from: string | null
+  max_raw_days: number
+}
