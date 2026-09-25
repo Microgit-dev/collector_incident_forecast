@@ -105,7 +105,7 @@ export function DataHealthPage() {
         {list.isLoading ? (
           <Loader />
         ) : (
-          <Table.ScrollContainer minWidth={760}>
+          <Table.ScrollContainer minWidth={760} data-tour="health">
             <Table striped>
               <Table.Thead>
                 <Table.Tr>

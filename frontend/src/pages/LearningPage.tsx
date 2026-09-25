@@ -847,7 +847,9 @@ export function LearningPage() {
       <Tabs defaultValue="impact" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="impact">Влияние на модели</Tabs.Tab>
-          <Tabs.Tab value="labels">Разметка диспетчеров</Tabs.Tab>
+          <Tabs.Tab value="labels" data-tour="labels">
+            Разметка диспетчеров
+          </Tabs.Tab>
           <Tabs.Tab value="rules">Правила разметки</Tabs.Tab>
           <Tabs.Tab value="settings">Настройки</Tabs.Tab>
         </Tabs.List>

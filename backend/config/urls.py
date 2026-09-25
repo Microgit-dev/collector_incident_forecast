@@ -19,6 +19,7 @@ api_v1 = [
     path("", include("apps.workorders.api.urls")),
     path("", include("apps.notifications.api.urls")),
     path("", include("apps.analytics.api.urls")),
+    path("", include("apps.training.api.urls")),
     path("", include("apps.audit.api.urls")),
 ]
 

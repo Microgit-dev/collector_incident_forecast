@@ -65,6 +65,7 @@ LOCAL_APPS = [
     "apps.workorders",
     "apps.notifications",
     "apps.analytics",
+    "apps.training",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -211,6 +212,8 @@ KAFKA = {
     "BOOTSTRAP_SERVERS": env("KAFKA_BOOTSTRAP_SERVERS", default="localhost:9092"),
     "TOPIC_RAW_EVENTS": env("KAFKA_TOPIC_RAW_EVENTS", default="smvu.raw-events"),
     "CONSUMER_GROUP": env("KAFKA_CONSUMER_GROUP", default="collector-forecast"),
+    # Команды симулятору (учебный контур): единственный канал в полевой контур — тот же брокер
+    "TOPIC_SIM_COMMANDS": env("KAFKA_TOPIC_SIM_COMMANDS", default="sim.training-commands"),
 }
 
 INTEGRATIONS = {

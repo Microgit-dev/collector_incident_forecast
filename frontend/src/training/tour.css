@@ -1,0 +1,16 @@
+/* Подсветка элемента интерфейса для учебного шага: рамка и затемнение остального экрана */
+.tour-spotlight {
+  position: relative;
+  z-index: 150;
+  outline: 3px solid var(--mantine-color-violet-5);
+  outline-offset: 4px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+  animation: tour-pulse 1.2s ease-in-out 3;
+}
+
+@keyframes tour-pulse {
+  50% {
+    outline-color: var(--mantine-color-violet-2);
+  }
+}

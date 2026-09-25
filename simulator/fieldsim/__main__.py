@@ -43,6 +43,10 @@ def cmd_serve(args):
 
     engine = _engine(args, not args.no_announce)
     engine.start()
+    if args.commands:
+        from .commands import start_listener
+
+        start_listener(engine, args.bootstrap, args.commands)
     try:
         serve(engine, args.host, args.port, args.contour)
     except KeyboardInterrupt:
@@ -159,6 +163,11 @@ def main(argv=None):
     p.add_argument("--port", type=int, default=8095)
     p.add_argument("--contour", default=os.environ.get("SIM_CONTOUR", "учебный контур"))
     p.add_argument("--no-announce", action="store_true", help="не отправлять начальное состояние каналов")
+    p.add_argument(
+        "--commands",
+        default=os.environ.get("SIM_COMMANDS_TOPIC", ""),
+        help="тема Kafka с командами учебного контура (восстановить объект, запустить сценарий)",
+    )
     p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("run", help="сценарий без сервера, до завершения")

@@ -170,6 +170,7 @@ export interface IncidentEvent {
   id: number
   ts: string
   kind: string
+  kind_display?: string
   actor_name: string | null
   text: string
 }
@@ -525,4 +526,44 @@ export interface Workspace {
     }[]
   }
   map: { color_by: 'risk' | 'health' | 'state'; incidents: boolean; workorders: boolean }
+}
+
+export interface TrainingStep {
+  code: string
+  title: string
+  hint: string
+  route: string | null
+  target: string | null
+  manual: boolean
+  status: 'done' | 'current' | 'pending'
+  done_at: string | null
+}
+
+export interface TrainingSession {
+  id: number
+  lesson: string
+  title: string
+  summary: string
+  role: string
+  status: 'active' | 'done' | 'abandoned'
+  object: string | null
+  started_at: string
+  finished_at: string | null
+  elapsed_s: number
+  hints: number
+  mistakes: number
+  note: string | null
+  steps: TrainingStep[]
+  user?: string
+}
+
+export interface TrainingLesson {
+  code: string
+  title: string
+  summary: string
+  minutes: number
+  steps: number
+  polygon: boolean
+  available: boolean
+  best: { finished_at: string; elapsed_s: number; mistakes: number } | null
 }

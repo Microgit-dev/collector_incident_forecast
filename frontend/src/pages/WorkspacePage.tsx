@@ -64,9 +64,9 @@ function Kpi({ kpi }: { kpi: WorkspaceKpi }) {
   )
 }
 
-function Panel({ title, to, children }: { title: string; to?: string; children: React.ReactNode }) {
+function Panel({ title, to, tour, children }: { title: string; to?: string; tour?: string; children: React.ReactNode }) {
   return (
-    <Card withBorder radius="md" h="100%">
+    <Card withBorder radius="md" h="100%" data-tour={tour}>
       <Group justify="space-between" mb="xs">
         <Text fw={600}>{title}</Text>
         {to && (
@@ -173,7 +173,7 @@ function HeadPanel({ data }: { data: Workspace }) {
 function ApprovalsPanel({ data }: { data: Workspace }) {
   const approvals = data.lists.approvals ?? []
   return (
-    <Panel title="Заявки на утверждение" to="/workorders">
+    <Panel title="Заявки на утверждение" to="/workorders" tour="approvals">
       {approvals.length ? (
         <Stack gap={0}>
           {approvals.map((o) => (
@@ -325,7 +325,7 @@ export function WorkspacePage() {
         )}
       </Group>
 
-      <SimpleGrid cols={{ base: 2, sm: 3, lg: data.kpis.length }}>
+      <SimpleGrid cols={{ base: 2, sm: 3, lg: data.kpis.length }} data-tour="kpis">
         {data.kpis.map((k) => (
           <Kpi key={k.key} kpi={k} />
         ))}
@@ -333,7 +333,7 @@ export function WorkspacePage() {
 
       <Grid>
         <Grid.Col span={{ base: 12, xl: 8 }}>
-          <Card withBorder radius="md">
+          <Card withBorder radius="md" data-tour="scheme">
             <Group justify="space-between" mb={4}>
               <Text fw={600}>Схема зоны ответственности</Text>
               <Tooltip label="Схема со всеми слоями и фильтрами">
@@ -354,7 +354,7 @@ export function WorkspacePage() {
             />
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, xl: 4 }}>
+        <Grid.Col span={{ base: 12, xl: 4 }} data-tour="side">
           {selected ? (
             <Stack gap={4}>
               <Group justify="flex-end">

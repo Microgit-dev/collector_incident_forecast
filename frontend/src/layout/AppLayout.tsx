@@ -18,6 +18,7 @@ import { useDisclosure } from '@mantine/hooks'
 import {
   IconAlertTriangle,
   IconBrain,
+  IconCertificate,
   IconSchool,
   IconHeartRateMonitor,
   IconHistory,
@@ -47,6 +48,7 @@ import { api } from '../api/client'
 import { ROLE } from '../api/labels'
 import { useAuth } from '../auth/AuthContext'
 import { useNotificationStream } from '../realtime/useNotificationStream'
+import { TrainingDock } from '../training/TrainingDock'
 
 interface NavItem {
   to: string
@@ -68,6 +70,7 @@ const NAV: NavItem[] = [
   { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
   { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
   { to: '/teams', label: 'Команды', icon: IconUsersGroup },
+  { to: '/training', label: 'Учебные задания', icon: IconCertificate },
   { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
   { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
@@ -130,7 +133,7 @@ export function AppLayout() {
           </Group>
           <Group gap="xs" wrap="nowrap">
             <Indicator label={unread.data?.count} size={16} disabled={!unread.data?.count} color="red">
-              <ActionIcon variant="default" size="lg" aria-label="Уведомления">
+              <ActionIcon variant="default" size="lg" aria-label="Уведомления" data-tour="notifications">
                 <IconBell size={18} />
               </ActionIcon>
             </Indicator>
@@ -166,7 +169,7 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        <Stack gap={2} style={{ flex: 1 }}>
+        <Stack gap={2} style={{ flex: 1 }} data-tour="nav">
           {NAV.filter((item) => !item.perm || can(item.perm)).map((item) => (
             <NavLink
               key={item.to}
@@ -216,6 +219,7 @@ export function AppLayout() {
 
       <AppShell.Main>
         <Outlet />
+        <TrainingDock />
       </AppShell.Main>
     </AppShell>
   )
