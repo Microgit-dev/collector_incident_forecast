@@ -1,4 +1,12 @@
-import type { DecisionCause, DecisionOutcome, IncidentStatus, IncidentType, PredictionOutcome, RiskLevel } from './types'
+import type {
+  DecisionCause,
+  DecisionOutcome,
+  IncidentStatus,
+  IncidentType,
+  PredictionOutcome,
+  RiskLevel,
+  WorkOrderStatus,
+} from './types'
 
 export const RISK: Record<RiskLevel, { label: string; color: string }> = {
   low: { label: 'Низкий', color: 'gray' },
@@ -102,4 +110,13 @@ export const CAUSE: Record<DecisionCause, { label: string; hint: string }> = {
   works: { label: 'Работы на объекте', hint: 'эти сутки исключаются из обучения' },
   real_event: { label: 'Реальное событие', hint: 'угроза подтвердилась' },
   insufficient_data: { label: 'Недостаточно данных', hint: 'вывод сделать нельзя — метка не ставится' },
+}
+
+export const WO_STATUS: Record<WorkOrderStatus, { label: string; color: string }> = {
+  draft: { label: 'Черновик', color: 'gray' },
+  approved: { label: 'Утверждена', color: 'blue' },
+  submitted: { label: 'Передана в систему заявок', color: 'indigo' },
+  in_progress: { label: 'В работе', color: 'orange' },
+  done: { label: 'Выполнена', color: 'teal' },
+  cancelled: { label: 'Отменена', color: 'gray' },
 }

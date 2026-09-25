@@ -22,7 +22,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api, type Page } from '../api/client'
-import type { RiskLevel } from '../api/types'
+import { WO_STATUS } from '../api/labels'
+import type { RiskLevel, WorkOrderStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
 
@@ -64,16 +65,6 @@ interface WorkOrder {
   report: string
 }
 
-type WorkOrderStatus = 'draft' | 'approved' | 'submitted' | 'in_progress' | 'done' | 'cancelled'
-
-const WO_STATUS: Record<WorkOrderStatus, { label: string; color: string }> = {
-  draft: { label: 'Черновик', color: 'gray' },
-  approved: { label: 'Утверждена', color: 'blue' },
-  submitted: { label: 'Передана в систему заявок', color: 'indigo' },
-  in_progress: { label: 'В работе', color: 'orange' },
-  done: { label: 'Выполнена', color: 'teal' },
-  cancelled: { label: 'Отменена', color: 'gray' },
-}
 // Следующий шаг жизненного цикла и право, которое для него нужно
 const NEXT: Partial<Record<WorkOrderStatus, { status: WorkOrderStatus; label: string; perm: string }>> = {
   draft: { status: 'approved', label: 'Утвердить', perm: 'workorders.approve_workorder' },

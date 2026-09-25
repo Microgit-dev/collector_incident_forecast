@@ -21,6 +21,7 @@ import {
   IconSchool,
   IconHeartRateMonitor,
   IconHistory,
+  IconLayoutDashboard,
   IconBell,
   IconChartBar,
   IconClipboardList,
@@ -56,7 +57,8 @@ interface NavItem {
 
 // Каждый пункт виден только ролям, у которых есть соответствующее право
 const NAV: NavItem[] = [
-  { to: '/', label: 'Оперативная обстановка', icon: IconGauge },
+  { to: '/', label: 'Рабочее место', icon: IconLayoutDashboard },
+  { to: '/overview', label: 'Оперативная обстановка', icon: IconGauge, perm: 'incidents.view_incident' },
   { to: '/incidents', label: 'Инциденты', icon: IconAlertTriangle, perm: 'incidents.view_incident' },
   { to: '/map', label: 'Схема объектов', icon: IconMap2, perm: 'topology.view_node' },
   { to: '/forecasts', label: 'Журнал прогнозов', icon: IconTimeline, perm: 'forecasting.view_prediction' },

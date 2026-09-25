@@ -11,10 +11,12 @@ from .views import (
     ReplayView,
     ReportViewSet,
     SchemeView,
+    WorkspaceView,
 )
 
 urlpatterns = [
     path("analytics/overview/", OverviewView.as_view(), name="analytics-overview"),
+    path("analytics/workspace/", WorkspaceView.as_view(), name="analytics-workspace"),
     path("analytics/live/", LiveView.as_view(), name="analytics-live"),
     path("analytics/scheme/", SchemeView.as_view(), name="analytics-scheme"),
     path("analytics/efficiency/", EfficiencyView.as_view(), name="analytics-efficiency"),
