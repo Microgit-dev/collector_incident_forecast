@@ -25,7 +25,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type Page } from '../api/client'
-import { CAUSE, INCIDENT_TYPE, OUTCOME } from '../api/labels'
+import { CAUSE, INCIDENT_TYPE, isIndicator, OUTCOME } from '../api/labels'
 import type { DecisionCause, DecisionOutcome, DecisionReason, IncidentDetail } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
@@ -276,11 +276,17 @@ export function IncidentDetailPage() {
                   Реакция до {dayjs(incident.ack_deadline).format('DD.MM HH:mm')} — затем эскалация
                 </Text>
               )}
-              {incident.probability !== null && (
-                <Text size="sm">
-                  Вероятность: {(incident.probability * 100).toFixed(0)}% на {incident.horizon_hours} ч
-                </Text>
-              )}
+              {incident.probability !== null &&
+                (isIndicator(incident.type) ? (
+                  <Text size="sm">
+                    Индекс риска: {incident.probability.toFixed(2)} на {incident.horizon_hours} ч — индикатор по правилам,
+                    не вероятность
+                  </Text>
+                ) : (
+                  <Text size="sm">
+                    Вероятность: {(incident.probability * 100).toFixed(0)}% на {incident.horizon_hours} ч
+                  </Text>
+                ))}
             </Card>
             <Card withBorder radius="md">
               <Text fw={600} mb="xs">

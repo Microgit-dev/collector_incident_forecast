@@ -23,14 +23,13 @@ import dayjs from 'dayjs'
 import { Link, useParams } from 'react-router-dom'
 
 import { api } from '../api/client'
-import { CHANNEL_STATE, HEALTH_COMPONENT, INCIDENT_TYPE, PREDICTION_OUTCOME, TASK } from '../api/labels'
+import { CHANNEL_STATE, HEALTH_COMPONENT, INCIDENT_TYPE, isIndicator, PREDICTION_OUTCOME, TASK } from '../api/labels'
 import type { PredictionCard } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
 
 const pct = (v: number | null | undefined, digits = 0) => (v == null ? '—' : `${(v * 100).toFixed(digits)}%`)
 const scoreColor = (v: number) => (v >= 80 ? 'teal' : v >= 50 ? 'yellow' : 'red')
-const isIndicator = (task: string) => task === 'fire' || task === 'intrusion'
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

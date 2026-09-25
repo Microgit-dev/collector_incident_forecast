@@ -18,7 +18,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { api, type Page } from '../api/client'
-import { PREDICTION_OUTCOME } from '../api/labels'
+import { isIndicator, PREDICTION_OUTCOME } from '../api/labels'
 import type { ChannelRisk, Prediction, PredictionOutcome } from '../api/types'
 import { RiskBadge } from '../components/badges'
 
@@ -254,7 +254,15 @@ export function ForecastsPage() {
                       </Table.Td>
                       <Table.Td>{p.channel_name ?? '—'}</Table.Td>
                       <Table.Td>{p.node_name}</Table.Td>
-                      <Table.Td>{pct(p.probability)}</Table.Td>
+                      <Table.Td>
+                        {isIndicator(p.task) ? (
+                          <Text size="sm" title="Индикатор по правилам: индекс риска 0–1, не вероятность">
+                            индекс {p.probability.toFixed(2)}
+                          </Text>
+                        ) : (
+                          pct(p.probability)
+                        )}
+                      </Table.Td>
                       <Table.Td>
                         <RiskBadge level={p.risk_level} />
                       </Table.Td>
