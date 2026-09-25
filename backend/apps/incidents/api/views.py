@@ -8,6 +8,7 @@ from apps.core.permissions import require_perm
 from apps.topology.mixins import ScopedQuerySetMixin
 
 from .. import services
+from ..first import mark_seen
 from ..models import (
     Alert,
     Decision,
@@ -75,6 +76,10 @@ class IncidentSerializer(serializers.ModelSerializer):
     node_name = serializers.CharField(source="node.name", read_only=True)
     responsible_node_name = serializers.CharField(source="responsible_node.name", read_only=True)
     assigned_to_name = serializers.CharField(source="assigned_to.get_full_name", default=None, read_only=True)
+    first_seen_by_name = serializers.CharField(
+        source="first_seen_by.get_full_name", default=None, read_only=True
+    )
+    responder_name = serializers.CharField(source="responder.get_full_name", default=None, read_only=True)
 
     class Meta:
         model = Incident
@@ -100,6 +105,12 @@ class IncidentSerializer(serializers.ModelSerializer):
             "assigned_to",
             "assigned_to_name",
             "escalation_level",
+            "first_seen_by",
+            "first_seen_by_name",
+            "first_seen_at",
+            "responder",
+            "responder_name",
+            "responded_at",
             "contour",
             "signals_count",
             "channels_count",
@@ -191,6 +202,7 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         incident = self.get_object()
         log_view(request, incident, "incident.view")
+        mark_seen(incident, request.user)
         return Response(self._detail(incident))
 
     def _run(self, request, action_name: str, fn, *args, **kwargs):

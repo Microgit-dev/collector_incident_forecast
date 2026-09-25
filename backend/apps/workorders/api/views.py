@@ -114,6 +114,13 @@ class WorkOrderViewSet(ScopedQuerySetMixin, viewsets.ModelViewSet):
         incident = get_object_or_404(
             scope_queryset(Incident.objects.all(), request.user, "node"), pk=incident_id
         )
+        from apps.incidents.services import IncidentError, claim
+
+        try:
+            # черновик заявки — тоже отклик: карточка достаётся тому, кто первым взялся
+            incident = claim(incident, request.user, "Черновик заявки")
+        except IncidentError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         order = services.draft_from_incident(incident, request.user)
         log_action(request, "workorder.draft", obj=order)
         return Response(WorkOrderSerializer(order).data, status=status.HTTP_201_CREATED)

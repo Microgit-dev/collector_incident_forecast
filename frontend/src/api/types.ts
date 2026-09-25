@@ -98,6 +98,12 @@ export interface Incident {
   node_name: string
   responsible_node: number
   responsible_node_name: string
+  first_seen_by: number | null
+  first_seen_by_name: string | null
+  first_seen_at: string | null
+  responder: number | null
+  responder_name: string | null
+  responded_at: string | null
   title: string
   description: string
   probability: number | null
@@ -674,4 +680,77 @@ export interface HistoryCoverage {
   daily: { from: string; to: string } | null
   operational_from: string | null
   max_raw_days: number
+}
+
+export interface StaffPerson {
+  user: number
+  name: string
+  position: string
+  team: string | null
+  zone: string
+  active: boolean
+  rank: number | null
+  zone_cards: number
+  first_seen: number
+  responded: number
+  responded_share: number | null
+  view_median: number | null
+  response_median: number | null
+  decision_median: number | null
+  races: number
+  races_won: number
+  races_won_share: number | null
+  decisions: number
+  closed: number
+  repeated: number
+  quality: number | null
+  labels_accepted: number
+  labels_rejected: number
+  takeovers_lost: number
+  releases: number
+  shifts: number
+  per_shift: number | null
+  training_done: number
+  training_mistakes: number | null
+}
+
+export interface StaffTeam {
+  team: string
+  members: number
+  zone_cards: number
+  responded: number
+  responded_share: number | null
+  response_median: number | null
+  escalated_unanswered: number
+  quality: number | null
+  training_done: number
+}
+
+export interface StaffMetrics {
+  period: { from: string; to: string }
+  summary: {
+    cards: number
+    responded_share: number | null
+    response: { median: number | null; p90: number | null }
+    contested: number
+    contested_share: number | null
+    escalated_unanswered: number
+    takeovers: number
+    emulated: number
+  }
+  people: StaffPerson[]
+  teams: StaffTeam[]
+}
+
+export interface MyMetrics {
+  period: { from: string; to: string }
+  me: StaffPerson | null
+  rank_of: number
+  colleagues: {
+    count: number
+    responded: number | null
+    response_median: number | null
+    responded_share: number | null
+    quality: number | null
+  }
 }

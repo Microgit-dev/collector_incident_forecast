@@ -20,6 +20,7 @@ from apps.topology.selectors import scope_queryset, user_scope_node
 
 from .efficiency import efficiency, incidents_in
 from .quality import quality
+from .staff import staff_metrics
 
 MSK = ZoneInfo("Europe/Moscow")
 TASK_TITLE = {
@@ -52,6 +53,7 @@ def collect(user, since: datetime, until: datetime, include_emulated: bool, back
         "by_type": {IncidentType(t).label: n for t, n in by_type.most_common()},
         "efficiency": efficiency(user, since, until, include_emulated),
         "quality": quality(user, since, until, backtest),
+        "staff": staff_metrics(user, since, until, include_emulated),
     }
 
 
@@ -96,6 +98,47 @@ def staff_rows(data: dict) -> list[list]:
             p["false_alarm_share"],
         ]
         for p in data["efficiency"]["staff"]
+    ]
+
+
+def first_rows(data: dict) -> list[list]:
+    """Кто первый: отклики, гонки, скорость, качество решений, нагрузка на смену, обучение."""
+    return [
+        [
+            p["rank"] or "",
+            p["name"],
+            p["team"] or "",
+            p["zone_cards"],
+            p["first_seen"],
+            p["responded"],
+            p["responded_share"],
+            p["response_median"],
+            f"{p['races_won']} из {p['races']}" if p["races"] else "—",
+            p["decision_median"],
+            p["quality"],
+            p["takeovers_lost"],
+            p["per_shift"],
+            p["training_done"],
+        ]
+        for p in data["staff"]["people"]
+        if p["active"]
+    ]
+
+
+def team_rows(data: dict) -> list[list]:
+    return [
+        [
+            t["team"],
+            t["members"],
+            t["zone_cards"],
+            t["responded"],
+            t["responded_share"],
+            t["response_median"],
+            t["escalated_unanswered"],
+            t["quality"],
+            t["training_done"],
+        ]
+        for t in data["staff"]["teams"]
     ]
 
 
@@ -199,8 +242,43 @@ def to_pdf(data: dict) -> bytes:
             ],
             (30, 25, 45, 45, 30),
         )
+    first = first_rows(data)
+    if first:
+        h2("2. Сотрудники: кто первый откликнулся")
+        st = data["staff"]["summary"]
+        para(
+            f"Правило смены: карточку забирает тот, кто первым откликнулся. Гонок (карточку открыли двое и больше "
+            f"до отклика) — {st['contested']} ({_pct(st['contested_share'])}), перехватов руководителем — "
+            f"{st['takeovers']}, эскалаций без отклика — {st['escalated_unanswered']}. Качество — доля закрытий "
+            "как ложных (пожар, газ, вода, проникновение), после которых угроза не повторилась на объекте за 6 часов.",
+            8,
+        )
+        table(
+            ["№", "Сотрудник", "Первым", "Доля зоны", "Отклик", "Гонки", "Решение", "Качество", "На смену"],
+            [
+                [r or "", n, rs, _pct(sh), _min(rm), races, _min(dm), _pct(q), ps if ps is not None else "—"]
+                for r, n, _t, _z, _fs, rs, sh, rm, races, dm, q, _tl, ps, _tr in first
+            ],
+            (10, 40, 16, 20, 22, 20, 22, 20, 18),
+        )
+        teams = team_rows(data)
+        if teams:
+            table(
+                [
+                    "Команда",
+                    "Чел.",
+                    "Карточек зоны",
+                    "Первым",
+                    "Доля",
+                    "Отклик",
+                    "Эскал. без отклика",
+                    "Качество",
+                ],
+                [[t, m, z, r, _pct(sh), _min(rm), e, _pct(q)] for t, m, z, r, sh, rm, e, q, _ in teams],
+                (46, 12, 24, 18, 16, 22, 26, 20),
+            )
     if data["efficiency"]["staff"]:
-        h2("2. Работа сотрудников")
+        h2("2б. Решения сотрудников")
         table(
             ["Сотрудник", "Команда", "Решений", "Просмотр", "Решение", "Эскал.", "С причиной", "Ложных"],
             [
@@ -293,7 +371,42 @@ def to_xlsx(data: dict, user) -> bytes:
     ]
     sheet("Сводка", ["Показатель", "Значение"], meta, first=True)
     sheet(
-        "Сотрудники",
+        "Кто первый",
+        [
+            "Место",
+            "Сотрудник",
+            "Команда",
+            "Карточек зоны",
+            "Первым заметил",
+            "Первым откликнулся",
+            "Доля карточек зоны",
+            "До отклика, медиана мин",
+            "Гонки: выиграно",
+            "От отклика до решения, мин",
+            "Качество решений",
+            "Перехвачено руководителем",
+            "Откликов на смену",
+            "Учебных заданий",
+        ],
+        first_rows(data),
+    )
+    sheet(
+        "Команды",
+        [
+            "Команда",
+            "Сотрудников",
+            "Карточек зоны",
+            "Откликнулись первыми",
+            "Доля",
+            "До отклика, медиана мин",
+            "Эскалаций без отклика",
+            "Качество решений",
+            "Учебных заданий",
+        ],
+        team_rows(data),
+    )
+    sheet(
+        "Решения сотрудников",
         [
             "Сотрудник",
             "Команда",

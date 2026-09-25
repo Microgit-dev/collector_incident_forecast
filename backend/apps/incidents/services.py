@@ -254,6 +254,7 @@ def raise_alert(
 def mark_action(incident: Incident, user, code: str, done: bool = True) -> Incident:
     """Отметка шага чек-листа «что делать»; попадает в хронологию карточки."""
     incident = Incident.objects.select_for_update().get(pk=incident.pk)
+    _claim(incident, user, "Отмечен шаг чек-листа")
     for step in incident.actions:
         if step["code"] == code:
             step["done"] = done
@@ -268,14 +269,82 @@ def mark_action(incident: Incident, user, code: str, done: bool = True) -> Incid
     return incident
 
 
+def _owner_text(incident: Incident) -> str:
+    owner = incident.assigned_to
+    name = owner.get_full_name() or owner.get_username()
+    when = timezone.localtime(incident.responded_at).strftime("%H:%M") if incident.responded_at else ""
+    first = incident.responder_id == owner.pk
+    return (
+        f"Карточку уже взял {name}"
+        + (f" в {when}" if when else "")
+        + (" — откликнулся первым" if first else "")
+    )
+
+
+def _claim(incident: Incident, user, how: str) -> bool:
+    """
+    Под блокировкой строки: свободная карточка достаётся тому, кто первым откликнулся. Чужая — отказ
+    с именем владельца; руководитель (право takeover) действует по чужой карточке, не забирая её.
+    Возвращает True, если карточка только что закреплена за пользователем.
+    """
+    if incident.assigned_to_id == user.pk:
+        return False
+    if incident.assigned_to_id:
+        if user.has_perm("incidents.takeover_incident"):
+            return False
+        raise IncidentError(_owner_text(incident))
+    now = timezone.now()
+    first = incident.responder_id is None
+    incident.assigned_to = user
+    incident.acknowledged_at = incident.acknowledged_at or now
+    if first:
+        incident.responder, incident.responded_at = user, now
+    incident.save(update_fields=["assigned_to", "acknowledged_at", "responder", "responded_at", "updated_at"])
+    _event(
+        incident,
+        IncidentEvent.Kind.ASSIGNED,
+        actor=user,
+        text=f"{how}: первым откликнулся {user.get_full_name() or user.get_username()}" if first else how,
+        first=first,
+    )
+    _broadcast(incident, user, "claimed")
+    return True
+
+
+def _broadcast(incident: Incident, user, action: str) -> None:
+    """Остальным в зоне — обновить очередь: карточку уже взяли."""
+    from apps.notifications.services import broadcast
+
+    transaction.on_commit(
+        lambda: broadcast(
+            recipients(incident),
+            {
+                "incident": incident.pk,
+                "action": action,
+                "by": user.pk,
+                "by_name": user.get_full_name() or user.get_username(),
+            },
+        )
+    )
+
+
+@transaction.atomic
+def claim(incident: Incident, user, how: str) -> Incident:
+    """Отклик через смежное действие (например, черновик заявки из карточки)."""
+    incident = Incident.objects.select_for_update().get(pk=incident.pk)
+    _claim(incident, user, how)
+    return incident
+
+
 @transaction.atomic
 def acknowledge(incident: Incident, user) -> Incident:
     incident = Incident.objects.select_for_update().get(pk=incident.pk)
+    _claim(incident, user, "Принят")
     if incident.status != Incident.Status.NEW:
         return incident
     now = timezone.now()
-    incident.status, incident.acknowledged_at = Incident.Status.ACKNOWLEDGED, now
-    incident.save(update_fields=["status", "acknowledged_at", "updated_at"])
+    incident.status = Incident.Status.ACKNOWLEDGED
+    incident.save(update_fields=["status", "updated_at"])
     incident.alerts.filter(acknowledged_at=None).update(acknowledged_by=user, acknowledged_at=now)
     _event(incident, IncidentEvent.Kind.ACKNOWLEDGED, actor=user)
     return incident
@@ -283,19 +352,27 @@ def acknowledge(incident: Incident, user) -> Incident:
 
 @transaction.atomic
 def take(incident: Incident, user, *, force: bool = False) -> Incident:
-    """Закрепить карточку за собой. Второй диспетчер получает отказ, если нет права takeover."""
+    """Закрепить карточку за собой: успевает первый. Забрать чужую — только с правом takeover и явно."""
     incident = Incident.objects.select_for_update().get(pk=incident.pk)
-    locked_by_other = incident.assigned_to_id and incident.assigned_to_id != user.pk
-    if locked_by_other and not (force and user.has_perm("incidents.takeover_incident")):
-        raise IncidentError(
-            f"Инцидент уже в работе у {incident.assigned_to.get_full_name() or incident.assigned_to}"
+    owner = incident.assigned_to
+    if owner and owner.pk != user.pk:
+        if not (force and user.has_perm("incidents.takeover_incident")):
+            raise IncidentError(_owner_text(incident))
+        incident.assigned_to = user
+        incident.save(update_fields=["assigned_to", "updated_at"])
+        _event(
+            incident,
+            IncidentEvent.Kind.ASSIGNED,
+            actor=user,
+            text=f"Перехват у {owner.get_full_name() or owner.get_username()}",
+            takeover_from=owner.pk,
         )
-    if incident.status == Incident.Status.NEW:
-        incident.acknowledged_at = timezone.now()
-    incident.assigned_to = user
-    incident.status = Incident.Status.IN_PROGRESS
-    incident.save(update_fields=["assigned_to", "status", "acknowledged_at", "updated_at"])
-    _event(incident, IncidentEvent.Kind.ASSIGNED, actor=user)
+        _broadcast(incident, user, "takeover")
+    elif owner is None:
+        _claim(incident, user, "Взят в работу")
+    if incident.status in (Incident.Status.NEW, Incident.Status.ACKNOWLEDGED):
+        incident.status = Incident.Status.IN_PROGRESS
+        incident.save(update_fields=["status", "updated_at"])
     return incident
 
 
@@ -341,12 +418,7 @@ def decide(
     incident = Incident.objects.select_for_update().get(pk=incident.pk)
     if incident.status == Incident.Status.CLOSED:
         raise IncidentError("Инцидент закрыт")
-    if (
-        incident.assigned_to_id
-        and incident.assigned_to_id != user.pk
-        and not user.has_perm("incidents.takeover_incident")
-    ):
-        raise IncidentError("Инцидент в работе у другого диспетчера")
+    _claim(incident, user, "Решение")
     if reason and reason.outcome != outcome:
         raise IncidentError("Причина не соответствует виду решения")
 
