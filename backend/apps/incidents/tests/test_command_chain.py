@@ -79,7 +79,11 @@ def test_scope_limits_visibility_and_actions(tree, staff):
 
     incident_id = listing["results"][0]["id"]
     client.force_authenticate(staff["dispatcher"])
-    assert client.post(f"/api/v1/incidents/items/{incident_id}/take/").status_code == 200
+    client.get(f"/api/v1/incidents/items/{incident_id}/")
+    taken = client.post(f"/api/v1/incidents/items/{incident_id}/take/")
+    assert taken.status_code == 200
+    # ответ действия — полная карточка: интерфейс подменяет ею открытую, в том числе список просмотревших
+    assert [v["username"] for v in taken.json()["viewed_by"]] == [staff["dispatcher"].username]
     client.force_authenticate(staff["dispatcher2"])
     assert client.post(f"/api/v1/incidents/items/{incident_id}/take/").status_code == 409
 
