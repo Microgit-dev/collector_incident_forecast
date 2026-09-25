@@ -16,10 +16,17 @@ TTL = 60
 
 
 def scope_key(user) -> str:
+    """
+    Зона ответственности и набор ролей: одна и та же зона выглядит по-разному для диспетчера
+    и бригады (у бригады нет карточек и прогнозов), поэтому кеш у них разный.
+    """
     if has_global_scope(user):
-        return "all"
-    node = user_scope_node(user)
-    return node.path if node else "none"
+        scope = "all"
+    else:
+        node = user_scope_node(user)
+        scope = node.path if node else "none"
+    roles = "su" if user.is_superuser else ",".join(sorted(user.groups.values_list("name", flat=True)))
+    return f"{scope}:{roles}"
 
 
 def cached(name: str, user, params: tuple, build: Callable[[], dict], ttl: int = TTL) -> dict:

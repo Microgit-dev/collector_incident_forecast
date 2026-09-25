@@ -111,8 +111,29 @@ def transition(order: WorkOrder, new_status: str, user=None) -> WorkOrder:
     order.status = new_status
     if new_status == WorkOrder.Status.APPROVED:
         order.approved_by = user
+        if order.assignee_id is None:
+            order.assignee = brigade_for(order.node)
     order.save()
     return order
+
+
+def brigade_for(node):
+    """
+    Исполнитель по умолчанию — бригадир бригады, в чью зону входит объект (ближайшая по дереву).
+    Руководитель может переназначить заявку; без бригады в зоне исполнитель остаётся пустым.
+    """
+    from apps.accounts.models import Team, TeamKind
+
+    teams = [
+        t
+        for t in Team.objects.filter(kind=TeamKind.BRIGADE, lead__isnull=False).select_related(
+            "scope_node", "lead"
+        )
+        if t.scope_node and node.path.startswith(t.scope_node.path)
+    ]
+    if not teams:
+        return None
+    return max(teams, key=lambda t: t.scope_node.depth).lead
 
 
 # ---------- система учёта заявок заказчика (help desk) ----------

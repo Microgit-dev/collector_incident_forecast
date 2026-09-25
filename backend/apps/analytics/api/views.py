@@ -20,6 +20,17 @@ class OverviewView(APIView):
         return Response(overview(request.user))
 
 
+class WorkspaceView(APIView):
+    """Рабочее место роли: счётчики, списки и слой схемы; ?role= — другая роль пользователя."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from ..workspace import workspace
+
+        return Response(workspace(request.user, request.query_params.get("role")))
+
+
 class LiveView(APIView):
     """Главный экран: сигналы за окно → эпизоды → требуют действия, активные риски."""
 
@@ -61,6 +72,11 @@ class SchemeView(APIView):
             (complex_id, task, bin_size),
             lambda: scheme(request.user, complex_id=complex_id, task=task, bin_size=bin_size),
         )
+        if params.get("workorders") in ("1", "true"):
+            from ..scheme import workorders_layer
+
+            # слой заявок — по пользователю, поверх общей для зоны и ролей схемы из кеша
+            result = {**result, "features": result["features"] + workorders_layer(request.user, result)}
         if params.get("geometry") == "wkt":
             from ..scheme import to_wkt
 

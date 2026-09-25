@@ -72,7 +72,7 @@ function Stage({
   )
 }
 
-function IncidentLine({ incident }: { incident: LiveIncident }) {
+export function IncidentLine({ incident }: { incident: LiveIncident }) {
   const navigate = useNavigate()
   return (
     <UnstyledButton onClick={() => navigate(`/incidents/${incident.id}`)} w="100%">

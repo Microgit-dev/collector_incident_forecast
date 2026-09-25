@@ -467,3 +467,62 @@ export interface PredictionCard extends Prediction {
   }[]
   actions: { code: string; title: string }[]
 }
+
+export type WorkOrderStatus = 'draft' | 'approved' | 'submitted' | 'in_progress' | 'done' | 'cancelled'
+
+export interface WorkspaceKpi {
+  key: string
+  label: string
+  value: number
+  hint: string
+  color: string | null
+  to: string | null
+}
+
+export interface WorkspaceIncident {
+  id: number
+  title: string
+  type: IncidentType
+  severity: RiskLevel
+  status: IncidentStatus
+  priority: number
+  escalation_level: number
+  opened_at: string
+  node: string
+}
+
+export interface WorkspaceOrder {
+  id: number
+  number: string
+  title: string
+  status: WorkOrderStatus
+  priority: RiskLevel
+  work_type: string
+  due_at: string
+  overdue: boolean
+  node: string
+  created_by: string | null
+  external_status: string
+}
+
+export interface Workspace {
+  role: string
+  title: string
+  description: string
+  roles: { code: string; title: string }[]
+  kpis: WorkspaceKpi[]
+  lists: {
+    escalated?: WorkspaceIncident[]
+    approvals?: WorkspaceOrder[]
+    my_orders?: WorkspaceOrder[]
+    weak_channels?: {
+      channel: number
+      name: string
+      node: string
+      score: number
+      silent: boolean
+      last_seen_at: string | null
+    }[]
+  }
+  map: { color_by: 'risk' | 'health' | 'state'; incidents: boolean; workorders: boolean }
+}

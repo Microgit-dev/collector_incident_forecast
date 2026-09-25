@@ -20,6 +20,7 @@ import { ReplayPage } from './pages/ReplayPage'
 import { SchemePage } from './pages/SchemePage'
 import { TeamsPage } from './pages/TeamsPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
+import { WorkspacePage } from './pages/WorkspacePage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -44,7 +45,8 @@ export function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<DashboardPage />} />
+        <Route index element={<WorkspacePage />} />
+        <Route path="overview" element={<DashboardPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="map" element={<SchemePage />} />
