@@ -183,3 +183,18 @@ def test_errors_are_value_errors(sim):
         engine.set_value(by_name(engine, "ДД ПК200").id, 5)
     with pytest.raises(ValueError):
         engine.start_scenario("nope", MU)
+
+
+def test_training_commands(sim):
+    from fieldsim.commands import handle
+
+    engine, sink, clock = sim
+    assert handle(engine, {"op": "scenario", "scenario": "fire", "object": MU, "picket": 220, "speed": 10}).startswith(
+        "запуск #1"
+    )
+    advance(engine, clock, 30)
+    assert engine.channels[by_name(engine, "ДД ПК220").id].mode == "alarm"
+    handle(engine, {"op": "restore", "object": MU})
+    assert engine.channels[by_name(engine, "ДД ПК220").id].mode == "normal"
+    with pytest.raises(ValueError):
+        handle(engine, {"op": "drop-tables"})

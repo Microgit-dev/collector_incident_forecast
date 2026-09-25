@@ -64,10 +64,11 @@ class DecisionSerializer(serializers.ModelSerializer):
 
 class IncidentEventSerializer(serializers.ModelSerializer):
     actor_name = serializers.CharField(source="actor.get_full_name", default=None, read_only=True)
+    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
 
     class Meta:
         model = IncidentEvent
-        fields = ("id", "ts", "kind", "actor", "actor_name", "text", "payload")
+        fields = ("id", "ts", "kind", "kind_display", "actor", "actor_name", "text", "payload")
 
 
 class IncidentSerializer(serializers.ModelSerializer):
@@ -179,13 +180,18 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             qs = qs.prefetch_related("decisions__decided_by", "events__actor")
         return qs
 
+    @staticmethod
+    def _detail(incident) -> dict:
+        """Полная карточка — и при открытии, и в ответ на действие: интерфейс заменяет ею свою копию."""
+        body = IncidentDetailSerializer(incident).data
+        # Кто уже открывал карточку — видно всей смене, чтобы не дублировать работу
+        body["viewed_by"] = viewers(incident, "incident.view")
+        return body
+
     def retrieve(self, request, *args, **kwargs):
         incident = self.get_object()
         log_view(request, incident, "incident.view")
-        body = self.get_serializer(incident).data
-        # Кто уже открывал карточку — видно всей смене, чтобы не дублировать работу
-        body["viewed_by"] = viewers(incident, "incident.view")
-        return Response(body)
+        return Response(self._detail(incident))
 
     def _run(self, request, action_name: str, fn, *args, **kwargs):
         incident = self.get_object()
@@ -200,7 +206,7 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             payload=kwargs and {k: str(v) for k, v in kwargs.items()},
         )
         incident.refresh_from_db()
-        body = IncidentDetailSerializer(incident).data
+        body = self._detail(incident)
         if isinstance(result, Decision):
             body["decision"] = DecisionSerializer(result).data
         return Response(body)
@@ -241,7 +247,7 @@ class IncidentViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
         services.escalate(incident, actor=request.user, reason=request.data.get("reason") or "вручную")
         log_action(request, "incident.escalate", obj=incident)
         incident.refresh_from_db()
-        return Response(IncidentDetailSerializer(incident).data)
+        return Response(self._detail(incident))
 
 
 class AlertViewSet(ScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):

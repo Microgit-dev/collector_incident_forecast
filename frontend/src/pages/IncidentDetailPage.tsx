@@ -192,7 +192,7 @@ export function IncidentDetailPage() {
         {open && (
           <Group gap="xs">
             {!mine && can('incidents.change_incident') && (
-              <Button leftSection={<IconHandGrab size={16} />} onClick={() => action.mutate('take')} disabled={lockedByOther} loading={action.isPending}>
+              <Button data-tour="incident-take" leftSection={<IconHandGrab size={16} />} onClick={() => action.mutate('take')} disabled={lockedByOther} loading={action.isPending}>
                 Взять в работу
               </Button>
             )}
@@ -202,12 +202,12 @@ export function IncidentDetailPage() {
               </Button>
             )}
             {can('incidents.decide_incident') && (
-              <Button color="teal" leftSection={<IconChecklist size={16} />} onClick={decisionModal.open} disabled={lockedByOther}>
+              <Button data-tour="decision" color="teal" leftSection={<IconChecklist size={16} />} onClick={decisionModal.open} disabled={lockedByOther}>
                 Решение
               </Button>
             )}
             {can('workorders.add_workorder') && (
-              <Button variant="light" leftSection={<IconClipboardPlus size={16} />} onClick={() => draft.mutate()} loading={draft.isPending}>
+              <Button data-tour="incident-workorder" variant="light" leftSection={<IconClipboardPlus size={16} />} onClick={() => draft.mutate()} loading={draft.isPending}>
                 Черновик заявки
               </Button>
             )}
@@ -274,13 +274,13 @@ export function IncidentDetailPage() {
               <Text fw={600} mb="sm">
                 Просмотрели карточку
               </Text>
-              {incident.viewed_by.length === 0 ? (
+              {!incident.viewed_by?.length ? (
                 <Text size="sm" c="dimmed">
                   Пока никто
                 </Text>
               ) : (
                 <Stack gap={4}>
-                  {incident.viewed_by.map((v) => (
+                  {incident.viewed_by?.map((v) => (
                     <Group key={v.user} justify="space-between" gap="xs" wrap="nowrap">
                       <Text size="sm">
                         {v.name}
@@ -306,7 +306,7 @@ export function IncidentDetailPage() {
               </Text>
               <Timeline bulletSize={14} lineWidth={2}>
                 {incident.events.map((event) => (
-                  <Timeline.Item key={event.id} title={event.text || event.kind}>
+                  <Timeline.Item key={event.id} title={event.text || event.kind_display || event.kind}>
                     <Text size="xs" c="dimmed">
                       {dayjs(event.ts).format('DD.MM HH:mm:ss')}
                       {event.actor_name && ` · ${event.actor_name}`}

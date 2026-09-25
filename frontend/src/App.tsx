@@ -19,6 +19,7 @@ import { ModelsPage } from './pages/ModelsPage'
 import { ReplayPage } from './pages/ReplayPage'
 import { SchemePage } from './pages/SchemePage'
 import { TeamsPage } from './pages/TeamsPage'
+import { TrainingPage } from './pages/TrainingPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 
@@ -59,6 +60,7 @@ export function App() {
         <Route path="replay" element={<ReplayPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="teams" element={<TeamsPage />} />
+        <Route path="training" element={<TrainingPage />} />
         <Route path="data-import" element={<DataImportPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

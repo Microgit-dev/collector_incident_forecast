@@ -404,7 +404,7 @@ function Orders() {
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">
                         {next && can(next.perm) && (
-                          <Button size="compact-xs" onClick={() => move.mutate({ id: o.id, next: next.status })}>
+                          <Button data-tour="wo-action" size="compact-xs" onClick={() => move.mutate({ id: o.id, next: next.status })}>
                             {next.label}
                           </Button>
                         )}

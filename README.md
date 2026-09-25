@@ -94,7 +94,7 @@ docker compose --profile demo up -d replay
 
 Учебный контур и симулятор датчиков: отдельная база и тема Kafka, полигон из трёх объектов. Интерфейс
 учебного контура — https://localhost:8443, симулятор (консоль и веб) — http://localhost:8095.
-Подробности в [simulator/README.md](simulator/README.md).
+Подробности в [simulator/README.md](simulator/README.md); учебные задания по ролям — в [docs/training.md](docs/training.md).
 
 ```bash
 docker compose --profile training up -d --build

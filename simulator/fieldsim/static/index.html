@@ -221,8 +221,9 @@ function renderState() {
       <div class="bar"><div style="width:${(100 * r.done) / Math.max(r.total, 1)}%"></div></div>
       ${r.log.map((l) => `<div class="small">${esc(l)}</div>`).join('')}
       ${r.next ? `<div class="small muted">далее: ${esc(r.next)}</div>` : ''}</div>`).join('');
-  $('log').innerHTML = state.log.filter((m) => !$('hidePolls').checked || m.error || !isPoll(m)).map((m) => m.error
+  $('log').innerHTML = state.log.filter((m) => !$('hidePolls').checked || m.error || m.command || !isPoll(m)).map((m) => m.error
     ? `<div class="alarm">${fmt(m.ts)} ошибка: ${esc(m.error)}</div>`
+    : m.command ? `<div style="color:var(--violet)">${fmt(m.ts)} учебный контур — ${esc(m.command)}</div>`
     : `<div class="${m.alarm ? 'alarm' : ''}" title="${esc(m.name)} · ${m.channel}">${fmt(m.ts)} ${esc(m.name)} — ${esc(m.raw)}</div>`).join('');
 }
 

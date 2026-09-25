@@ -241,6 +241,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: ${SIMULATOR_TOPIC:-smvu.training-events}
       SIM_CONTOUR: ${SIMULATOR_CONTOUR:-учебный контур}
+      # Команды учебных заданий (восстановить объект, запустить сценарий) — через тот же брокер
+      SIM_COMMANDS_TOPIC: sim.training-commands
     ports:
       - "127.0.0.1:${SIMULATOR_PORT:-8095}:8095"
     networks: [field]
