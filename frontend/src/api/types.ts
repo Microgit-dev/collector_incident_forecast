@@ -31,6 +31,12 @@ export interface Me {
   roles: string[]
   permissions: string[]
   is_superuser: boolean
+  contour: Contour
+}
+
+export interface Contour {
+  code: 'combat' | 'training'
+  urls: { combat: string; training: string; simulator: string }
 }
 
 export type TeamKind = 'management' | 'ods' | 'unit' | 'brigade' | 'analytics' | 'support'

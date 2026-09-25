@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Симулятор СМВУ</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --text: #1d232b; --muted: #677384; --line: #e3e6eb;
+  --accent: #1c7ed6; --accent-soft: #e7f1fb; --red: #e03131; --red-soft: #fdecec; --orange: #e8590c;
+  --orange-soft: #fdf0e7; --yellow: #f08c00; --grey-soft: #eef0f3; --green: #2b8a3e; --green-soft: #e9f6ec;
+  --violet: #7048e8; --violet-soft: #f0ecfd;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181d; --panel: #1d2127; --text: #e3e7ec; --muted: #939dab; --line: #2d333b;
+    --accent: #4dabf7; --accent-soft: #1b2f44; --red: #ff6b6b; --red-soft: #3a1f22; --orange: #ff922b;
+    --orange-soft: #3a2a1d; --grey-soft: #272c33; --green: #51cf66; --green-soft: #1d3324; --violet: #9775fa;
+    --violet-soft: #2a2340;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--grey-soft); color: var(--muted); white-space: nowrap; }
+.badge.violet { background: var(--violet-soft); color: var(--violet); }
+.badge.green { background: var(--green-soft); color: var(--green); }
+.badge.red { background: var(--red-soft); color: var(--red); }
+.spacer { flex: 1; }
+main { display: grid; grid-template-columns: 250px 1fr 360px; gap: 12px; padding: 12px; align-items: start; }
+@media (max-width: 1200px) { main { grid-template-columns: 220px 1fr; } aside.right { grid-column: 1 / -1; } }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.panel + .panel { margin-top: 12px; }
+.panel h2 { font-size: 14px; margin: 0 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree ul { list-style: none; margin: 0; padding-left: 14px; }
+.tree button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 6px; width: 100%; padding: 4px 6px; border-radius: 5px; }
+.tree button:hover { background: var(--grey-soft); }
+.tree button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+button.btn, select, input { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+button.btn { cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn.danger { color: var(--red); }
+button.btn:disabled { opacity: .5; cursor: default; }
+input.num { width: 72px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.wrap { overflow-x: auto; }
+.chip { display: inline-block; min-width: 86px; text-align: center; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.m-normal { background: var(--green-soft); color: var(--green); }
+.m-alarm { background: var(--red-soft); color: var(--red); }
+.m-fault, .m-disabled { background: var(--orange-soft); color: var(--orange); }
+.m-power { background: var(--violet-soft); color: var(--violet); }
+.m-unknown, .m-silent { background: var(--grey-soft); color: var(--muted); }
+.modes { display: flex; gap: 3px; flex-wrap: wrap; }
+.modes button { all: unset; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); }
+.modes button:hover { border-color: var(--accent); }
+.modes button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.log { font: 12px/1.5 ui-monospace, Consolas, monospace; max-height: 360px; overflow-y: auto; }
+.log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log .alarm { color: var(--red); }
+.run { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-top: 8px; }
+.run .bar { height: 4px; background: var(--grey-soft); border-radius: 2px; margin: 6px 0; }
+.run .bar div { height: 100%; background: var(--accent); border-radius: 2px; }
+.field { display: grid; gap: 4px; margin-bottom: 8px; }
+.field label { font-size: 12px; color: var(--muted); }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 6px; display: none; max-width: 90vw; }
+details summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Симулятор СМВУ</h1>
+  <span class="badge violet" id="contour"></span>
+  <span class="spacer"></span>
+  <span class="small muted" id="sink"></span>
+  <span class="badge" id="sent"></span>
+</header>
+<main>
+  <aside class="panel">
+    <h2>Объекты</h2>
+    <ul class="tree" id="tree"></ul>
+  </aside>
+
+  <section>
+    <div class="panel">
+      <div class="toolbar">
+        <h2 style="margin:0" id="objTitle">Выберите объект</h2>
+        <span class="spacer"></span>
+        <span id="guard"></span>
+      </div>
+      <div class="toolbar" id="objActions" hidden>
+        <input id="filter" placeholder="Фильтр: название, тип, пикет" style="flex:1; min-width:180px">
+        <select id="cascadeMode" title="Все каналы объекта разом">
+          <option value="power">Обесточить всё</option>
+          <option value="fault">Всё неисправно</option>
+          <option value="unknown">Всё «не определено»</option>
+          <option value="silent">Всё без связи</option>
+        </select>
+        <button class="btn" id="cascade">Каскад</button>
+        <button class="btn" id="restore">Восстановить объект</button>
+      </div>
+      <div class="wrap">
+        <table>
+          <thead><tr><th>Канал</th><th>Пикет</th><th>Состояние</th><th>Показание</th><th>Режим</th><th>Последнее сообщение</th></tr></thead>
+          <tbody id="channels"><tr><td colspan="6" class="muted">Каналы появятся после выбора объекта слева.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <aside class="right">
+    <div class="panel">
+      <h2>Сценарий</h2>
+      <div class="field"><label for="scenario">Что происходит</label><select id="scenario"></select></div>
+      <div class="small muted" id="scenarioHint" style="margin-bottom:8px"></div>
+      <div class="field" id="picketField"><label for="picket">Пикет (пусто — случайный)</label><input id="picket" inputmode="decimal"></div>
+      <div class="field"><label for="speed">Ускорение</label>
+        <select id="speed"><option value="1">×1 — реальное время</option><option value="5">×5</option><option value="10" selected>×10</option><option value="30">×30</option></select>
+      </div>
+      <button class="btn primary" id="start" disabled>Запустить на выбранном объекте</button>
+      <div id="runs"></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar" style="margin-bottom:6px"><h2 style="margin:0">Отправлено в поток</h2><span class="spacer"></span>
+        <label class="small muted"><input type="checkbox" id="hidePolls" checked style="padding:0"> без опроса показаний</label></div>
+      <div class="log" id="log"></div>
+    </div>
+  </aside>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+let meta = null, selected = null, state = null;
+const MAIN_MODES = ['normal', 'alarm', 'fault', 'power'];
+const isPoll = (m) => /^-?\d+([.,]\d+)?$/.test(m.raw ?? '') && !m.alarm;
+const fmt = (ts) => ts ? new Date(ts).toLocaleTimeString('ru-RU') : '';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function toast(text) {
+  const el = $('toast'); el.textContent = text; el.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => (el.style.display = 'none'), 3500);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || res.statusText);
+  return data;
+}
+
+async function act(body) {
+  try { await api('/api/action', body); await refresh(); } catch (e) { toast(e.message); }
+}
+
+function renderTree() {
+  const build = (nodes) => nodes.map((n) => `<li><button data-id="${n.id}" class="${n.id === selected ? 'active' : ''}">
+      <span>${esc(n.name)}</span><span class="muted small">${n.channels}</span></button>
+      ${n.children.length ? `<ul>${build(n.children)}</ul>` : ''}</li>`).join('');
+  $('tree').innerHTML = build(meta.tree);
+}
+
+function findNode(nodes, id) {
+  for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children, id); if (f) return f; }
+  return null;
+}
+
+function renderChannels() {
+  const q = $('filter').value.trim().toLowerCase();
+  const rows = state.channels.filter((c) => !q || `${c.name} ${c.type} ${c.picket ?? ''} ${c.object}`.toLowerCase().includes(q));
+  $('channels').innerHTML = rows.map((c) => {
+    const value = c.numeric
+      ? `<input class="num" data-value="${c.id}" value="${c.value ?? ''}" title="Enter — установить; порог ${c.threshold}">
+         <button class="btn small" data-ramp="${c.id}" title="Плавно довести до значения за 2 минуты">↗</button>
+         ${c.ramp !== null ? `<div class="small muted">→ ${c.ramp}</div>` : ''}`
+      : c.operation
+        ? `<button class="btn" data-op="${c.id}" data-on="${c.op ? 0 : 1}">${c.op ? 'Включён' : 'Выключен'}</button>`
+        : '';
+    const modeBtn = (m) => `<button data-mode="${m}" data-ch="${c.id}" class="${c.mode === m ? 'on' : ''}">${esc(meta.modes[m])}</button>`;
+    const modes = c.modes.filter((m) => MAIN_MODES.includes(m)).map(modeBtn).join('');
+    const extra = c.modes.filter((m) => !MAIN_MODES.includes(m)).map(modeBtn).join('');
+    return `<tr>
+      <td><div>${esc(c.name)}</div><div class="small muted">${esc(c.type)} · ${c.id}${c.guarded ? ' · охранный' : ''}</div></td>
+      <td>${c.picket ?? ''}</td>
+      <td><span class="chip m-${c.mode}">${esc(c.mode_title)}</span></td>
+      <td style="white-space:nowrap">${value}</td>
+      <td><div class="modes">${modes}
+        <details style="display:inline"><summary class="small muted">ещё</summary>
+          <div class="modes" style="margin-top:4px">${extra}
+            <button data-sentinel="${c.id}">Код −100</button>
+            <button data-flap="${c.id}">Дребезг</button>
+            <button data-raw="${c.id}">Своё значение…</button>
+          </div></details></div></td>
+      <td class="small"><span class="${c.last_alarm ? 'm-alarm chip' : ''}" style="${c.last_alarm ? 'min-width:0' : ''}">${esc(c.last_raw)}</span>
+        <div class="muted">${fmt(c.last_sent)}</div></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted">Нет каналов</td></tr>';
+}
+
+function renderState() {
+  const sink = state.sink;
+  $('sink').textContent = sink.kind === 'kafka'
+    ? `Kafka ${sink.target} · доставлено ${sink.delivered}${sink.errors ? ` · ошибок ${sink.errors}` : ''}${sink.last_error ? ` · ${sink.last_error}` : ''}`
+    : `${sink.kind} ${sink.target}`;
+  $('sent').textContent = `отправлено ${state.sent}`;
+  $('sent').className = 'badge ' + (sink.errors || sink.last_error ? 'red' : 'green');
+  if (selected) {
+    renderChannels();
+    $('guard').innerHTML = state.guard.map((g) =>
+      `<button class="btn" data-guard="${g.object}" data-on="${g.on ? 0 : 1}" title="${esc(g.name)}">${g.on ? '🔒 На охране — снять' : '🔓 Снято — поставить на охрану'}</button>`).join(' ');
+  }
+  $('runs').innerHTML = state.runs.map((r) => `<div class="run">
+      <div style="display:flex;gap:6px;align-items:center"><b>${esc(r.title)}</b><span class="muted small">#${r.id} · ${esc(r.object)} · ×${r.speed}</span>
+      <span class="spacer"></span>${r.status === 'running' ? `<button class="btn danger small" data-stop="${r.id}">Стоп</button>` : `<span class="badge">${r.status === 'done' ? 'готово' : 'остановлен'}</span>`}</div>
+      <div class="bar"><div style="width:${(100 * r.done) / Math.max(r.total, 1)}%"></div></div>
+      ${r.log.map((l) => `<div class="small">${esc(l)}</div>`).join('')}
+      ${r.next ? `<div class="small muted">далее: ${esc(r.next)}</div>` : ''}</div>`).join('');
+  $('log').innerHTML = state.log.filter((m) => !$('hidePolls').checked || m.error || !isPoll(m)).map((m) => m.error
+    ? `<div class="alarm">${fmt(m.ts)} ошибка: ${esc(m.error)}</div>`
+    : `<div class="${m.alarm ? 'alarm' : ''}" title="${esc(m.name)} · ${m.channel}">${fmt(m.ts)} ${esc(m.name)} — ${esc(m.raw)}</div>`).join('');
+}
+
+async function refresh() {
+  try {
+    state = await api('/api/state' + (selected ? `?object=${selected}` : ''));
+    renderState();
+  } catch (e) { $('sink').textContent = 'симулятор недоступен'; }
+}
+
+function select(id) {
+  selected = id;
+  const node = findNode(meta.tree, id);
+  $('objTitle').textContent = node ? node.name : '';
+  $('objActions').hidden = false;
+  $('start').disabled = false;
+  $('filter').value = '';
+  renderTree();
+  refresh();
+}
+
+function scenarioHint() {
+  const s = meta.scenarios.find((x) => x.code === $('scenario').value);
+  $('scenarioHint').textContent = s ? s.description : '';
+  $('picketField').hidden = !(s && s.uses_picket);
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.id) return select(Number(d.id));
+  if (d.mode) return act({ op: 'mode', channel: Number(d.ch), mode: d.mode });
+  if (d.op) return act({ op: 'op', channel: Number(d.op), on: d.on === '1' });
+  if (d.guard) return act({ op: 'guard', object: Number(d.guard), on: d.on === '1' });
+  if (d.sentinel) return act({ op: 'sentinel', channel: Number(d.sentinel) });
+  if (d.flap) return act({ op: 'flap', channel: Number(d.flap) });
+  if (d.raw) {
+    const raw = prompt('Сырое значение, как его пишет СМВУ (например «Обнаружен дым» или «255»)');
+    if (raw !== null && raw !== '') act({ op: 'raw', channel: Number(d.raw), raw, alarm: confirm('Пометить как тревожное?') });
+    return;
+  }
+  if (d.ramp) {
+    const input = document.querySelector(`input[data-value="${d.ramp}"]`);
+    return act({ op: 'ramp', channel: Number(d.ramp), target: Number(input.value.replace(',', '.')), seconds: 120 });
+  }
+  if (d.stop) { try { await api(`/api/scenario/${d.stop}/stop`, {}); refresh(); } catch (err) { toast(err.message); } return; }
+  if (t.id === 'cascade') {
+    if (confirm(`Все каналы объекта «${$('objTitle').textContent}» разом: ${$('cascadeMode').selectedOptions[0].text.toLowerCase()}?`))
+      act({ op: 'cascade', object: selected, mode: $('cascadeMode').value });
+    return;
+  }
+  if (t.id === 'restore') return act({ op: 'restore', object: selected });
+  if (t.id === 'start') {
+    try {
+      const run = await api('/api/scenario', { scenario: $('scenario').value, object: selected, picket: $('picket').value.replace(',', '.') || null, speed: Number($('speed').value) });
+      toast(`Запуск #${run.id}: ${run.steps.length} шагов`);
+      refresh();
+    } catch (err) { toast(err.message); }
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.dataset.value) act({ op: 'value', channel: Number(e.target.dataset.value), value: Number(e.target.value.replace(',', '.')) });
+});
+$('filter').addEventListener('input', () => state && renderChannels());
+$('hidePolls').addEventListener('change', () => state && renderState());
+$('scenario').addEventListener('change', scenarioHint);
+
+(async () => {
+  meta = await api('/api/meta');
+  $('contour').textContent = meta.contour;
+  $('scenario').innerHTML = meta.scenarios.map((s) => `<option value="${s.code}">${esc(s.title)}</option>`).join('');
+  scenarioHint();
+  renderTree();
+  const first = meta.tree[0]?.children?.[0] ?? meta.tree[0];
+  if (first) select(first.id);
+  // пока пользователь редактирует показание или открыл меню канала, таблицу не перерисовываем
+  setInterval(() => {
+    if (!document.activeElement?.dataset?.value && !document.querySelector('#channels details[open]')) refresh();
+  }, 1500);
+})();
+</script>
+</body>
+</html>

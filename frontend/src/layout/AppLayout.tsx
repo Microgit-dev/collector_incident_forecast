@@ -30,7 +30,9 @@ import {
   IconLogout,
   IconMap2,
   IconMoon,
+  IconRoute,
   IconSettings,
+  IconShieldCheck,
   IconSun,
   IconTimeline,
   IconUser,
@@ -94,11 +96,22 @@ export function AppLayout() {
   })
 
   const isStaff = can('normalization.change_sensorprofile') || user?.is_superuser
+  const training = user?.contour.code === 'training'
+  // Сценарии на полигоне запускают инструкторы: руководитель, аналитик, администратор
+  const instructor = Boolean(user?.is_superuser || user?.roles.some((r) => ['head', 'analyst', 'admin'].includes(r)))
 
   return (
-    <AppShell header={{ height: 56 }} navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
+    <AppShell header={{ height: training ? 88 : 56 }} navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+        {training && (
+          <Group h={32} px="md" gap="xs" justify="center" wrap="nowrap" bg="violet.7" c="white">
+            <IconRoute size={16} />
+            <Text size="sm" fw={600} truncate>
+              Учебный контур — полигон и учебные данные, на работу района не влияет
+            </Text>
+          </Group>
+        )}
+        <Group h={56} px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Меню" />
             <Title order={4} style={{ whiteSpace: 'nowrap' }}>
@@ -107,6 +120,11 @@ export function AppLayout() {
             <Badge variant="light" visibleFrom="md">
               {user?.scope_node_name ?? 'Все объекты'}
             </Badge>
+            {training && (
+              <Badge color="violet" variant="filled">
+                Учебный
+              </Badge>
+            )}
           </Group>
           <Group gap="xs" wrap="nowrap">
             <Indicator label={unread.data?.count} size={16} disabled={!unread.data?.count} color="red">
@@ -158,6 +176,33 @@ export function AppLayout() {
               onClick={close}
             />
           ))}
+        </Stack>
+        <Stack gap={2} mb={isStaff ? 2 : 0}>
+          {training ? (
+            <>
+              {instructor && (
+                <NavLink
+                  href={user?.contour.urls.simulator}
+                  target="_blank"
+                  label="Симулятор датчиков"
+                  leftSection={<IconRoute size={18} stroke={1.6} />}
+                />
+              )}
+              <NavLink
+                href={user?.contour.urls.combat}
+                label="Перейти в рабочий контур"
+                leftSection={<IconShieldCheck size={18} stroke={1.6} />}
+              />
+            </>
+          ) : (
+            <NavLink
+              href={user?.contour.urls.training}
+              target="_blank"
+              label="Учебный контур"
+              description="Полигон для обучения"
+              leftSection={<IconRoute size={18} stroke={1.6} />}
+            />
+          )}
         </Stack>
         {isStaff && (
           <Stack gap={2}>

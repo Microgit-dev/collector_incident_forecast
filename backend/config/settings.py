@@ -144,6 +144,15 @@ STORAGES = {
 DATA_DIR = Path(env("DATA_DIR", default=str(BASE_DIR.parent / "data")))
 ARTIFACTS_DIR = Path(env("ARTIFACTS_DIR", default=str(BASE_DIR.parent / "artifacts")))
 
+# Контур: combat — работа на данных заказчика; training — учебный полигон со своей базой, темой Kafka
+# и help desk. Один и тот же образ; контур меняет только окружение, поэтому учебный не может задеть боевой.
+CONTOUR = env("CONTOUR", default="combat")
+CONTOUR_URLS = {
+    "combat": env("COMBAT_URL", default="https://localhost"),
+    "training": env("TRAINING_URL", default="https://localhost:8443"),
+    "simulator": env("SIMULATOR_URL", default="http://localhost:8095"),
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",

@@ -19,6 +19,7 @@ class MeSerializer(serializers.ModelSerializer):
     scope_node_name = serializers.CharField(source="scope_node.name", default=None)
     team = TeamRefSerializer(allow_null=True)
     command_chain = serializers.SerializerMethodField()
+    contour = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -36,7 +37,14 @@ class MeSerializer(serializers.ModelSerializer):
             "roles",
             "permissions",
             "is_superuser",
+            "contour",
         )
+
+    def get_contour(self, obj: User) -> dict:
+        """Контур, в котором работает пользователь, и адреса соседних — для перехода и плашки «Учебный»."""
+        from django.conf import settings
+
+        return {"code": settings.CONTOUR, "urls": settings.CONTOUR_URLS}
 
     def get_permissions(self, obj: User) -> list[str]:
         # Фронтенд прячет недоступные действия по этому списку; реальная проверка — на бэкенде

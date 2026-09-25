@@ -92,6 +92,14 @@ docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59
 docker compose --profile demo up -d replay
 ```
 
+Учебный контур и симулятор датчиков: отдельная база и тема Kafka, полигон из трёх объектов. Интерфейс
+учебного контура — https://localhost:8443, симулятор (консоль и веб) — http://localhost:8095.
+Подробности в [simulator/README.md](simulator/README.md).
+
+```bash
+docker compose --profile training up -d --build
+```
+
 ## Пакет сдачи
 
 Сопроводительная документация (DOCX/PDF), презентация (PPTX/PDF), демо-сценарии и нагрузочная

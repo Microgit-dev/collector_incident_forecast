@@ -5,6 +5,22 @@
 	}
 }
 
+# Общее для обоих контуров: SPA и заголовки безопасности
+(spa) {
+	# SPA: неизвестные пути отдаются index.html, маршрутизирует React Router
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
 # Локальный стенд: TLS 1.2+ с сертификатом внутреннего CA Caddy (ТЗ §11 — шифрование при передаче).
 # Для боевого домена достаточно заменить адрес сайта — сертификат выпустится автоматически.
 localhost, 127.0.0.1 {
@@ -25,18 +41,25 @@ localhost, 127.0.0.1 {
 		reverse_proxy mock-helpdesk:8080
 	}
 
-	# SPA: неизвестные пути отдаются index.html, маршрутизирует React Router
-	handle {
-		root * /srv
-		try_files {path} /index.html
-		file_server
+	import spa
+}
+
+# Учебный контур (профиль training): тот же интерфейс, свой бэкенд и help desk.
+# Другой порт — другой origin, поэтому вход и токены учебного и боевого контуров не смешиваются.
+localhost:8443, 127.0.0.1:8443 {
+	tls internal
+	encode zstd gzip
+
+	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
+	handle @backend {
+		reverse_proxy backend-training:8000
 	}
 
-	header {
-		Strict-Transport-Security "max-age=31536000"
-		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
+	handle_path /helpdesk* {
+		reverse_proxy mock-helpdesk-training:8080
 	}
+
+	import spa
 }
 
 :2019 {
