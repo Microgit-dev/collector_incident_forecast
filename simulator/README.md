@@ -8,12 +8,16 @@
 ## Контуры
 
 ```
- полевой контур (сеть field)          │  платформа
-                                      │
- simulator ──► Kafka: smvu.training-events ──► consumer-training ─► БД collector_training
- веб :8095                            │         backend-training, worker-training ─► https://localhost:8443
-                                      │
- (в эксплуатации — шлюз СМВУ)          │  Kafka: smvu.raw-events ──► consumer ─► БД collector ─► https://localhost
+Полевой контур (сеть field)
+  simulator, веб :8095  ──►  Kafka: smvu.training-events
+
+Учебный контур
+  Kafka  ──►  consumer-training  ──►  БД collector_training
+  backend-training, worker-training  ──►  https://localhost:8443
+
+Рабочий контур (в эксплуатации поток даёт шлюз СМВУ)
+  Kafka: smvu.raw-events  ──►  consumer  ──►  БД collector
+  backend, worker  ──►  https://localhost
 ```
 
 - **Полевой контур.** Симулятор подключён к отдельной сети `field`, где из платформы есть только брокер Kafka.
