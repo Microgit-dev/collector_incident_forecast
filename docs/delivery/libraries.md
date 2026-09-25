@@ -34,10 +34,11 @@
 | httpx | 0.28.1 | BSD License | HTTP-клиент интеграций |
 | openpyxl | 3.1.5 | MIT License | XLSX: импорт журналов и отчёты |
 | fpdf2 | 2.8.8 | LGPL-3.0-only | PDF-отчёты |
+| djangorestframework-xml | 2.0.0 | BSD License |  |
 | ruff | 0.16.8 | MIT | линтер и форматирование (разработка) |
 | pytest | 9.1.1 | MIT | тесты (разработка) |
 | pytest-django | 4.14.0 | BSD License | тесты Django (разработка) |
-| factory-boy | 3.3.3 | MIT License |  |
+| factory-boy | 3.3.3 | MIT License | тестовые данные (разработка) |
 | django-auth-ldap | 5.3.0 | BSD-2-Clause | вход через LDAP / AD |
 
 ## Frontend (TypeScript)
