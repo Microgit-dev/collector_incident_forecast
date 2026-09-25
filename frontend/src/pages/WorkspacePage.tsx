@@ -17,7 +17,7 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconMap2, IconX } from '@tabler/icons-react'
+import { IconMap2, IconTrophy, IconX } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useState } from 'react'
@@ -25,7 +25,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { INCIDENT_TYPE, WO_STATUS } from '../api/labels'
-import type { Live, Workspace, WorkspaceKpi, WorkspaceOrder, WorkOrderStatus } from '../api/types'
+import type { Live, MyMetrics, Workspace, WorkspaceKpi, WorkspaceOrder, WorkOrderStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
 import { IncidentLine, RisksPanel } from '../components/LivePanels'
@@ -134,6 +134,69 @@ function DispatcherPanel({ live }: { live?: Live }) {
         <Empty>Все карточки приняты — очередь пуста.</Empty>
       )}
     </Panel>
+  )
+}
+
+function MyMetricsCard() {
+  const q = useQuery({ queryKey: ['staff-me'], queryFn: () => api<MyMetrics>('/analytics/staff/me/'), staleTime: 60_000 })
+  const me = q.data?.me
+  if (!q.data || !me) return null
+  const c = q.data.colleagues
+  const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)} %`)
+  const item = (label: string, value: string, peer: string | null, hint?: string) => (
+    <Tooltip label={hint ?? label} disabled={!hint}>
+      <Stack gap={0}>
+        <Text size="xs" c="dimmed">
+          {label}
+        </Text>
+        <Text fw={700} fz="lg">
+          {value}
+        </Text>
+        {peer !== null && (
+          <Text size="xs" c="dimmed">
+            коллеги: {peer}
+          </Text>
+        )}
+      </Stack>
+    </Tooltip>
+  )
+  return (
+    <Card withBorder radius="md">
+      <Group justify="space-between" mb="xs">
+        <Group gap="xs">
+          <IconTrophy size={18} color={me.rank === 1 ? 'var(--mantine-color-yellow-6)' : 'var(--mantine-color-dimmed)'} />
+          <Text fw={600}>Мои показатели</Text>
+          <Text size="xs" c="dimmed">
+            {dayjs(q.data.period.from).format('DD.MM')} — {dayjs(q.data.period.to).subtract(1, 'day').format('DD.MM.YYYY')}
+          </Text>
+        </Group>
+        <Anchor component={Link} to="/analytics" size="xs">
+          Рейтинг смены
+        </Anchor>
+      </Group>
+      <SimpleGrid cols={{ base: 2, sm: 5 }}>
+        {item('Место', me.rank ? `${me.rank} из ${q.data.rank_of}` : '—', null, 'Рейтинг «кто первый» среди диспетчеров зоны')}
+        {item('Первым откликнулся', String(me.responded), c.responded === null ? null : String(c.responded))}
+        {item('Доля карточек зоны', pct(me.responded_share), c.responded_share === null ? null : pct(c.responded_share))}
+        {item(
+          'До отклика, медиана',
+          me.response_median === null ? '—' : `${me.response_median} мин`,
+          c.response_median === null ? null : `${c.response_median} мин`,
+        )}
+        {item(
+          'Качество решений',
+          pct(me.quality),
+          c.quality === null ? null : pct(c.quality),
+          'Доля физических угроз, закрытых как ложные, после которых угроза не повторилась в течение 6 часов',
+        )}
+      </SimpleGrid>
+      {me.races > 0 && (
+        <Text size="xs" c="dimmed" mt="xs">
+          Гонки за карточку: выиграно {me.races_won} из {me.races}
+          {me.takeovers_lost ? ` · перехвачено руководителем ${me.takeovers_lost}` : ''}
+        </Text>
+      )}
+    </Card>
   )
 }
 
@@ -380,6 +443,7 @@ export function WorkspacePage() {
         </Grid.Col>
       </Grid>
 
+      {dispatcher && <MyMetricsCard />}
       {data.role === 'head' && <ApprovalsPanel data={data} />}
       {withLive && live.data && <RisksPanel data={live.data} />}
     </Stack>

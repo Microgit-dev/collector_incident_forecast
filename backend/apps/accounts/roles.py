@@ -57,6 +57,8 @@ ROLES: dict[Role, RoleSpec] = {
             "incidents.decide_incident",
             "incidents.escalate_incident",
             "incidents.change_incident",
+            # перехват карточки у диспетчера — только руководитель
+            "incidents.takeover_incident",
             "workorders.add_workorder",
             "workorders.change_workorder",
             "workorders.approve_workorder",

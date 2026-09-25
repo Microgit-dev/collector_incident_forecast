@@ -254,6 +254,37 @@ class EfficiencyView(APIView):
         return Response(efficiency(request.user, since, until, _flag(request, "include_emulated", True)))
 
 
+class StaffView(APIView):
+    """Сотрудники и команды за период: отклик первым, гонки, качество решений, нагрузка, обучение."""
+
+    permission_classes = [require_perm("analytics.view_reportexport")]
+
+    def get(self, request):
+        from ..staff import staff_metrics
+
+        try:
+            since, until = _period(request)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(staff_metrics(request.user, since, until, _flag(request, "include_emulated", True)))
+
+
+class MyMetricsView(APIView):
+    """Мои показатели: своя строка, медиана коллег зоны, место в рейтинге «кто первый»."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from ..staff import my_metrics, my_period
+
+        try:
+            own = None if request.query_params.get("from") else my_period(request.user)
+            since, until = own or _period(request)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(my_metrics(request.user, since, until))
+
+
 class QualityView(APIView):
     """Качество прогнозов за период (ТЗ §9)."""
 

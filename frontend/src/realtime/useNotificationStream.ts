@@ -28,6 +28,13 @@ export function useNotificationStream(enabled: boolean) {
       }
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data) as { type: string; data: AppNotification }
+        if (message.type === 'incident') {
+          // карточку взяли или перехватили — очередь, схема и открытая карточка обновляются сразу
+          for (const key of ['incidents', 'live', 'workspace', 'scheme', 'training-current']) {
+            void queryClient.invalidateQueries({ queryKey: [key] })
+          }
+          return
+        }
         if (message.type !== 'notification') return
         const n = message.data
         notifications.show({

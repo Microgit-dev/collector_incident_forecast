@@ -56,3 +56,15 @@ def notify(
         except Exception:  # недоступность Redis не должна ронять бизнес-операцию
             logger.exception("websocket push failed")
     return len(items)
+
+
+def broadcast(users: Iterable, event: dict) -> None:
+    """Событие без записи в уведомления: интерфейсу — обновить очередь и карточку (например, её взяли)."""
+    layer = get_channel_layer()
+    if layer is None:
+        return
+    for user in users:
+        try:
+            async_to_sync(layer.group_send)(user_group(user.pk), {"type": "incident.update", "event": event})
+        except Exception:  # недоступность Redis не должна ронять бизнес-операцию
+            logger.exception("websocket broadcast failed")

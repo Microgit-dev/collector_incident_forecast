@@ -8,12 +8,14 @@ from .views import (
     HistoryCoverageView,
     HistoryNodeView,
     LiveView,
+    MyMetricsView,
     OverviewView,
     QualityView,
     RangesView,
     ReplayView,
     ReportViewSet,
     SchemeView,
+    StaffView,
     WorkspaceView,
 )
 
@@ -24,6 +26,8 @@ urlpatterns = [
     path("analytics/scheme/", SchemeView.as_view(), name="analytics-scheme"),
     path("analytics/efficiency/", EfficiencyView.as_view(), name="analytics-efficiency"),
     path("analytics/quality/", QualityView.as_view(), name="analytics-quality"),
+    path("analytics/staff/", StaffView.as_view(), name="analytics-staff"),
+    path("analytics/staff/me/", MyMetricsView.as_view(), name="analytics-staff-me"),
     path("analytics/ranges/", RangesView.as_view(), name="analytics-ranges"),
     path("analytics/flood/", FloodView.as_view(), name="analytics-flood"),
     path("analytics/replay/", ReplayView.as_view(), name="analytics-replay"),

@@ -24,6 +24,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useState } from 'react'
 
+import { StaffTab } from '../components/StaffTab'
 import { api, download, type Page } from '../api/client'
 import { CAUSE, RISK, TASK } from '../api/labels'
 import type { DecisionCause, RiskLevel } from '../api/types'
@@ -618,11 +619,15 @@ export function AnalyticsPage() {
       <Tabs value={tab} onChange={setTab}>
         <Tabs.List>
           <Tabs.Tab value="staff">Эффективность диспетчеров</Tabs.Tab>
+          <Tabs.Tab value="people">Сотрудники и команды</Tabs.Tab>
           <Tabs.Tab value="forecasts">Качество прогнозов</Tabs.Tab>
           <Tabs.Tab value="reports">Отчёты</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="staff" pt="md">
           {efficiency.isLoading || !efficiency.data ? <Loader /> : <DispatchersTab data={efficiency.data} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="people" pt="md">
+          <StaffTab query={query} emulated={emulated} />
         </Tabs.Panel>
         <Tabs.Panel value="forecasts" pt="md">
           {quality.isLoading || !quality.data ? <Loader /> : <ForecastsTab data={quality.data} backtest={backtest} />}

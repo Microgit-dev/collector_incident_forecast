@@ -82,6 +82,14 @@ class Shift:
         self.reasons = {r.code: r for r in DecisionReason.objects.all()}
         self.timeouts = dict(EscalationPolicy.objects.values_list("severity", "ack_timeout_minutes"))
 
+    def on_duty(self, node: Node, at: datetime) -> list[User]:
+        """Кто видит карточку: диспетчеры объекта и дежурный ОДС смены (08–20 — первый, 20–08 — второй)."""
+        local = [u for u in self.units if node.path.startswith(u.scope_node.path)]
+        if not self.ods:
+            return local
+        day_shift = 8 <= at.astimezone(MSK).hour < 20
+        return [*local, self.ods[0] if day_shift or len(self.ods) == 1 else self.ods[1]]
+
     def dispatcher(self, node: Node, at: datetime) -> User | None:
         local = [u for u in self.units if node.path.startswith(u.scope_node.path)]
         if local and self.rng.random() < 0.75:
@@ -97,18 +105,32 @@ class Shift:
     ):
         """Действия диспетчера по карточке: просмотр, взять, решение; эскалация, если не успел."""
         rng = self.rng
-        user = self.dispatcher(incident.node, incident.opened_at)
-        if user is None:
+        crew = self.on_duty(incident.node, incident.opened_at)
+        if not crew:
             return None
         night = not (8 <= incident.opened_at.astimezone(MSK).hour < 20)
-        pace = _speed(user) * (1.4 if night else 1.0)
-        view = incident.opened_at + timedelta(minutes=_lognormal(rng, VIEW_MEDIAN[incident.severity] * pace))
-        take = view + timedelta(minutes=_lognormal(rng, 1.5, 0.6))
+        # Гонка смены: каждый дежурный замечает карточку в своём темпе, достаётся она откликнувшемуся первым
+        race = []
+        for member in crew:
+            pace = _speed(member) * (1.4 if night else 1.0)
+            seen = incident.opened_at + timedelta(
+                minutes=_lognormal(rng, VIEW_MEDIAN[incident.severity] * pace)
+            )
+            race.append((seen + timedelta(minutes=_lognormal(rng, 1.5, 0.6)), seen, member, pace))
+        race.sort(key=lambda r: r[0])
+        take, view, user, pace = race[0]
+        first_seen = min(race, key=lambda r: r[1])
         decide = take + timedelta(
             minutes=_lognormal(rng, DECIDE_MEDIAN[incident.contour or "technical"] * pace)
         )
+        incident.first_seen_by, incident.first_seen_at = first_seen[2], first_seen[1]
+        incident.responder, incident.responded_at = user, take
+        # опоздавшие открывают карточку уже занятой — это видно в «кто первым заметил»
+        for _, seen, member, _ in race[1:]:
+            if seen < decide:
+                views.append((member, seen))
         timeout = self.timeouts.get(incident.severity)
-        if timeout and (view - incident.opened_at) > timedelta(minutes=timeout):
+        if timeout and (take - incident.opened_at) > timedelta(minutes=timeout):
             incident.escalation_level = 1
             events.append(
                 (
@@ -119,7 +141,14 @@ class Shift:
                 )
             )
         views.append((user, view))
-        events.append((IncidentEvent.Kind.ASSIGNED, take, user, f"Взят в работу: {user.get_full_name()}"))
+        events.append(
+            (
+                IncidentEvent.Kind.ASSIGNED,
+                take,
+                user,
+                f"Взят в работу: первым откликнулся {user.get_full_name()}",
+            )
+        )
 
         if incident.is_forecast:
             cause, outcome, code = is_forecast_ok
@@ -306,7 +335,18 @@ def _save_day(shift: Shift, created: list, stats: dict) -> None:
         events += [(incident, *e) for e in ev]
         views += [(incident, *v) for v in vw]
     Incident.objects.bulk_update(
-        incidents, ["status", "assigned_to", "acknowledged_at", "resolved_at", "escalation_level"]
+        incidents,
+        [
+            "status",
+            "assigned_to",
+            "acknowledged_at",
+            "resolved_at",
+            "escalation_level",
+            "first_seen_by",
+            "first_seen_at",
+            "responder",
+            "responded_at",
+        ],
     )
     Alert.objects.bulk_create(alerts)
     made = Decision.objects.bulk_create([d for d, _ in decisions])

@@ -150,6 +150,15 @@ export function IncidentDetailPage() {
     onError: (error) => notifications.show({ color: 'red', message: error.message }),
   })
 
+  const takeover = useMutation({
+    mutationFn: () => api<IncidentDetail>(`/incidents/items/${id}/take/`, { method: 'POST', body: { force: true } }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['incidents', Number(id)], data)
+      void queryClient.invalidateQueries({ queryKey: ['incidents'] })
+    },
+    onError: (error) => notifications.show({ color: 'red', message: error.message }),
+  })
+
   const draft = useMutation({
     mutationFn: () => api<{ number: string }>(`/workorders/items/from-incident/${id}/`, { method: 'POST', body: {} }),
     onSuccess: (order) => {
@@ -164,6 +173,9 @@ export function IncidentDetailPage() {
   const open = ['new', 'acknowledged', 'in_progress'].includes(incident.status)
   const mine = incident.assigned_to === user?.id
   const lockedByOther = incident.assigned_to !== null && !mine
+  // Правило смены: карточка у откликнувшегося первым; руководитель может действовать и перехватить
+  const canOverride = can('incidents.takeover_incident')
+  const blocked = lockedByOther && !canOverride
 
   return (
     <Stack>
@@ -192,8 +204,13 @@ export function IncidentDetailPage() {
         {open && (
           <Group gap="xs">
             {!mine && can('incidents.change_incident') && (
-              <Button data-tour="incident-take" leftSection={<IconHandGrab size={16} />} onClick={() => action.mutate('take')} disabled={lockedByOther} loading={action.isPending}>
+              <Button data-tour="incident-take" leftSection={<IconHandGrab size={16} />} onClick={() => action.mutate('take')} disabled={blocked} loading={action.isPending}>
                 Взять в работу
+              </Button>
+            )}
+            {lockedByOther && canOverride && (
+              <Button variant="default" color="grape" leftSection={<IconHandGrab size={16} />} onClick={() => takeover.mutate()} loading={takeover.isPending}>
+                Перехватить
               </Button>
             )}
             {mine && (
@@ -202,7 +219,7 @@ export function IncidentDetailPage() {
               </Button>
             )}
             {can('incidents.decide_incident') && (
-              <Button data-tour="decision" color="teal" leftSection={<IconChecklist size={16} />} onClick={decisionModal.open} disabled={lockedByOther}>
+              <Button data-tour="decision" color="teal" leftSection={<IconChecklist size={16} />} onClick={decisionModal.open} disabled={blocked}>
                 Решение
               </Button>
             )}
@@ -222,7 +239,11 @@ export function IncidentDetailPage() {
 
       {lockedByOther && (
         <Text c="orange" size="sm">
-          Карточка в работе у {incident.assigned_to_name}. Действия доступны только ему.
+          Карточку взял {incident.assigned_to_name}
+          {incident.responder === incident.assigned_to && incident.responded_at
+            ? ` — откликнулся первым в ${dayjs(incident.responded_at).format('HH:mm')}`
+            : ''}
+          . {canOverride ? 'Вы можете действовать по ней или перехватить.' : 'Действия доступны только ему.'}
         </Text>
       )}
 
@@ -231,13 +252,25 @@ export function IncidentDetailPage() {
           <Stack>
             <EpisodeCard incident={incident} />
             <HypothesesCard incident={incident} />
-            <ActionsCard incident={incident} canEdit={open && !lockedByOther && can('incidents.change_incident')} />
+            <ActionsCard incident={incident} canEdit={open && !blocked && can('incidents.change_incident')} />
             <Card withBorder radius="md">
               <Text fw={600} mb="xs">
                 Ответственность
               </Text>
               <Text size="sm">Уровень: {incident.responsible_node_name}</Text>
               <Text size="sm">В работе у: {incident.assigned_to_name || 'не назначен'}</Text>
+              {incident.first_seen_by_name && incident.first_seen_at && (
+                <Text size="sm">
+                  Первым заметил: {incident.first_seen_by_name} · через{' '}
+                  {Math.max(dayjs(incident.first_seen_at).diff(incident.opened_at, 'minute'), 0)} мин
+                </Text>
+              )}
+              {incident.responder_name && incident.responded_at && (
+                <Text size="sm">
+                  Первым откликнулся: {incident.responder_name} · через{' '}
+                  {Math.max(dayjs(incident.responded_at).diff(incident.opened_at, 'minute'), 0)} мин
+                </Text>
+              )}
               {incident.ack_deadline && incident.status === 'new' && (
                 <Text size="sm" c="red">
                   Реакция до {dayjs(incident.ack_deadline).format('DD.MM HH:mm')} — затем эскалация

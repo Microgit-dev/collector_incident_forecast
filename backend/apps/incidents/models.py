@@ -116,6 +116,26 @@ class Incident(TimeStampedModel):
         related_name="assigned_incidents",
     )
     escalation_level = models.PositiveSmallIntegerField("уровень эскалации", default=0)
+    # Кто первым заметил и кто первым откликнулся: карточка достаётся откликнувшемуся первым,
+    # отметки не меняются при освобождении или перехвате — по ним считаются метрики сотрудников
+    first_seen_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="первым заметил",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    first_seen_at = models.DateTimeField("заметил в", null=True, blank=True)
+    responder = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="первым откликнулся",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    responded_at = models.DateTimeField("откликнулся в", null=True, blank=True)
 
     # Эпизод: сколько сигналов и каналов склеено в карточку, первый и последний сигнал
     contour = models.CharField(
