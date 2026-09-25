@@ -1,13 +1,9 @@
-import dataclasses
-import time
 from datetime import datetime
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
-from apps.ingestion.adapters import REGISTRY
-from apps.ingestion.kafka import encode, make_producer
+from apps.ingestion.streaming import stream_events
 
 
 class Command(BaseCommand):
@@ -40,26 +36,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, path, adapter, speed, limit, historical, start=None, end=None, **options):
-        producer = make_producer()
-        topic = settings.KAFKA["TOPIC_RAW_EVENTS"]
-        prev_ts = None
-        sent = 0
-        for event in REGISTRY[adapter].iter_events(path=path, start=start, end=end):
-            if prev_ts is not None and speed > 0:
-                gap = (event.ts - prev_ts).total_seconds() / speed
-                if gap > 0:
-                    producer.poll(0)
-                    time.sleep(min(gap, 5.0))
-            prev_ts = event.ts
-            if not historical:
-                event = dataclasses.replace(event, ts=timezone.now())
-            # Ключ = канал: события одного канала попадают в одну партицию и сохраняют порядок
-            producer.produce(topic, key=str(event.channel_external_id), value=encode(event.to_message()))
-            sent += 1
-            if sent % 10_000 == 0:
-                producer.poll(0)
-                self.stdout.write(f"sent {sent} (source time {prev_ts:%Y-%m-%d %H:%M:%S})")
-            if limit and sent >= limit:
-                break
-        producer.flush()
-        self.stdout.write(self.style.SUCCESS(f"done: {sent} events → {topic}"))
+        sent = stream_events(
+            adapter,
+            path,
+            start=start,
+            end=end,
+            speed=speed,
+            limit=limit,
+            historical=historical,
+            echo=self.stdout.write,
+        )
+        self.stdout.write(self.style.SUCCESS(f"done: {sent} events → {settings.KAFKA['TOPIC_RAW_EVENTS']}"))

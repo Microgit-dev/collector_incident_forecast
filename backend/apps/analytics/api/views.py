@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from apps.core.permissions import require_perm
 
+from ..cache import cached
 from ..flood import flood_reduction
 from ..models import ReportExport
 from ..selectors import overview
@@ -30,13 +31,17 @@ class LiveView(APIView):
         from ..live import active_risks, stream
 
         minutes = min(max(int(request.query_params.get("minutes", 10)), 1), 24 * 60)
+        # поток — всегда свежий; риски и время данных пересчитываются не чаще раза в минуту
+        risks = cached(
+            "risks", request.user, (), lambda: {"risks": active_risks(request.user), "clock": data_clock()}
+        )
         return Response(
-            stream(request.user, minutes) | {"risks": active_risks(request.user), "data_clock": data_clock()}
+            stream(request.user, minutes) | {"risks": risks["risks"], "data_clock": risks["clock"]}
         )
 
 
 class SchemeView(APIView):
-    """Линейная схема коллекторов по пикетам (GeoJSON в схематических координатах)."""
+    """Линейная схема коллекторов по пикетам: GeoJSON в схематических координатах, ?geometry=wkt — WKT."""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -50,7 +55,21 @@ class SchemeView(APIView):
         except ValueError:
             return Response({"detail": "Неверные параметры"}, status=400)
         task = params.get("task") or None
-        return Response(scheme(request.user, complex_id=complex_id, task=task, bin_size=bin_size))
+        result = cached(
+            "scheme",
+            request.user,
+            (complex_id, task, bin_size),
+            lambda: scheme(request.user, complex_id=complex_id, task=task, bin_size=bin_size),
+        )
+        if params.get("geometry") == "wkt":
+            from ..scheme import to_wkt
+
+            # копия: объект из кеша не меняем
+            result = {
+                **result,
+                "features": [f | {"geometry": to_wkt(f["geometry"])} for f in result["features"]],
+            }
+        return Response(result)
 
 
 class FloodView(APIView):

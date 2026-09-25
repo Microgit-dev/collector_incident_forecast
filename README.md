@@ -92,6 +92,11 @@ docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59
 docker compose --profile demo up -d replay
 ```
 
+## Пакет сдачи
+
+Сопроводительная документация (DOCX/PDF), презентация (PPTX/PDF), демо-сценарии и нагрузочная
+проверка — в [docs/delivery/](docs/delivery/README.md).
+
 ## Архитектура
 
 Модульный монолит на Django + DRF, внутри каждого модуля — слои `models / services / selectors / domain / api`.

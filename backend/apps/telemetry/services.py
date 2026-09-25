@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -64,46 +65,55 @@ def store_readings(items: list[NormalizedReading]) -> list[StateChange]:
 
 
 def _apply_latest_states(items: list[NormalizedReading]) -> list[StateChange]:
-    latest: dict[tuple[int, str], NormalizedReading] = {}
+    """
+    Текущее состояние канала — по последнему событию, но смены состояния считаются по всей пачке
+    в порядке времени: кратковременная тревога, снятая в той же пачке, тоже становится сигналом.
+    """
+    per_key: dict[tuple[int, str], list[NormalizedReading]] = defaultdict(list)
     for item in items:
-        key = (item.channel_id, item.value.facet)
-        if key not in latest or item.ts >= latest[key].ts:
-            latest[key] = item
+        per_key[(item.channel_id, item.value.facet)].append(item)
 
-    channel_ids = {cid for cid, _ in latest}
+    channel_ids = {cid for cid, _ in per_key}
     existing = {
         (s.channel_id, s.facet): s
         for s in ChannelState.objects.select_for_update().filter(channel_id__in=channel_ids)
     }
     to_create, to_update, changes = [], [], []
-    for key, item in latest.items():
+    for key, seq in per_key.items():
+        seq.sort(key=lambda i: i.ts)
         current = existing.get(key)
-        new_state = item.value.state
+        if current is not None:
+            seq = [i for i in seq if i.ts >= current.last_seen_at]  # опоздавшие не откатывают состояние
+            if not seq:
+                continue
+        previous = State(current.state) if current is not None else None
+        changed_at = current.changed_at if current is not None else seq[0].ts
+        for item in seq:
+            if item.value.state != previous:
+                changes.append(
+                    StateChange(key[0], key[1], previous, item.value.state, item.ts, item.value.numeric)
+                )
+                changed_at = item.ts
+            previous = item.value.state
+        last = seq[-1]
         if current is None:
             to_create.append(
                 ChannelState(
                     channel_id=key[0],
                     facet=key[1],
-                    state=new_state,
-                    numeric=item.value.numeric,
-                    raw_value=item.raw_value[:255],
-                    changed_at=item.ts,
-                    last_seen_at=item.ts,
+                    state=last.value.state,
+                    numeric=last.value.numeric,
+                    raw_value=last.raw_value[:255],
+                    changed_at=changed_at,
+                    last_seen_at=last.ts,
                 )
             )
-            changes.append(StateChange(key[0], key[1], None, new_state, item.ts, item.value.numeric))
             continue
-        if item.ts < current.last_seen_at:
-            continue  # опоздавшее событие не откатывает более свежее состояние
-        if current.state != new_state:
-            changes.append(
-                StateChange(key[0], key[1], State(current.state), new_state, item.ts, item.value.numeric)
-            )
-            current.changed_at = item.ts
-        current.state = new_state
-        current.numeric = item.value.numeric
-        current.raw_value = item.raw_value[:255]
-        current.last_seen_at = item.ts
+        current.state = last.value.state
+        current.numeric = last.value.numeric
+        current.raw_value = last.raw_value[:255]
+        current.changed_at = changed_at
+        current.last_seen_at = last.ts
         to_update.append(current)
 
     ChannelState.objects.bulk_create(to_create, ignore_conflicts=True)
