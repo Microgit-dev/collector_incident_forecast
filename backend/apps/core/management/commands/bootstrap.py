@@ -63,6 +63,12 @@ PERIODIC = [
     ("Статусы заявок из help desk", "apps.workorders.tasks.sync_helpdesk", 60),
     ("Погода Open-Meteo: последние сутки и прогноз", "apps.integrations.tasks.sync_weather", 6 * 3600),
 ]
+# Учебный контур не обучает модели на полигоне и не ходит во внешние сервисы
+COMBAT_ONLY = {
+    "apps.forecasting.tasks.check_model_degradation",
+    "apps.forecasting.tasks.weekly_retrain",
+    "apps.integrations.tasks.sync_weather",
+}
 
 
 class Command(BaseCommand):
@@ -98,9 +104,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("bootstrap done"))
 
     def _schedules(self):
+        from django.conf import settings
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         for name, task, seconds in PERIODIC:
+            if settings.CONTOUR != "combat" and task in COMBAT_ONLY:
+                continue
             interval, _ = IntervalSchedule.objects.get_or_create(
                 every=seconds, period=IntervalSchedule.SECONDS
             )
@@ -109,7 +118,10 @@ class Command(BaseCommand):
             )
 
     def _reference(self):
-        """Справочники заказчика, если каталог данных смонтирован (идемпотентно)."""
+        """
+        Справочники заказчика, если каталог данных смонтирован (идемпотентно). Учебному контуру вместо
+        данных заказчика монтируется полигон в том же формате (simulator/polygon).
+        """
         from django.conf import settings
 
         from apps.assets.models import Equipment

@@ -1,5 +1,7 @@
 # Полный стенд одной командой:  docker compose up -d --build
 # Демо-поток СМВУ:              docker compose --profile demo up -d replay
+# Учебный контур и симулятор:   docker compose --profile training up -d --build
+#                               (https://localhost:8443 · симулятор http://localhost:8095)
 # Интерфейс: https://localhost  · API: /api/docs/ · Админка: /admin/ · Grafana: /grafana/
 
 # Образ собирает только сервис migrate; остальные backend-сервисы переиспользуют его
@@ -19,6 +21,32 @@ x-backend: &backend
   restart: unless-stopped
   depends_on:
     migrate:
+      condition: service_completed_successfully
+
+# Учебный контур: тот же образ, но своя база, тема Kafka, Redis-индекс и help desk; вместо справочников
+# заказчика смонтирован полигон. Пересечься с боевым контуром ему негде.
+x-training: &training
+  image: collector-forecast/backend:local
+  pull_policy: never
+  profiles: ["training"]
+  env_file: .env
+  environment: &training-env
+    CONTOUR: training
+    DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}_training
+    REDIS_URL: redis://redis:6379/1
+    KAFKA_TOPIC_RAW_EVENTS: smvu.training-events
+    KAFKA_CONSUMER_GROUP: collector-training
+    HELPDESK_URL: http://mock-helpdesk-training:8080
+    CSRF_TRUSTED_ORIGINS: https://localhost:8443
+    DATA_DIR: /data
+    ARTIFACTS_DIR: /artifacts
+  volumes:
+    - ./simulator/polygon:/data:ro
+    - trainingartifacts:/artifacts
+    - trainingmedia:/app/media
+  restart: unless-stopped
+  depends_on:
+    migrate-training:
       condition: service_completed_successfully
 
 services:
@@ -53,6 +81,8 @@ services:
 
   kafka:
     image: apache/kafka:3.9.1
+    # Брокер — единственная точка, общая с полевым контуром (сеть field), как у настоящей СМВУ
+    networks: [default, field]
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -159,6 +189,66 @@ services:
       - helpdeskdata:/data
     restart: unless-stopped
 
+  # ---------- учебный контур (профиль training) ----------
+  migrate-training:
+    <<: *training
+    command: ["sh", "-c", "python manage.py ensure_database && python manage.py migrate --noinput && python manage.py bootstrap"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend-training:
+    <<: *training
+    command: ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker-training:
+    # Воркер и планировщик в одном процессе: нагрузка учебного контура невелика
+    <<: *training
+    command: ["celery", "-A", "config", "worker", "-B", "-l", "info", "--concurrency", "2"]
+
+  consumer-training:
+    <<: *training
+    command: ["python", "manage.py", "consume_events", "--metrics-port", "9102"]
+    depends_on:
+      migrate-training:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+
+  mock-helpdesk-training:
+    image: collector-forecast/mock-helpdesk:local
+    pull_policy: never
+    profiles: ["training"]
+    environment:
+      STAGE_MINUTES: ${HELPDESK_STAGE_MINUTES:-2,5,20,10}
+    volumes:
+      - helpdeskdata-training:/data
+    restart: unless-stopped
+
+  # Симулятор датчиков: полевой контур, видит только Kafka; веб-интерфейс — только с этой машины
+  simulator:
+    build: ./simulator
+    image: collector-forecast/simulator:local
+    profiles: ["training"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: ${SIMULATOR_TOPIC:-smvu.training-events}
+      SIM_CONTOUR: ${SIMULATOR_CONTOUR:-учебный контур}
+    ports:
+      - "127.0.0.1:${SIMULATOR_PORT:-8095}:8095"
+    networks: [field]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     # Caddy: TLS (самоподписанный локальный CA), SPA и reverse proxy к API/WS/Grafana
     build: ./frontend
@@ -166,6 +256,7 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
+      - "${TRAINING_PORT:-8443}:8443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
@@ -254,9 +345,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+networks:
+  # Полевой контур: симулятор и (в эксплуатации) шлюз СМВУ; из платформы сюда виден только брокер
+  field:
+
 volumes:
   pgdata:
   helpdeskdata:
+  helpdeskdata-training:
+  trainingartifacts:
+  trainingmedia:
   redisdata:
   kafkadata:
   promdata:

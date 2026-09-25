@@ -1,0 +1,20 @@
+[project]
+name = "fieldsim"
+version = "0.1.0"
+description = "Симулятор датчиков СМВУ: поток событий в формате заказчика для учебного и боевого контура"
+requires-python = ">=3.12"
+dependencies = ["confluent-kafka>=2.5"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
