@@ -272,7 +272,9 @@ function ObjectPanel({ id, detail, loading, onBack }: { id: number; detail?: Mon
                 detail.incidents.map((i) => (
                   <Anchor key={i.id} component={Link} to={`/incidents/${i.id}`} underline="never">
                     <Group gap={6} wrap="nowrap">
-                      <RiskBadge level={i.severity} />
+                      <Box style={{ flexShrink: 0 }}>
+                        <RiskBadge level={i.severity} />
+                      </Box>
                       <Box style={{ minWidth: 0 }}>
                         <Text size="sm" truncate>
                           {i.title}
