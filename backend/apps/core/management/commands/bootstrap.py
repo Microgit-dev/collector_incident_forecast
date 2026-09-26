@@ -99,6 +99,9 @@ class Command(BaseCommand):
         self.stdout.write(f"feedback rules created: {seed_rules()}")
         LearningSettings.load()
         self._schedules()
+        from apps.wiki.content import seed as seed_wiki
+
+        self.stdout.write(f"wiki: {seed_wiki()}")
         self._reference()
         self._demo()
         self._superuser()

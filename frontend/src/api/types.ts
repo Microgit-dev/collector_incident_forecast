@@ -856,3 +856,25 @@ export interface ExerciseOptions {
   candidates: ExerciseCandidate[]
 }
 
+// ---------- вики ----------
+
+export interface WikiBrief {
+  slug: string
+  title: string
+  summary: string
+  roles: string[]
+  is_published: boolean
+}
+
+export interface WikiIndex {
+  sections: { slug: string; title: string; pages: WikiBrief[] }[]
+  can_edit: boolean
+}
+
+export interface WikiArticle extends WikiBrief {
+  id: number
+  section: string
+  body: string
+  updated_at: string
+  updated_by: string | null
+}
