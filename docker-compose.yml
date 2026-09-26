@@ -265,6 +265,7 @@ services:
       TRAINING_ADDRESS: ${TRAINING_ADDRESS:-localhost:8443, 127.0.0.1:8443}
       TLS: ${TLS:-internal}
       MAP_TILES_ORIGIN: ${MAP_TILES_ORIGIN:-https://tiles.versatiles.org}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./infra/caddy/certs:/certs:ro

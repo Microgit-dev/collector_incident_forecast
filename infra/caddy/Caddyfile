@@ -1,6 +1,8 @@
 {
 	# Метрики Caddy для Prometheus
 	metrics
+	email noreply@gmail.com
+	acme_dns duckdns {env.DUCKDNS_TOKEN}
 }
 
 # Общее для обоих контуров: SPA и заголовки безопасности
@@ -29,11 +31,45 @@
 	}
 }
 
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle /grafana* {
+		reverse_proxy grafana:3000
+	}
+
+	handle_path /helpdesk* {
+		reverse_proxy mock-helpdesk:8080
+	}
+
+	import spa
+}
+
+{$TRAINING_ADDRESS} {
+	encode zstd gzip
+
+	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
+	handle @backend {
+		reverse_proxy backend-training:8000
+	}
+
+	handle_path /helpdesk* {
+		reverse_proxy mock-helpdesk-training:8080
+	}
+
+	import spa
+}
+
 # TLS 1.2+ (ТЗ §11 — шифрование при передаче). Адреса и сертификат задаются в .env:
 #   SITE_ADDRESS     — имя сервера, по умолчанию localhost (стенд);
 #   TLS              — internal (внутренний CA Caddy, по умолчанию) или пути к сертификату и ключу
 #                      заказчика внутри контейнера: /certs/fullchain.pem /certs/privkey.pem
-{$SITE_ADDRESS:localhost, 127.0.0.1} {
+https://localhost, https://127.0.0.1 {
 	tls {$TLS:internal}
 	encode zstd gzip
 
@@ -56,7 +92,7 @@
 
 # Учебный контур (профиль training): тот же интерфейс, свой бэкенд и help desk.
 # Другой порт — другой origin, поэтому вход и токены учебного и боевого контуров не смешиваются.
-{$TRAINING_ADDRESS:localhost:8443, 127.0.0.1:8443} {
+https://localhost:8443, https://127.0.0.1:8443 {
 	tls {$TLS:internal}
 	encode zstd gzip
 
