@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services import log_action
-from apps.topology.models import Node
 
 from .. import exercises as svc
 from ..models import Exercise, ExerciseParticipant
@@ -22,8 +21,7 @@ def _visible(user):
         scope = svc.managed_nodes(user)
         if scope is None:
             return qs
-        prefix = scope.path[: 2 * Node.steplen] if scope.depth >= 2 else scope.path
-        return qs.filter(Q(node__path__startswith=prefix) | Q(participants__user=user)).distinct()
+        return qs.filter(Q(node__path__startswith=scope.path) | Q(participants__user=user)).distinct()
     return qs.filter(participants__user=user)
 
 

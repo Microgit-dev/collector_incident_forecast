@@ -65,6 +65,14 @@ ROLES: dict[Role, RoleSpec] = {
             "analytics.export_report",
             "notifications.change_notification",
             "audit.view_actionlog",
+            # структура зоны: зоны, сотрудники, командирование, объекты и датчики на карте
+            "topology.manage_zones",
+            "topology.add_node",
+            "topology.change_node",
+            "assets.add_channel",
+            "assets.change_channel",
+            "accounts.assign_staff",
+            "accounts.view_secondment",
             # учения: сценарий, участники, старт и досрочная остановка
             "training.add_exercise",
             "training.change_exercise",
@@ -112,6 +120,11 @@ ROLES: dict[Role, RoleSpec] = {
             "accounts.view_all_scopes",
             "normalization.*",
             "forecasting.*",
+            # объекты и датчики: привязка к местности, новые каналы
+            "topology.add_node",
+            "topology.change_node",
+            "assets.add_channel",
+            "assets.change_channel",
             "ingestion.*",
             "incidents.decide_incident",
             "analytics.export_report",

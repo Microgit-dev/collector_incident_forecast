@@ -52,13 +52,13 @@ def training_bot() -> User:
 
 def lesson_node(user) -> Node | None:
     """Объект полигона для урока: объект зоны ответственности ученика, а у районных ролей — первый по алфавиту."""
-    step = Node.steplen
+    from apps.topology.selectors import object_of, objects_under
+
     scope = user.scope_node or Node.objects.filter(depth=1).order_by("name").first()
     if scope is None:
         return None
-    if scope.depth >= 2:
-        return Node.objects.get(path=scope.path[: 2 * step])
-    return Node.objects.filter(path__startswith=scope.path, depth=2).order_by("name").first()
+    # зона ученика — объект или его часть: урок идёт на этом объекте; зона или район — на первом объекте в ней
+    return object_of(scope) or objects_under(scope).order_by("name").first()
 
 
 def _picket(node: Node) -> float | None:

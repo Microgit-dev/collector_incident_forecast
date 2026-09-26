@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 from django.core.cache import cache
 
-from apps.topology.selectors import has_global_scope, user_scope_node
+from apps.topology.selectors import has_global_scope, scope_paths
 
 TTL = 60
 
@@ -20,11 +20,8 @@ def scope_key(user) -> str:
     Зона ответственности и набор ролей: одна и та же зона выглядит по-разному для диспетчера
     и бригады (у бригады нет карточек и прогнозов), поэтому кеш у них разный.
     """
-    if has_global_scope(user):
-        scope = "all"
-    else:
-        node = user_scope_node(user)
-        scope = node.path if node else "none"
+    # с учётом командирований: у командированного своя видимость
+    scope = "all" if has_global_scope(user) else "|".join(scope_paths(user)) or "none"
     roles = "su" if user.is_superuser else ",".join(sorted(user.groups.values_list("name", flat=True)))
     return f"{scope}:{roles}"
 

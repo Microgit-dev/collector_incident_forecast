@@ -21,8 +21,8 @@ from apps.assets.models import Channel
 from apps.forecasting.models import ChannelHealth, ChannelRisk
 from apps.incidents.models import Alert, Incident
 from apps.telemetry.models import ChannelState
-from apps.topology.models import Node
-from apps.topology.selectors import scope_queryset
+from apps.topology.models import Node, NodeKind
+from apps.topology.selectors import ObjectIndex, scope_queryset
 
 LEVELS = ("low", "medium", "high", "critical")
 ABNORMAL = ("alarm", "fault", "power_loss", "unknown")
@@ -51,7 +51,7 @@ def _line(a: float, b: float, y: float) -> dict:
 def scheme(
     user, *, complex_id: int | None = None, task: str | None = None, bin_size: int | None = None
 ) -> dict:
-    step = Node.steplen
+    index = ObjectIndex()
     channels = scope_queryset(
         Channel.objects.filter(is_active=True, picket__isnull=False, node__depth__gte=2), user, "node"
     ).select_related("node", "sensor_type")
@@ -60,7 +60,9 @@ def scheme(
         channels = channels.filter(node__path__startswith=root.path)
     by_complex: dict[str, list[Channel]] = defaultdict(list)
     for ch in channels:
-        by_complex[ch.node.path[: 2 * step]].append(ch)
+        obj = index.of_path(ch.node.path)
+        if obj is not None:  # каналы прямо на зоне или районе на схеме объектов не рисуются
+            by_complex[obj.path].append(ch)
     ids = [c.pk for chs in by_complex.values() for c in chs]
     # Строка схемы — комплекс, даже если зона ответственности пользователя уже (один объект внутри него)
     complexes = {n.path: n for n in Node.objects.filter(path__in=list(by_complex)).order_by("name")}
@@ -113,7 +115,7 @@ def scheme(
 
         subs = defaultdict(list)
         for c in chs:
-            if c.node.depth > 2:
+            if c.node.kind != NodeKind.COMPLEX:
                 subs[c.node].append(float(c.picket))
         for sub, values in sorted(subs.items(), key=lambda kv: min(kv[1])):
             a = float(sub.picket_from) if sub.picket_from is not None else min(values)
@@ -152,7 +154,7 @@ def scheme(
             }
         )
     if user.has_perm("incidents.view_incident"):
-        features.extend(_incidents(user, complexes, rows, step))
+        features.extend(_incidents(user, complexes, rows, index))
     return {
         "type": "FeatureCollection",
         "properties": {"rows": len(rows), "task": task, "crs": "схема: x — пикет, y — строка объекта"},
@@ -198,7 +200,7 @@ def _segment(members: list[Channel], states: dict, health: dict, risks: dict) ->
     }
 
 
-def _incidents(user, complexes: dict, rows: list[str], step: int) -> list[dict]:
+def _incidents(user, complexes: dict, rows: list[str], index: ObjectIndex) -> list[dict]:
     row_of = {path: y for y, path in enumerate(rows)}
     incidents = scope_queryset(Incident.objects.filter(status__in=OPEN), user, "node").select_related("node")
     pickets: dict[int, list[float]] = defaultdict(list)
@@ -208,7 +210,8 @@ def _incidents(user, complexes: dict, rows: list[str], step: int) -> list[dict]:
         pickets[incident_id].append(float(picket))
     out = []
     for i in incidents:
-        y = row_of.get(i.node.path[: 2 * step])
+        obj = index.of_path(i.node.path)
+        y = row_of.get(obj.path) if obj else None
         values = pickets.get(i.pk)
         if y is None or not values:
             continue
@@ -251,8 +254,13 @@ def workorders_layer(user, result: dict) -> list[dict]:
     }
     if not rows:
         return []
-    step = Node.steplen
+    index = ObjectIndex()
     complex_of = dict(Node.objects.filter(pk__in=rows).values_list("path", "pk"))
+
+    def object_path(node) -> str | None:
+        obj = index.of_path(node.path)
+        return obj.path if obj else None
+
     orders = scope_queryset(
         WorkOrder.objects.exclude(status__in=[WorkOrder.Status.DONE, WorkOrder.Status.CANCELLED]),
         user,
@@ -260,7 +268,7 @@ def workorders_layer(user, result: dict) -> list[dict]:
     ).select_related("node", "equipment", "assignee")
     if user.has_perm("workorders.execute_workorder") and not user.has_perm("workorders.add_workorder"):
         orders = orders.filter(assignee=user)
-    orders = [o for o in orders if complex_of.get(o.node.path[: 2 * step]) in rows]
+    orders = [o for o in orders if complex_of.get(object_path(o.node)) in rows]
 
     by_incident: dict[int, list[float]] = defaultdict(list)
     for incident_id, picket in Alert.objects.filter(
@@ -291,7 +299,7 @@ def workorders_layer(user, result: dict) -> list[dict]:
                 "type": "Feature",
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [picket, rows[complex_of[order.node.path[: 2 * step]]]],
+                    "coordinates": [picket, rows[complex_of[object_path(order.node)]]],
                 },
                 "properties": {
                     "kind": "workorder",

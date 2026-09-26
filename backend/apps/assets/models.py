@@ -67,6 +67,8 @@ class Channel(TimeStampedModel):
     # Пикет разбирается из названия («ТД ПК86-85», «Темп. ВШ ПК88,5») — основа схемы коллектора
     picket = models.DecimalField("пикет", max_digits=8, decimal_places=2, null=True, blank=True)
     location_hint = models.CharField("место (ВШ, камера…)", max_length=64, blank=True)
+    # Точка на карте [долгота, широта]; пусто — датчик раскладывается по контуру объекта по пикету
+    location = models.JSONField("точка на карте", null=True, blank=True)
     is_active = models.BooleanField("активен", default=True)
     in_catalog = models.BooleanField(
         "есть в справочнике",

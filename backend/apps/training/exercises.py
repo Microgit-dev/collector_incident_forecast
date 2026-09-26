@@ -24,7 +24,7 @@ from apps.audit.models import ActionLog
 from apps.incidents.models import Decision, DecisionOutcome, Incident, IncidentEvent
 from apps.notifications.services import notify
 from apps.topology.models import Node
-from apps.topology.selectors import has_global_scope
+from apps.topology.selectors import has_global_scope, object_of, objects_under
 
 from .models import Exercise, ExerciseParticipant
 from .services import BOT_USERNAME, _picket, reset_object, send_simulator
@@ -102,20 +102,15 @@ COMPLICATIONS = {
 
 
 def managed_nodes(head) -> Node | None:
-    """Зона руководителя; None — весь район."""
-    return None if has_global_scope(head) else head.scope_node
+    """Зона руководителя; None — весь район. Если руководитель закреплён за частью объекта — весь объект."""
+    if has_global_scope(head):
+        return None
+    scope = head.scope_node
+    return (object_of(scope) or scope) if scope is not None else None
 
 
 def polygon_objects(head) -> list[Node]:
-    scope = managed_nodes(head)
-    qs = Node.objects.filter(depth=2)
-    if scope is not None:
-        qs = (
-            qs.filter(path__startswith=scope.path[: 2 * Node.steplen])
-            if scope.depth >= 2
-            else qs.filter(path__startswith=scope.path)
-        )
-    return list(qs.order_by("name"))
+    return list(objects_under(managed_nodes(head)).order_by("name"))
 
 
 def _sees(user, node: Node) -> bool:
@@ -686,9 +681,7 @@ def can_manage(user, exercise: Exercise | None = None) -> bool:
     if exercise is None:
         return True
     scope = managed_nodes(user)
-    return scope is None or exercise.node.path.startswith(
-        scope.path[: 2 * Node.steplen] if scope.depth >= 2 else scope.path
-    )
+    return scope is None or exercise.node.path.startswith(scope.path)
 
 
 def serialize(exercise: Exercise, user) -> dict:

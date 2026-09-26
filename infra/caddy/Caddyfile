@@ -14,8 +14,10 @@
 		file_server
 		# Интерфейс: скрипты только свои (XSS не подгрузит чужой код), в iframe не встраивается.
 		# 'unsafe-inline' для стилей — Mantine задаёт стили атрибутами style; скриптов это не касается.
+		# tiles.versatiles.org — подложка карты мониторинга (стиль, тайлы, шрифты подписей); для своего
+		# сервера тайлов адрес меняется здесь и в MAP_STYLE_LIGHT/DARK
 		header {
-			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.versatiles.org; font-src 'self' data:; connect-src 'self' https://tiles.versatiles.org; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 			X-Frame-Options DENY
 		}
 	}

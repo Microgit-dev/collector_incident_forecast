@@ -24,6 +24,8 @@ import {
   IconHeartRateMonitor,
   IconHistory,
   IconLayoutDashboard,
+  IconMapPin,
+  IconPolygon,
   IconBell,
   IconBook,
   IconChartBar,
@@ -64,7 +66,9 @@ interface NavItem {
 
 // Каждый пункт виден только ролям, у которых есть соответствующее право
 const NAV: NavItem[] = [
-  { to: '/', label: 'Рабочее место', icon: IconLayoutDashboard },
+  // мониторинг — главный экран каждой роли, открывается после входа
+  { to: '/', label: 'Мониторинг', icon: IconMapPin },
+  { to: '/workspace', label: 'Рабочее место', icon: IconLayoutDashboard },
   { to: '/overview', label: 'Оперативная обстановка', icon: IconGauge, perm: 'incidents.view_incident' },
   { to: '/incidents', label: 'Инциденты', icon: IconAlertTriangle, perm: 'incidents.view_incident' },
   { to: '/map', label: 'Схема объектов', icon: IconMap2, perm: 'topology.view_node' },
@@ -76,6 +80,7 @@ const NAV: NavItem[] = [
   { to: '/history', label: 'История', icon: IconCalendarStats, perm: 'telemetry.view_channeldaily' },
   { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
   { to: '/teams', label: 'Команды', icon: IconUsersGroup },
+  { to: '/structure', label: 'Зоны и объекты', icon: IconPolygon, perm: 'topology.add_node' },
   { to: '/training', label: 'Учебные задания', icon: IconCertificate },
   { to: '/exercises', label: 'Учения', icon: IconFlag },
   { to: '/wiki', label: 'Вики', icon: IconBook },

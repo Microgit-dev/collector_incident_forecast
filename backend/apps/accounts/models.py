@@ -97,8 +97,44 @@ class User(AbstractUser):
     class Meta:
         verbose_name = "пользователь"
         verbose_name_plural = "пользователи"
-        permissions = [("view_all_scopes", "Видит все зоны ответственности")]
+        permissions = [
+            ("view_all_scopes", "Видит все зоны ответственности"),
+            ("assign_staff", "Назначает сотрудников в зоны и командирует в другие зоны"),
+        ]
 
     @property
     def role_codes(self) -> list[str]:
         return sorted(self.groups.values_list("name", flat=True))
+
+
+class Secondment(models.Model):
+    """
+    Командирование: сотрудник зоны временно работает в другой зоне — видит её карточки и получает её
+    уведомления, не теряя своей. В смежную зону — обычный порядок; в несмежную — только «крайний случай»
+    с обязательной причиной.
+    """
+
+    user = models.ForeignKey(
+        User, verbose_name="сотрудник", on_delete=models.CASCADE, related_name="secondments"
+    )
+    zone = models.ForeignKey(
+        "topology.Node", verbose_name="куда направлен", on_delete=models.CASCADE, related_name="secondments"
+    )
+    starts_at = models.DateTimeField("с")
+    ends_at = models.DateTimeField("по")
+    reason = models.CharField("причина", max_length=255, blank=True)
+    emergency = models.BooleanField("крайний случай (зона не смежная)", default=False)
+    created_by = models.ForeignKey(
+        User, verbose_name="кто направил", null=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField("создано", auto_now_add=True)
+    cancelled_at = models.DateTimeField("отозван", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "командирование в другую зону"
+        verbose_name_plural = "командирования в другие зоны"
+        ordering = ("-starts_at",)
+        indexes = [models.Index(fields=["user", "ends_at"])]
+
+    def __str__(self):
+        return f"{self.user} → {self.zone}"

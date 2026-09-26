@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .monitoring import MonitoringObjectView, MonitoringOthersView, MonitoringView
 from .views import (
     EfficiencyView,
     FloodView,
@@ -22,6 +23,9 @@ from .views import (
 urlpatterns = [
     path("analytics/overview/", OverviewView.as_view(), name="analytics-overview"),
     path("analytics/workspace/", WorkspaceView.as_view(), name="analytics-workspace"),
+    path("analytics/monitoring/", MonitoringView.as_view(), name="monitoring"),
+    path("analytics/monitoring/others/", MonitoringOthersView.as_view(), name="monitoring-others"),
+    path("analytics/monitoring/objects/<int:pk>/", MonitoringObjectView.as_view(), name="monitoring-object"),
     path("analytics/live/", LiveView.as_view(), name="analytics-live"),
     path("analytics/scheme/", SchemeView.as_view(), name="analytics-scheme"),
     path("analytics/efficiency/", EfficiencyView.as_view(), name="analytics-efficiency"),
