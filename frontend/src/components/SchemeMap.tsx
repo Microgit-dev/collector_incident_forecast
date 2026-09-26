@@ -1,4 +1,5 @@
 import { Badge, Card, Group, Loader, Stack, Table, Text, Tooltip } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 
@@ -181,11 +182,13 @@ function Row({
   labelWidth: number
 }) {
   const navigate = useNavigate()
+  // на телефоне подпись над трассой: иначе трасса ужимается в полоску рядом с подписью
+  const narrow = useMediaQuery('(max-width: 36em)')
   const span = Math.max(route.picket_to - route.picket_from, 1)
   const x = (pk: number) => ((pk - route.picket_from) / span) * W
   return (
-    <Group wrap="nowrap" align="center" gap="sm">
-      <Stack gap={0} w={labelWidth} style={{ flexShrink: 0 }}>
+    <Group wrap={narrow ? 'wrap' : 'nowrap'} align="center" gap={narrow ? 4 : 'sm'}>
+      <Stack gap={0} w={narrow ? '100%' : labelWidth} style={{ flexShrink: 0 }}>
         <Text size="sm" fw={600} truncate>
           {route.name}
         </Text>
@@ -197,7 +200,7 @@ function Row({
         </Group>
       </Stack>
       {/* flex: 1 + minWidth: 0 — трасса занимает остаток строки, а не 100% рядом с подписью */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: narrow ? '1 1 100%' : 1, minWidth: 0 }}>
         <svg viewBox={`-8 0 ${W + 16} ${H}`} style={{ width: '100%', height: H, overflow: 'visible', display: 'block' }}>
           <line x1={0} x2={W} y1={LINE_Y} y2={LINE_Y} stroke="var(--mantine-color-gray-5)" strokeWidth={2} />
           {segments.map((s) => {
