@@ -61,6 +61,7 @@ PERIODIC = [
     ("Плановое переобучение модели", "apps.forecasting.tasks.weekly_retrain", 7 * 86400),
     ("Рекомендации по ТО", "apps.workorders.tasks.generate_recommendations", 86400),
     ("Статусы заявок из help desk", "apps.workorders.tasks.sync_helpdesk", 60),
+    ("Учения: старт по таймеру и завершение", "apps.training.tasks.exercise_tick", 15),
     ("Погода Open-Meteo: последние сутки и прогноз", "apps.integrations.tasks.sync_weather", 6 * 3600),
 ]
 # Учебный контур не обучает модели на полигоне и не ходит во внешние сервисы

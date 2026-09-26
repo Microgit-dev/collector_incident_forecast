@@ -29,6 +29,7 @@ import {
   IconClipboardList,
   IconDatabase,
   IconDatabaseImport,
+  IconFlag,
   IconGauge,
   IconLogout,
   IconMap2,
@@ -49,7 +50,9 @@ import { api } from '../api/client'
 import { ROLE } from '../api/labels'
 import { useAuth } from '../auth/AuthContext'
 import { useNotificationStream } from '../realtime/useNotificationStream'
+import { ExerciseBanner } from '../components/ExerciseBanner'
 import { TrainingDock } from '../training/TrainingDock'
+import { NotificationsDrawer } from './NotificationsDrawer'
 
 interface NavItem {
   to: string
@@ -73,6 +76,7 @@ const NAV: NavItem[] = [
   { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
   { to: '/teams', label: 'Команды', icon: IconUsersGroup },
   { to: '/training', label: 'Учебные задания', icon: IconCertificate },
+  { to: '/exercises', label: 'Учения', icon: IconFlag },
   { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
   { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
@@ -92,6 +96,7 @@ function ColorSchemeToggle() {
 
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure()
+  const [inbox, { open: openInbox, close: closeInbox }] = useDisclosure()
   const { user, can, logout } = useAuth()
   const location = useLocation()
   useNotificationStream(Boolean(user))
@@ -135,7 +140,7 @@ export function AppLayout() {
           </Group>
           <Group gap="xs" wrap="nowrap">
             <Indicator label={unread.data?.count} size={16} disabled={!unread.data?.count} color="red">
-              <ActionIcon variant="default" size="lg" aria-label="Уведомления" data-tour="notifications">
+              <ActionIcon variant="default" size="lg" aria-label="Сообщения" data-tour="notifications" onClick={openInbox}>
                 <IconBell size={18} />
               </ActionIcon>
             </Indicator>
@@ -220,7 +225,9 @@ export function AppLayout() {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        <ExerciseBanner />
         <Outlet />
+        <NotificationsDrawer opened={inbox} onClose={closeInbox} />
         <TrainingDock />
       </AppShell.Main>
     </AppShell>

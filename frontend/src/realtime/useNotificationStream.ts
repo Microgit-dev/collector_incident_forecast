@@ -46,6 +46,7 @@ export function useNotificationStream(enabled: boolean) {
         void queryClient.invalidateQueries({ queryKey: ['incidents'] })
         void queryClient.invalidateQueries({ queryKey: ['overview'] })
         void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        void queryClient.invalidateQueries({ queryKey: ['exercises'] })
       }
       socket.onclose = () => {
         if (closed) return

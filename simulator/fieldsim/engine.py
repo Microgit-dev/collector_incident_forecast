@@ -342,6 +342,17 @@ class Engine:
 
         return execute
 
+    def stop_runs(self, object_id: int | None = None) -> int:
+        """Остановить идущие сценарии на объекте (или все): оставшиеся шаги не выполнятся."""
+        with self.lock:
+            subtree = set(self.catalog.subtree(int(object_id))) if object_id else None
+            stopped = 0
+            for run in self.runs.values():
+                if run.status == "running" and (subtree is None or run.object_id in subtree):
+                    run.status = "stopped"
+                    stopped += 1
+            return stopped
+
     def stop_run(self, run_id: int) -> None:
         with self.lock:
             run = self.runs.get(int(run_id))

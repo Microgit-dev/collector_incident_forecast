@@ -198,3 +198,16 @@ def test_training_commands(sim):
     assert engine.channels[by_name(engine, "ДД ПК220").id].mode == "normal"
     with pytest.raises(ValueError):
         handle(engine, {"op": "drop-tables"})
+
+
+def test_restore_command_stops_the_scenario(sim):
+    """Досрочная остановка учений: после restore оставшиеся шаги сценария не срабатывают."""
+    from fieldsim.commands import handle
+
+    engine, sink, clock = sim
+    run = engine.start_scenario("intrusion", MU, None, speed=1)
+    advance(engine, clock, 35)  # охрана и вскрытый люк
+    assert "остановлено сценариев: 1" in handle(engine, {"op": "restore", "object": MU})
+    advance(engine, clock, 300, step=5)
+    assert run.status == "stopped"
+    assert all(engine.channels[d.id].mode == "normal" for d in engine.catalog.devices_under(MU))
