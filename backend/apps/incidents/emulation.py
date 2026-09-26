@@ -63,7 +63,7 @@ def _lognormal(rng: random.Random, med: float, sigma: float = 0.8) -> float:
 
 def _speed(user: User) -> float:
     """У каждого сотрудника свой темп — чтобы в метриках по сотрудникам была разница."""
-    h = int(hashlib.md5(user.username.encode()).hexdigest()[:6], 16) / 0xFFFFFF
+    h = int(hashlib.md5(user.username.encode(), usedforsecurity=False).hexdigest()[:6], 16) / 0xFFFFFF
     return 0.6 + 0.9 * h
 
 

@@ -384,7 +384,7 @@ def load_readings(
         _copy("stage_reading", READING_COLUMNS, frame.slice(offset, batch))
         with connection.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO telemetry_reading ({', '.join(READING_COLUMNS)}) "
+                f"INSERT INTO telemetry_reading ({', '.join(READING_COLUMNS)}) "  # nosec B608 — имена колонок из констант модуля
                 f"SELECT {', '.join(READING_COLUMNS)} FROM stage_reading ON CONFLICT DO NOTHING"
             )
             inserted += cursor.rowcount
@@ -419,13 +419,13 @@ def _load_channel_states(frame: pl.DataFrame) -> None:
     with connection.cursor() as cursor:
         # Без суррогатного id: LIKE не переносит автоинкремент, а для upsert он не нужен
         cursor.execute(
-            f"CREATE TEMP TABLE IF NOT EXISTS stage_state AS "
+            f"CREATE TEMP TABLE IF NOT EXISTS stage_state AS "  # nosec B608 — имена колонок из констант модуля
             f"SELECT {', '.join(columns)} FROM telemetry_channelstate WITH NO DATA"
         )
         cursor.execute("TRUNCATE stage_state")
     _copy("stage_state", columns, states.with_columns(pl.col("raw_value").fill_null("")))
     with connection.cursor() as cursor:
-        cursor.execute(
+        cursor.execute(  # nosec B608 — имена колонок из кадра, собранного кодом
             f"""
             INSERT INTO telemetry_channelstate ({", ".join(columns)})
             SELECT {", ".join(columns)} FROM stage_state
@@ -534,7 +534,7 @@ def load_daily(frame: pl.DataFrame) -> int:
     updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in DAILY_COLUMNS[2:])
     with connection.cursor() as cursor:
         cursor.execute(
-            f"INSERT INTO telemetry_channeldaily ({', '.join(DAILY_COLUMNS)}) "
+            f"INSERT INTO telemetry_channeldaily ({', '.join(DAILY_COLUMNS)}) "  # nosec B608 — имена колонок из констант модуля
             f"SELECT {', '.join(DAILY_COLUMNS)} FROM stage_daily "
             f"ON CONFLICT (day, channel_id) DO UPDATE SET {updates}"
         )

@@ -242,7 +242,9 @@ def labels_fingerprint(labels: pl.DataFrame) -> str:
     """Ключ кеша выборки: другая разметка — другая выборка."""
     if labels.is_empty():
         return "nofb"
-    digest = hashlib.sha1(labels.sort("label_id").write_csv().encode()).hexdigest()[:10]
+    digest = hashlib.sha1(labels.sort("label_id").write_csv().encode(), usedforsecurity=False).hexdigest()[
+        :10
+    ]
     return f"fb{digest}"
 
 

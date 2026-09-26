@@ -319,8 +319,10 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       JAVA_OPTS: "-Xms128m -Xmx256m"
+    # Kafka UI без входа читает и пишет в темы (можно подмешать события датчиков) — только с этой машины;
+    # удалённо — через SSH-туннель
     ports:
-      - "${KAFKA_UI_PORT:-8081}:8080"
+      - "127.0.0.1:${KAFKA_UI_PORT:-8081}:8080"
     depends_on:
       kafka:
         condition: service_healthy

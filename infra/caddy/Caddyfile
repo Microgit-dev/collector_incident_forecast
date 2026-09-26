@@ -12,12 +12,20 @@
 		root * /srv
 		try_files {path} /index.html
 		file_server
+		# Интерфейс: скрипты только свои (XSS не подгрузит чужой код), в iframe не встраивается.
+		# 'unsafe-inline' для стилей — Mantine задаёт стили атрибутами style; скриптов это не касается.
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Frame-Options DENY
+		}
 	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
 	}
 }
 
