@@ -53,6 +53,7 @@
 | @tabler/icons-react | 3.48.0 | MIT | иконки |
 | @tanstack/react-query | 5.103.2 | MIT | загрузка и кеш данных API |
 | dayjs | 1.11.23 | MIT | даты и время |
+| maplibre-gl | 6.11.2 | BSD-3-Clause |  |
 | react | 19.3.0 | MIT | интерфейс |
 | react-dom | 19.3.0 | MIT | интерфейс |
 | react-markdown | 10.1.0 | MIT |  |
