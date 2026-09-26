@@ -2,7 +2,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
-import { tokens } from '../api/client'
+import { api, tokens } from '../api/client'
 import { RISK } from '../api/labels'
 import type { AppNotification } from '../api/types'
 
@@ -20,9 +20,13 @@ export function useNotificationStream(enabled: boolean) {
     let attempt = 0
     let closed = false
 
-    const connect = () => {
+    const connect = async () => {
+      // access живёт 30 минут: перед (пере)подключением обновить его, иначе сокет откроется с просроченным
+      await api('/auth/me/').catch(() => undefined)
+      if (closed) return
       const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      socket = new WebSocket(`${scheme}://${window.location.host}/ws/notifications/?token=${tokens.access ?? ''}`)
+      // токен — в заголовке Sec-WebSocket-Protocol, не в адресе: адреса попадают в журналы серверов
+      socket = new WebSocket(`${scheme}://${window.location.host}/ws/notifications/`, ['jwt', tokens.access ?? ''])
       socket.onopen = () => {
         attempt = 0
       }
@@ -51,10 +55,10 @@ export function useNotificationStream(enabled: boolean) {
       socket.onclose = () => {
         if (closed) return
         // Экспоненциальная пауза переподключения, не чаще раза в 30 с
-        retry = window.setTimeout(connect, Math.min(30_000, 1000 * 2 ** attempt++))
+        retry = window.setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** attempt++))
       }
     }
-    connect()
+    void connect()
     return () => {
       closed = true
       window.clearTimeout(retry)

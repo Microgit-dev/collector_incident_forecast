@@ -1,10 +1,11 @@
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
+from .auth import SUBPROTOCOL
 from .services import user_group
 
 
 class NotificationConsumer(AsyncJsonWebsocketConsumer):
-    """ws/notifications/?token=<JWT> — персональный поток уведомлений пользователя."""
+    """ws/notifications/ (протоколы ["jwt", <токен>]) — персональный поток уведомлений пользователя."""
 
     async def connect(self):
         user = self.scope.get("user")
@@ -13,7 +14,8 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
             return
         self.group = user_group(user.pk)
         await self.channel_layer.group_add(self.group, self.channel_name)
-        await self.accept()
+        # сервер обязан подтвердить один из предложенных протоколов — «jwt», сам токен не возвращается
+        await self.accept(subprotocol=SUBPROTOCOL)
 
     async def disconnect(self, code):
         if hasattr(self, "group"):

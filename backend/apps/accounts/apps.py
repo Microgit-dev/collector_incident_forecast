@@ -8,6 +8,9 @@ class AccountsConfig(AppConfig):
     verbose_name = "Пользователи и роли"
 
     def ready(self):
+        from .lockout import connect
+
+        connect()
         if getattr(settings, "AUTH_LDAP_SERVER_URI", None):
             from .ldap import connect_signals
 

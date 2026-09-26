@@ -27,6 +27,12 @@ CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 
 # TLS терминируется на Caddy; Django доверяет его заголовку
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Cookie сессии (админка) и CSRF — только по HTTPS; в отладке без TLS — обычные
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_AGE = 8 * 3600
+X_FRAME_OPTIONS = "DENY"
+# HSTS и перенаправление HTTP → HTTPS делает Caddy для всех ответов (infra/caddy/Caddyfile)
+SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008"]
 USE_X_FORWARDED_HOST = True
 
 DJANGO_APPS = [
@@ -46,6 +52,7 @@ THIRD_PARTY_APPS = [
     "treebeard",
     "auditlog",
     "django_celery_beat",
+    "rest_framework_simplejwt.token_blacklist",
     "django_prometheus",
     "channels",
 ]
@@ -118,14 +125,20 @@ AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
 ]
-AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+# Первым — блокировка после серии неудачных входов (apps/accounts/lockout.py)
+AUTHENTICATION_BACKENDS = [
+    "apps.accounts.lockout.LockoutBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+LOCKOUT_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
 
 # LDAP/AD: реальный контроллер домена недоступен, поэтому в compose поднимается
 # тестовый LDAP-сервер. Бэкенд подключается только если включён флагом.
 if env("LDAP_ENABLED"):
     from apps.accounts.ldap import configure_ldap
 
-    AUTHENTICATION_BACKENDS.insert(0, "django_auth_ldap.backend.LDAPBackend")
+    AUTHENTICATION_BACKENDS.insert(1, "django_auth_ldap.backend.LDAPBackend")
     configure_ldap(env, globals())
 
 LANGUAGE_CODE = "ru-ru"
@@ -181,15 +194,22 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.MultiPartParser",
     ],
 }
+# Короткий access (утечка токена живёт недолго), интерфейс обновляет его сам по refresh.
+# Refresh ротируется при каждом обновлении, старый попадает в чёрный список; выход отзывает текущий.
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Collector Incident Forecast API",
     "DESCRIPTION": "Прогнозирование отказов датчиков и инцидентов в инженерных коллекторах",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # схема и Swagger — только после входа (в браузере — через сессию админки)
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
     "COMPONENT_SPLIT_REQUEST": True,
 }
 

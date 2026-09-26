@@ -37,6 +37,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(() => {
+    // отозвать refresh на сервере: украденной копией токена после выхода не воспользоваться
+    const refresh = tokens.refresh
+    if (refresh) void api('/auth/logout/', { method: 'POST', body: { refresh } }).catch(() => undefined)
     tokens.clear()
     queryClient.clear()
     window.location.assign('/login')
