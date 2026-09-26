@@ -24,6 +24,7 @@ import { SchemePage } from './pages/SchemePage'
 import { TeamsPage } from './pages/TeamsPage'
 import { TrainingPage } from './pages/TrainingPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
+import { WikiPage } from './pages/WikiPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -67,6 +68,8 @@ export function App() {
         <Route path="training" element={<TrainingPage />} />
         <Route path="exercises" element={<ExercisesPage />} />
         <Route path="exercises/:id" element={<ExerciseDetailPage />} />
+        <Route path="wiki" element={<WikiPage />} />
+        <Route path="wiki/:slug" element={<WikiPage />} />
         <Route path="data-import" element={<DataImportPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
