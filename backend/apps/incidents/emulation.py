@@ -33,7 +33,7 @@ from apps.incidents.models import (
     IncidentEvent,
     IncidentType,
 )
-from apps.topology.models import Node
+from apps.topology.models import Node, NodeKind
 
 MSK = ZoneInfo("Europe/Moscow")
 DISPATCHER_ROLES = ("ods_dispatcher", "unit_dispatcher")
@@ -267,7 +267,7 @@ def emulate(start: date, end: date, *, seed: int = 7, echo=None) -> dict:
     from apps.analytics.replay import ReplayError, replay
 
     shift = Shift(seed)
-    complexes = list(Node.objects.filter(depth=2, is_active=True))
+    complexes = list(Node.objects.filter(kind=NodeKind.COMPLEX, is_active=True))
     stats = {"facts": 0, "forecasts": 0, "decisions": 0, "escalated": 0}
     day = start
     while day <= end:

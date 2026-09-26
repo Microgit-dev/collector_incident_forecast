@@ -251,3 +251,10 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
 }
+
+# Карта мониторинга: векторная подложка OpenStreetMap (стиль MapLibre) и автовыделение зданий (Overpass).
+# Пусто — карта без подложки (только контуры зон и объектов), автовыделение выключено. Для контура
+# заказчика адреса меняются на собственный сервер тайлов и Overpass.
+MAP_STYLE_LIGHT = env("MAP_STYLE_LIGHT", default="https://tiles.versatiles.org/assets/styles/muted/style.json")
+MAP_STYLE_DARK = env("MAP_STYLE_DARK", default="https://tiles.versatiles.org/assets/styles/muted-dark/style.json")
+OVERPASS_URL = env("OVERPASS_URL", default="https://overpass-api.de/api/interpreter")

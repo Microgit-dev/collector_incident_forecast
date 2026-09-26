@@ -153,6 +153,10 @@ class Command(BaseCommand):
         from apps.accounts.demo import seed_demo
 
         self.stdout.write(f"demo: {seed_demo(os.environ.get('DEMO_PASSWORD', 'Passw0rd!'))}")
+        # зоны и контуры объектов на карте мониторинга (у заказчика координат нет)
+        from django.core.management import call_command
+
+        call_command("seed_geo", stdout=self.stdout)
 
     def _superuser(self):
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")

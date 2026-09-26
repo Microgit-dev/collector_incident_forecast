@@ -6,6 +6,8 @@ const backend = process.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
 
 export default defineConfig({
   plugins: [react()],
+  // обработчик тайлов карты собирается отдельным ES-модулем (см. src/map/engine.ts)
+  worker: { format: 'es' },
   server: {
     port: 5173,
     proxy: {

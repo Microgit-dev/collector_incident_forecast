@@ -54,8 +54,19 @@ def _users_with_scope(node: Node):
     handles = Q(groups__permissions__codename="acknowledge_alert") | Q(
         user_permissions__codename="acknowledge_alert"
     )
+    now = timezone.now()
+    # командированные в эту зону работают в ней наравне со своими
+    seconded = Q(
+        secondments__zone=node,
+        secondments__starts_at__lte=now,
+        secondments__ends_at__gt=now,
+        secondments__cancelled_at__isnull=True,
+    )
     return (
-        User.objects.filter(is_active=True, scope_node=node).filter(handles | Q(is_superuser=True)).distinct()
+        User.objects.filter(is_active=True)
+        .filter(Q(scope_node=node) | seconded)
+        .filter(handles | Q(is_superuser=True))
+        .distinct()
     )
 
 

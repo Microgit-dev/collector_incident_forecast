@@ -1,5 +1,5 @@
 import { Center, Loader } from '@mantine/core'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from './auth/AuthContext'
@@ -19,8 +19,12 @@ import { IncidentsPage } from './pages/IncidentsPage'
 import { LearningPage } from './pages/LearningPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModelsPage } from './pages/ModelsPage'
+import { MonitoringPage } from './pages/MonitoringPage'
 import { ReplayPage } from './pages/ReplayPage'
 import { SchemePage } from './pages/SchemePage'
+
+// редактор структуры тянет картографический движок — отдельный чанк
+const StructurePage = lazy(() => import('./pages/StructurePage').then((m) => ({ default: m.StructurePage })))
 import { TeamsPage } from './pages/TeamsPage'
 import { TrainingPage } from './pages/TrainingPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
@@ -50,7 +54,8 @@ export function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<WorkspacePage />} />
+        <Route index element={<MonitoringPage />} />
+        <Route path="workspace" element={<WorkspacePage />} />
         <Route path="overview" element={<DashboardPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
@@ -68,6 +73,14 @@ export function App() {
         <Route path="training" element={<TrainingPage />} />
         <Route path="exercises" element={<ExercisesPage />} />
         <Route path="exercises/:id" element={<ExerciseDetailPage />} />
+        <Route
+          path="structure"
+          element={
+            <Suspense fallback={<Loader />}>
+              <StructurePage />
+            </Suspense>
+          }
+        />
         <Route path="wiki" element={<WikiPage />} />
         <Route path="wiki/:slug" element={<WikiPage />} />
         <Route path="data-import" element={<DataImportPage />} />

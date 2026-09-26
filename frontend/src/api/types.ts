@@ -878,3 +878,201 @@ export interface WikiArticle extends WikiBrief {
   updated_at: string
   updated_by: string | null
 }
+
+// ---------- карта мониторинга и структура ----------
+
+export type MonitoringMode = 'situation' | 'risk' | 'state' | 'health' | 'orders'
+export type Polygon = { type: 'Polygon'; coordinates: number[][][] }
+export type LonLat = [number, number]
+
+export interface MonitoringZone {
+  id: number
+  name: string
+  color: string
+  geometry: Polygon | null
+  mine: boolean
+  home: boolean
+  adjacent: boolean
+  seconded: boolean
+}
+
+export interface MonitoringObject {
+  id: number
+  name: string
+  zone: number | null
+  zone_name: string | null
+  mine: boolean
+  geometry: Polygon | null
+  center: LonLat | null
+  placed: boolean
+  busy?: boolean
+  criticality?: number
+  channels?: number
+  abnormal?: number
+  silent?: number
+  health_low?: number
+  risk_level?: RiskLevel | null
+  incidents?: number
+  incident_level?: RiskLevel | null
+  escalated?: number
+  new?: number
+  orders?: number
+  approvals?: number
+  overdue?: number
+}
+
+export interface MonitoringMap {
+  role: string
+  modes: MonitoringMode[]
+  mode: MonitoringMode
+  scope: string
+  global: boolean
+  home_zone: number | null
+  bbox: [number, number, number, number] | null
+  zones: MonitoringZone[]
+  objects: MonitoringObject[]
+  incidents: { object: number; count: number; level: RiskLevel | null }[]
+  orders: { object: number; count: number; approvals: number; overdue: number }[]
+  summary: Record<string, number>
+  map: { light: string; dark: string }
+}
+
+export interface MonitoringSensor {
+  id: number
+  external_id: number
+  name: string
+  type: string
+  system: string
+  part: string | null
+  state: string
+  silent: boolean
+  health: number | null
+  risk_level: RiskLevel | null
+  position: LonLat | null
+  placed: boolean
+}
+
+export interface MonitoringObjectDetail {
+  id: number
+  name: string
+  zone: number | null
+  zone_name: string | null
+  geometry: Polygon | null
+  center: LonLat | null
+  mine: boolean
+  note?: string
+  criticality?: number
+  parts?: { id: number; name: string; kind: string }[]
+  sensors?: MonitoringSensor[]
+  states?: Record<string, number>
+  incidents?: {
+    id: number
+    title: string
+    type: string
+    severity: RiskLevel
+    status: string
+    status_display: string
+    assigned_to: string | null
+    escalation_level: number
+    opened_at: string
+  }[]
+  orders?: {
+    id: number
+    number: string
+    title: string
+    status: WorkOrderStatus
+    status_display: string
+    priority: RiskLevel
+    due_at: string
+    overdue: boolean
+    assignee: string | null
+    mine: boolean
+  }[]
+  modes?: MonitoringMode[]
+}
+
+export interface MonitoringOthers {
+  count: number
+  pages: number
+  page: number
+  results: { id: number; name: string; zone: number | null; zone_name: string; adjacent: boolean; center: LonLat | null }[]
+}
+
+export interface StructureZone {
+  id: number
+  name: string
+  color: string
+  geometry: Polygon | null
+  center: LonLat | null
+  adjacent: number[]
+  objects: number
+  staff: number
+}
+
+export interface StructureObject {
+  id: number
+  name: string
+  zone: number | null
+  criticality: number
+  geometry: Polygon | null
+  source: string
+  center: LonLat | null
+  channels: number
+}
+
+export interface StructurePerson {
+  id: number
+  name: string
+  roles: string[]
+  scope: number | null
+  scope_name: string
+  zone: number | null
+  team: string | null
+}
+
+export interface StructureSecondment {
+  id: number
+  user: number
+  user_name: string
+  zone: number
+  zone_name: string
+  ends_at: string
+  reason: string
+  emergency: boolean
+  by: string | null
+}
+
+export interface Structure {
+  can: { zones: boolean; objects: boolean; sensors: boolean; staff: boolean }
+  district: { id: number; name: string }
+  zones: StructureZone[]
+  objects: StructureObject[]
+  sensor_types: { id: number; name: string; system_type: string }[]
+  staff: StructurePerson[]
+  secondments: StructureSecondment[]
+  overpass: boolean
+  map: { light: string; dark: string }
+}
+
+export interface DetectedBuilding {
+  geometry: Polygon
+  source: string
+  name: string
+  address: string
+  levels: string | null
+  area_m2: number
+  center: LonLat
+  exact: boolean
+}
+
+export interface StructureSensor {
+  id: number
+  external_id: number
+  name: string
+  type: string
+  node: number
+  node_name: string
+  picket: number | null
+  location: LonLat | null
+  manual: boolean
+}
