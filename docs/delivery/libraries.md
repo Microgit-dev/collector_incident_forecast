@@ -55,8 +55,10 @@
 | dayjs | 1.11.23 | MIT | даты и время |
 | react | 19.3.0 | MIT | интерфейс |
 | react-dom | 19.3.0 | MIT | интерфейс |
+| react-markdown | 10.1.0 | MIT |  |
 | react-router-dom | 7.18.4 | MIT | маршрутизация SPA |
 | recharts | 3.10.1 | MIT | графики (основа @mantine/charts) |
+| remark-gfm | 4.0.1 | MIT |  |
 | @vitejs/plugin-react | 6.1.1 | MIT | сборка (разработка) |
 | oxlint | 1.85.0 | MIT | линтер (разработка) |
 | postcss | 8.5.28 | MIT | стили (сборка) |

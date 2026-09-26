@@ -148,7 +148,14 @@ def add_image(doc, path: Path, caption: str) -> None:
     if not path.exists():
         print(f"нет изображения {path}", file=sys.stderr)
         return
-    doc.add_picture(str(path), width=Cm(16.5))
+    from docx.image.image import Image
+
+    image = Image.from_file(str(path))
+    # высокие снимки (телефон) — по высоте, иначе вылезут за страницу
+    if image.px_height > image.px_width * 1.2:
+        doc.add_picture(str(path), height=Cm(15))
+    else:
+        doc.add_picture(str(path), width=Cm(16.5))
     doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
     cap = doc.add_paragraph(caption)
     cap.alignment = WD_ALIGN_PARAGRAPH.CENTER

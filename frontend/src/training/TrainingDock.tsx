@@ -87,6 +87,9 @@ export function TrainingDock() {
   }
 
   return (
+    <>
+      {/* на телефоне панель во всю ширину: отступ под контентом, чтобы она не закрывала нижние кнопки */}
+      {phone && <div style={{ height: collapsed ? 88 : 240 }} />}
     <Paper
       shadow="lg"
       radius="md"
@@ -205,5 +208,6 @@ export function TrainingDock() {
         </Stack>
       )}
     </Paper>
+    </>
   )
 }
