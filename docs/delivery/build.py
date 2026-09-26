@@ -24,11 +24,18 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 HERE = Path(__file__).resolve().parent
-SOURCE = HERE / "documentation.md"
 OUT = HERE / "out"
-DOCX = OUT / "Сопроводительная документация.docx"
 TITLE = "Сервис прогнозирования инцидентов инженерных коллекторов"
-SUBTITLE = "Сопроводительная документация"
+# (источник, файл, подзаголовок титула): сопроводительная документация и отдельная инструкция для
+# администраторов заказчика — её текст тот же, что глава в документации (docs/deployment.md)
+DOCUMENTS = [
+    (HERE / "documentation.md", "Сопроводительная документация.docx", "Сопроводительная документация"),
+    (
+        HERE.parent / "deployment.md",
+        "Инструкция по развёртыванию.docx",
+        "Инструкция по запуску и развёртыванию на серверах заказчика",
+    ),
+]
 ACCENT = RGBColor(0x1C, 0x4E, 0x9A)
 INCLUDE = re.compile(r"<!--\s*include:\s*(\S+)(.*?)-->")
 
@@ -122,6 +129,9 @@ def add_table(doc, rows: list[list[str]]) -> None:
         add_inline(cell.paragraphs[0], text, size=size, bold=True)
         set_cell_shading(cell, "E8EDF6")
     repeat_header(table.rows[0])
+    # шапка не остаётся одна внизу страницы
+    for cell in table.rows[0].cells:
+        cell.paragraphs[0].paragraph_format.keep_with_next = True
     for row in body:
         cells = table.add_row().cells
         for i in range(len(header)):
@@ -132,6 +142,8 @@ def add_table(doc, rows: list[list[str]]) -> None:
 
 def add_code(doc, code: list[str]) -> None:
     table = doc.add_table(rows=1, cols=1)
+    # блок кода не разрывается между страницами
+    table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
     cell = table.rows[0].cells[0]
     set_cell_shading(cell, "F3F4F7")
     p = cell.paragraphs[0]
@@ -163,9 +175,23 @@ def add_image(doc, path: Path, caption: str) -> None:
     cap.runs[0].font.size = Pt(9)
 
 
+def restart_numbering(doc, paragraph) -> None:
+    """Новый нумерованный список начинается с 1: своя нумерация поверх абстрактной из стиля."""
+    numbering = doc.part.numbering_part.element
+    style_num = paragraph.style.element.pPr.numPr.numId.val
+    abstract = numbering.num_having_numId(style_num).abstractNumId.val
+    num = numbering.add_num(abstract)
+    override = num.add_lvlOverride(ilvl=0)
+    override.add_startOverride(1)
+    num_pr = paragraph._p.get_or_add_pPr().get_or_add_numPr()
+    num_pr.get_or_add_ilvl().val = 0
+    num_pr.get_or_add_numId().val = num.numId
+
+
 def render(doc, lines: list[str], base: Path) -> None:
     i = 0
     paragraph: list[str] = []
+    in_ordered = False  # идёт ли нумерованный список верхнего уровня
 
     def flush():
         if paragraph:
@@ -177,6 +203,8 @@ def render(doc, lines: list[str], base: Path) -> None:
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
+        if stripped and not re.match(r"\s*([-*]|\d+\.) ", line):
+            in_ordered = False  # список прервался — следующий нумерованный начнётся с 1
         if stripped.startswith("```"):
             flush()
             code = []
@@ -223,6 +251,10 @@ def render(doc, lines: list[str], base: Path) -> None:
             if depth:
                 style += f" {min(depth + 1, 3)}"
             p = doc.add_paragraph(style=style)
+            if ordered and not depth and not in_ordered:
+                restart_numbering(doc, p)
+            if not depth:
+                in_ordered = ordered
             add_inline(p, text)
         elif not stripped or stripped.startswith("<!--"):
             flush()
@@ -270,7 +302,7 @@ def setup_styles(doc) -> None:
         style.paragraph_format.keep_with_next = True
 
 
-def build() -> Path:
+def build(source: Path, docx: Path, subtitle: str) -> Path:
     OUT.mkdir(exist_ok=True)
     doc = Document()
     section = doc.sections[0]
@@ -289,7 +321,7 @@ def build() -> Path:
     run.font.size, run.bold, run.font.color.rgb = Pt(24), True, ACCENT
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(SUBTITLE)
+    run = p.add_run(subtitle)
     run.font.size = Pt(16)
     for _ in range(2):
         doc.add_paragraph()
@@ -314,7 +346,7 @@ def build() -> Path:
     add_field(doc.add_paragraph(), 'TOC \\o "1-2" \\h \\z \\u')
     doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
-    render(doc, expand(SOURCE), HERE)
+    render(doc, expand(source), source.parent)
 
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -324,8 +356,8 @@ def build() -> Path:
     update = OxmlElement("w:updateFields")
     update.set(qn("w:val"), "true")
     settings.append(update)
-    doc.save(DOCX)
-    return DOCX
+    doc.save(docx)
+    return docx
 
 
 def to_pdf(docx: Path) -> Path | None:
@@ -352,8 +384,9 @@ def to_pdf(docx: Path) -> Path | None:
 
 
 if __name__ == "__main__":
-    path = build()
-    print(f"DOCX: {path}")
-    pdf = to_pdf(path)
-    if pdf:
-        print(f"PDF:  {pdf}")
+    for source, name, subtitle in DOCUMENTS:
+        path = build(source, OUT / name, subtitle)
+        print(f"DOCX: {path}")
+        pdf = to_pdf(path)
+        if pdf:
+            print(f"PDF:  {pdf}")

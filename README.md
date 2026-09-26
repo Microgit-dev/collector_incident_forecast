@@ -104,9 +104,16 @@ docker compose --profile demo up -d replay
 docker compose --profile training up -d --build
 ```
 
+## Развёртывание у заказчика
+
+Установка на серверы заказчика — своё имя сервера и сертификат, AD, поток СМВУ через Kafka, закрытый
+контур без интернета, обновление и откат — в [docs/deployment.md](docs/deployment.md). Заготовки:
+`infra/deploy/docker-compose.customer.yml` (настройки контура заказчика), `infra/deploy/bundle.sh`
+(комплект образов для закрытого контура), `infra/deploy/check.sh` (проверка после установки).
+
 ## Пакет сдачи
 
-Сопроводительная документация (DOCX/PDF), презентация (PPTX/PDF), демо-сценарии и нагрузочная
+Сопроводительная документация и инструкция по развёртыванию (DOCX/PDF), презентация (PPTX/PDF), демо-сценарии и нагрузочная
 проверка — в [docs/delivery/](docs/delivery/README.md).
 
 ## Архитектура
