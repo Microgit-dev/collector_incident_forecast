@@ -754,3 +754,105 @@ export interface MyMetrics {
     quality: number | null
   }
 }
+
+// ---------- учения ----------
+
+export type ExerciseStatus = 'scheduled' | 'running' | 'finished' | 'stopped' | 'cancelled'
+
+export interface ExerciseCheck {
+  code: string
+  title: string
+  ok: boolean | null
+  detail: string
+}
+
+export interface ExerciseEvent {
+  t: number | null
+  kind: string
+  text: string
+  who: string | null
+  incident?: number
+}
+
+export interface ExercisePerson {
+  user: number
+  name: string
+  role: string
+  silent: boolean
+  confirmed: boolean
+  first_view: number | null
+  responded: number
+  first_response: number | null
+  decisions: number
+  actions: number
+  workorders: number
+  verdict: string
+}
+
+export interface ExerciseReport {
+  scenario: string
+  complication: string | null
+  duration_s: number | null
+  incidents: {
+    id: number
+    type: string
+    type_display: string
+    title: string
+    status: string
+    opened: number | null
+    responder: string | null
+    responded: number | null
+    escalation_level: number
+  }[]
+  checks: ExerciseCheck[]
+  score: { passed: number; total: number }
+  people: ExercisePerson[]
+  timeline: ExerciseEvent[]
+}
+
+export interface Exercise {
+  id: number
+  title: string
+  status: ExerciseStatus
+  status_display: string
+  object: string
+  node: number
+  scenario: string | null
+  scenario_display: string | null
+  complication: string | null
+  complication_display: string | null
+  complication_after_min: number | null
+  speed: number | null
+  duration_min: number
+  briefing: string
+  scheduled_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  ends_at: string | null
+  created_by: string
+  stopped_by: string | null
+  stop_reason: string
+  manager: boolean
+  me: { silent: boolean; confirmed_at: string | null } | null
+  participants: { user: number; name: string; role: string; silent: boolean; confirmed_at: string | null }[]
+  report?: ExerciseReport
+}
+
+export interface ExerciseCandidate {
+  id: number
+  name: string
+  username: string
+  roles: string[]
+  team: string | null
+  zone: string
+  sees: boolean
+}
+
+export interface ExerciseOptions {
+  scenarios: { code: string; title: string; description: string }[]
+  complications: { code: string; title: string }[]
+  objects: { id: number; name: string }[]
+  node: number | null
+  candidates: ExerciseCandidate[]
+}
+

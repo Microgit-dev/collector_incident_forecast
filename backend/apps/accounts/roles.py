@@ -65,6 +65,10 @@ ROLES: dict[Role, RoleSpec] = {
             "analytics.export_report",
             "notifications.change_notification",
             "audit.view_actionlog",
+            # учения: сценарий, участники, старт и досрочная остановка
+            "training.add_exercise",
+            "training.change_exercise",
+            "training.view_exercise",
         ],
     ),
     Role.ODS_DISPATCHER: RoleSpec(

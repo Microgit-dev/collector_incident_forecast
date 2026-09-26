@@ -20,7 +20,9 @@ def handle(engine: Engine, command: dict) -> str:
     op = command.get("op")
     obj = int(command["object"]) if command.get("object") is not None else None
     if op == "restore":
-        return f"восстановлено каналов: {engine.restore(obj)}"
+        # сначала остановить сценарии объекта, иначе их оставшиеся шаги снова поднимут тревоги
+        stopped = engine.stop_runs(obj)
+        return f"остановлено сценариев: {stopped}, восстановлено каналов: {engine.restore(obj)}"
     if op == "scenario":
         picket = command.get("picket")
         run = engine.start_scenario(

@@ -9,6 +9,8 @@ import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
 import { DataQualityPage } from './pages/DataQualityPage'
+import { ExerciseDetailPage } from './pages/ExerciseDetailPage'
+import { ExercisesPage } from './pages/ExercisesPage'
 import { ForecastCardPage } from './pages/ForecastCardPage'
 import { ForecastsPage } from './pages/ForecastsPage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -63,6 +65,8 @@ export function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="training" element={<TrainingPage />} />
+        <Route path="exercises" element={<ExercisesPage />} />
+        <Route path="exercises/:id" element={<ExerciseDetailPage />} />
         <Route path="data-import" element={<DataImportPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
