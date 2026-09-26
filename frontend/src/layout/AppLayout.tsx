@@ -84,12 +84,18 @@ const NAV: NavItem[] = [
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
 ]
 
-function ColorSchemeToggle() {
+function ColorSchemeToggle({ visibleFrom }: { visibleFrom?: string }) {
   const { setColorScheme } = useMantineColorScheme()
   const scheme = useComputedColorScheme('light')
   return (
     <Tooltip label={scheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>
-      <ActionIcon variant="default" size="lg" onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')}>
+      <ActionIcon
+        variant="default"
+        size="lg"
+        visibleFrom={visibleFrom}
+        aria-label="Тема"
+        onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')}
+      >
         {scheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
       </ActionIcon>
     </Tooltip>
@@ -100,6 +106,8 @@ export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure()
   const [inbox, { open: openInbox, close: closeInbox }] = useDisclosure()
   const { user, can, logout } = useAuth()
+  const { setColorScheme } = useMantineColorScheme()
+  const scheme = useComputedColorScheme('light')
   const location = useLocation()
   useNotificationStream(Boolean(user))
 
@@ -128,14 +136,14 @@ export function AppLayout() {
         <Group h={56} px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Меню" />
-            <Title order={4} style={{ whiteSpace: 'nowrap' }}>
+            <Title order={4} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               Прогноз инцидентов
             </Title>
             <Badge variant="light" visibleFrom="md">
               {user?.scope_node_name ?? 'Все объекты'}
             </Badge>
             {training && (
-              <Badge color="violet" variant="filled">
+              <Badge color="violet" variant="filled" visibleFrom="sm">
                 Учебный
               </Badge>
             )}
@@ -146,7 +154,7 @@ export function AppLayout() {
                 <IconBell size={18} />
               </ActionIcon>
             </Indicator>
-            <ColorSchemeToggle />
+            <ColorSchemeToggle visibleFrom="xs" />
             <Menu position="bottom-end" withArrow>
               <Menu.Target>
                 <ActionIcon variant="default" size="lg" aria-label="Профиль">
@@ -168,6 +176,13 @@ export function AppLayout() {
                   )}
                 </Menu.Label>
                 <Menu.Divider />
+                <Menu.Item
+                  hiddenFrom="xs"
+                  leftSection={scheme === 'dark' ? <IconSun size={16} /> : <IconMoon size={16} />}
+                  onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')}
+                >
+                  {scheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+                </Menu.Item>
                 <Menu.Item leftSection={<IconLogout size={16} />} onClick={logout}>
                   Выйти
                 </Menu.Item>

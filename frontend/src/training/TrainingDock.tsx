@@ -14,6 +14,7 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconCheck, IconChevronDown, IconChevronUp, IconCertificate, IconPointer } from '@tabler/icons-react'
+import { useMediaQuery } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -38,6 +39,7 @@ export function TrainingDock() {
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const phone = useMediaQuery('(max-width: 36em)')
   const current = useQuery({
     queryKey: ['training-current'],
     queryFn: () => api<TrainingSession | null>('/training/sessions/current/'),
@@ -91,7 +93,13 @@ export function TrainingDock() {
       withBorder
       p="sm"
       w={360}
-      style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 300, maxWidth: 'calc(100vw - 32px)' }}
+      style={{
+        position: 'fixed',
+        right: phone ? 8 : 16,
+        bottom: phone ? 8 : 16,
+        zIndex: 300,
+        maxWidth: phone ? 'calc(100vw - 16px)' : 'calc(100vw - 32px)',
+      }}
     >
       <Group justify="space-between" wrap="nowrap" mb={collapsed ? 0 : 'xs'}>
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -142,7 +150,7 @@ export function TrainingDock() {
           ) : (
             <>
               <Stack gap={6}>
-                {steps.map((s, i) => (
+                {steps.map((s, i) => (phone && s.status !== 'current') ? null : (
                   <Group key={s.code} gap={8} wrap="nowrap" align="flex-start">
                     <ThemeIcon
                       size={20}

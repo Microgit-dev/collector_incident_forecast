@@ -1,5 +1,18 @@
-import { Badge, Card, Group, Loader, MultiSelect, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core'
-import { useDebouncedValue } from '@mantine/hooks'
+import {
+  Badge,
+  Card,
+  Group,
+  Loader,
+  MultiSelect,
+  Pagination,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
+import { useDebouncedValue, useMediaQuery } from '@mantine/hooks'
 import { IconSearch } from '@tabler/icons-react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -16,6 +29,7 @@ const OPEN = ['new', 'acknowledged', 'in_progress']
 
 export function IncidentsPage() {
   const navigate = useNavigate()
+  const phone = useMediaQuery('(max-width: 48em)')
   const [status, setStatus] = useState<string[]>(OPEN)
   const [severity, setSeverity] = useState<string[]>([])
   const [type, setType] = useState<string[]>([])
@@ -56,16 +70,48 @@ export function IncidentsPage() {
             setSearch(e.currentTarget.value)
             setPage(1)
           }}
-          w={240}
+          w={{ base: '100%', sm: 240 }}
         />
-        <MultiSelect label="Статус" data={options(INCIDENT_STATUS)} value={status} onChange={setStatus} clearable w={260} />
-        <MultiSelect label="Уровень" data={options(RISK)} value={severity} onChange={setSeverity} clearable w={220} />
-        <MultiSelect label="Тип" data={options(INCIDENT_TYPE)} value={type} onChange={setType} clearable w={260} />
+        <MultiSelect label="Статус" data={options(INCIDENT_STATUS)} value={status} onChange={setStatus} clearable w={{ base: '100%', sm: 260 }} />
+        <MultiSelect label="Уровень" data={options(RISK)} value={severity} onChange={setSeverity} clearable w={{ base: '100%', sm: 220 }} />
+        <MultiSelect label="Тип" data={options(INCIDENT_TYPE)} value={type} onChange={setType} clearable w={{ base: '100%', sm: 260 }} />
       </Group>
 
       <Card withBorder radius="md" p={0}>
         {query.isLoading ? (
           <Loader m="md" />
+        ) : phone ? (
+          // на телефоне — карточки: всё главное без прокрутки таблицы вбок
+          <Stack gap={0}>
+            {query.data?.results.map((incident) => (
+              <UnstyledButton
+                key={incident.id}
+                onClick={() => navigate(`/incidents/${incident.id}`)}
+                p="sm"
+                style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
+              >
+                <Group justify="space-between" wrap="nowrap" gap="xs" mb={4}>
+                  <Group gap={6} wrap="nowrap">
+                    <PriorityBadge value={incident.priority} />
+                    <RiskBadge level={incident.severity} />
+                  </Group>
+                  <StatusBadge status={incident.status} />
+                </Group>
+                <Text size="sm" fw={500}>
+                  {incident.title}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {incident.node_name} · {dayjs(incident.opened_at).format('DD.MM HH:mm')}
+                  {incident.assigned_to_name && ` · ${incident.assigned_to_name}`}
+                </Text>
+                {incident.escalation_level > 0 && (
+                  <Text size="xs" c="grape">
+                    эскалация → {incident.responsible_node_name}
+                  </Text>
+                )}
+              </UnstyledButton>
+            ))}
+          </Stack>
         ) : (
           <Table.ScrollContainer minWidth={900}>
             <Table highlightOnHover verticalSpacing="sm">
@@ -142,7 +188,7 @@ export function IncidentsPage() {
         )}
       </Card>
       {query.data && query.data.count > PAGE_SIZE && (
-        <Pagination total={Math.ceil(query.data.count / PAGE_SIZE)} value={page} onChange={setPage} />
+        <Pagination total={Math.ceil(query.data.count / PAGE_SIZE)} value={page} onChange={setPage} size={phone ? 'sm' : 'md'} siblings={phone ? 0 : 1} />
       )}
     </Stack>
   )

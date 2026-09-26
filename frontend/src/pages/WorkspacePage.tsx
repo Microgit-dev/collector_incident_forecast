@@ -16,6 +16,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconMap2, IconTrophy, IconX } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -295,6 +296,7 @@ function AnalystPanel({ data }: { data: Workspace }) {
 
 function TechnicianPanel({ data }: { data: Workspace }) {
   const client = useQueryClient()
+  const phone = useMediaQuery('(max-width: 36em)')
   const orders = data.lists.my_orders ?? []
   const move = useMutation({
     mutationFn: ({ id, status }: { id: number; status: WorkOrderStatus }) =>
@@ -317,8 +319,10 @@ function TechnicianPanel({ data }: { data: Workspace }) {
                 order={o}
                 action={
                   next && (
+                    // бригада жмёт с телефона на объекте — кнопка под палец (не меньше 36 px)
                     <Button
-                      size="compact-xs"
+                      size="sm"
+                      fullWidth={phone}
                       loading={move.isPending && move.variables?.id === o.id}
                       onClick={() => move.mutate({ id: o.id, status: next.status })}
                     >
