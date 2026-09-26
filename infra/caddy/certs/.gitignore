@@ -1,0 +1,3 @@
+# Сертификат и ключ заказчика (fullchain.pem, privkey.pem) кладутся сюда и в git не попадают.
+*
+!.gitignore

@@ -37,7 +37,7 @@ x-training: &training
     KAFKA_TOPIC_RAW_EVENTS: smvu.training-events
     KAFKA_CONSUMER_GROUP: collector-training
     HELPDESK_URL: http://mock-helpdesk-training:8080
-    CSRF_TRUSTED_ORIGINS: https://localhost:8443
+    CSRF_TRUSTED_ORIGINS: ${TRAINING_URL:-https://localhost:8443}
     DATA_DIR: /data
     ARTIFACTS_DIR: /artifacts
   volumes:
@@ -259,8 +259,15 @@ services:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
       - "${TRAINING_PORT:-8443}:8443"
+    # Адреса сайта, сертификат и сервер тайлов — из .env (подставляются в Caddyfile)
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost, 127.0.0.1}
+      TRAINING_ADDRESS: ${TRAINING_ADDRESS:-localhost:8443, 127.0.0.1:8443}
+      TLS: ${TLS:-internal}
+      MAP_TILES_ORIGIN: ${MAP_TILES_ORIGIN:-https://tiles.versatiles.org}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/certs:/certs:ro
       - caddydata:/data
     depends_on:
       backend:

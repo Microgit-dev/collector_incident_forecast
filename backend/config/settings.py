@@ -21,7 +21,11 @@ env = environ.Env(
 
 SECRET_KEY = env("SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DEBUG")
-ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+# Внутренние имена нужны всегда: healthcheck контейнера (localhost) и Prometheus (backend) —
+# в .env указывается только имя сервера для пользователей
+ALLOWED_HOSTS = list(
+    dict.fromkeys([*env("ALLOWED_HOSTS"), "localhost", "127.0.0.1", "backend", "backend-training"])
+)
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 
@@ -255,6 +259,10 @@ LOGGING = {
 # Карта мониторинга: векторная подложка OpenStreetMap (стиль MapLibre) и автовыделение зданий (Overpass).
 # Пусто — карта без подложки (только контуры зон и объектов), автовыделение выключено. Для контура
 # заказчика адреса меняются на собственный сервер тайлов и Overpass.
-MAP_STYLE_LIGHT = env("MAP_STYLE_LIGHT", default="https://tiles.versatiles.org/assets/styles/muted/style.json")
-MAP_STYLE_DARK = env("MAP_STYLE_DARK", default="https://tiles.versatiles.org/assets/styles/muted-dark/style.json")
+MAP_STYLE_LIGHT = env(
+    "MAP_STYLE_LIGHT", default="https://tiles.versatiles.org/assets/styles/muted/style.json"
+)
+MAP_STYLE_DARK = env(
+    "MAP_STYLE_DARK", default="https://tiles.versatiles.org/assets/styles/muted-dark/style.json"
+)
 OVERPASS_URL = env("OVERPASS_URL", default="https://overpass-api.de/api/interpreter")
