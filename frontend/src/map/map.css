@@ -32,3 +32,9 @@
   font: 700 10px/14px Inter, system-ui, sans-serif;
   text-align: center;
 }
+/* Телефон: линейка масштаба налезает на легенду и атрибуцию */
+@media (max-width: 600px) {
+  .maplibregl-ctrl-scale {
+    display: none;
+  }
+}

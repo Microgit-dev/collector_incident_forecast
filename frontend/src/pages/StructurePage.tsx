@@ -94,7 +94,7 @@ function StructureMap({
     if (!box.current) return
     const map = createMap(box.current, (dark ? data.map.dark : data.map.light) || null, dark, (h) => {
       const m = h.map
-      for (const id of ['zones', 'objects', 'sensors', 'point']) m.addSource(id, { type: 'geojson', data: EMPTY })
+      for (const id of ['zones', 'zone-labels', 'objects', 'sensors', 'point']) m.addSource(id, { type: 'geojson', data: EMPTY })
       m.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['case', ['get', 'sel'], 0.14, 0.05] } })
       m.addLayer({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': ['get', 'color'], 'line-width': ['case', ['get', 'sel'], 3, 1.5] } })
       m.addLayer({ id: 'objects-fill', type: 'fill', source: 'objects', paint: { 'fill-color': ['case', ['get', 'sel'], '#1c7ed6', '#495057'], 'fill-opacity': 0.45 } })
@@ -115,7 +115,8 @@ function StructureMap({
         m.addLayer({
           id: 'zone-labels',
           type: 'symbol',
-          source: 'zones',
+          source: 'zone-labels',
+          maxzoom: 15,
           layout: { 'text-field': ['get', 'name'], 'text-font': ['noto_sans_bold'], 'text-size': 13 },
           paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#fff', 'text-halo-width': 2 },
         })
@@ -153,11 +154,14 @@ function StructureMap({
   useEffect(() => {
     if (!handle) return
     const m = handle.map
-    ;(m.getSource('zones') as maplibregl.GeoJSONSource).setData({
+    const zones = data.zones
+      .filter((z) => z.geometry)
+      .map((z) => ({ type: 'Feature' as const, properties: { id: z.id, name: z.name, color: z.color || '#1c7ed6', sel: z.id === selectedZone }, geometry: z.geometry! }))
+    ;(m.getSource('zones') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: zones })
+    // подпись — одна точка на зону, иначе она повторяется в каждом тайле
+    ;(m.getSource('zone-labels') as maplibregl.GeoJSONSource).setData({
       type: 'FeatureCollection',
-      features: data.zones
-        .filter((z) => z.geometry)
-        .map((z) => ({ type: 'Feature', properties: { id: z.id, name: z.name, color: z.color || '#1c7ed6', sel: z.id === selectedZone }, geometry: z.geometry! })),
+      features: zones.map((f) => ({ ...f, geometry: { type: 'Point' as const, coordinates: centroidOf(f.geometry) } })),
     })
     ;(m.getSource('objects') as maplibregl.GeoJSONSource).setData({
       type: 'FeatureCollection',

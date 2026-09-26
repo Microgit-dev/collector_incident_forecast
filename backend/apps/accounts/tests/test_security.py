@@ -66,3 +66,18 @@ def test_weak_secret_key_is_an_error_in_production(settings, monkeypatch):
     monkeypatch.setenv("DEMO_USERS", "false")
     errors = [m for m in run_checks(tags=["security"]) if m.id == "collector.S001"]
     assert errors and errors[0].is_serious()
+
+
+def test_unlock_command_lifts_the_lock(make_user):
+    from django.core.management import call_command
+
+    from apps.audit.models import ActionLog
+
+    make_user("petrov", "unit_dispatcher")
+    client = APIClient()
+    for i in range(5):
+        client.post(URL, {"username": "petrov", "password": f"bad{i}"})
+    assert client.post(URL, {"username": "petrov", "password": "pass12345"}).status_code == 429
+    call_command("unlock", "Petrov")
+    assert client.post(URL, {"username": "petrov", "password": "pass12345"}).status_code == 200
+    assert ActionLog.objects.filter(action="security.unlock").exists()

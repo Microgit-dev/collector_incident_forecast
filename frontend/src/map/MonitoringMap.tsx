@@ -1,8 +1,9 @@
 import { useComputedColorScheme } from '@mantine/core'
 import { useEffect, useRef, useState } from 'react'
 
-import type { MonitoringMap as MapData, MonitoringMode, MonitoringObjectDetail } from '../api/types'
+import type { MonitoringMap as MapData, MonitoringMode, MonitoringObjectDetail, Polygon } from '../api/types'
 import { createMap, maplibregl, type MapHandle } from './engine'
+import { centroidOf } from './geometry'
 import { APPROVAL, BAD, LEVEL_COLOR, ORDER, SENSOR_COLOR, objectColor } from './status'
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
@@ -45,6 +46,15 @@ function collections(data: MapData, mode: MonitoringMode) {
         },
       })),
   }
+  // подпись зоны — одна точка в центре: подпись по контуру повторяется в каждом тайле
+  const zoneLabels: FC = {
+    type: 'FeatureCollection',
+    features: zones.features.map((f) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: centroidOf(f.geometry as Polygon) },
+      properties: f.properties,
+    })),
+  }
   const shapes: FC = {
     type: 'FeatureCollection',
     features: data.objects
@@ -67,12 +77,13 @@ function collections(data: MapData, mode: MonitoringMode) {
         properties: { id: o.id, name: o.name, mine: o.mine, color: objectColor(o, mode), busy: Boolean(o.busy) },
       })),
   }
-  return { zones, shapes, points }
+  return { zones, zoneLabels, shapes, points }
 }
 
 function addLayers(h: MapHandle) {
   const { map } = h
   map.addSource('zones', { type: 'geojson', data: EMPTY })
+  map.addSource('zone-labels', { type: 'geojson', data: EMPTY })
   map.addSource('objects', { type: 'geojson', data: EMPTY })
   map.addSource('points', { type: 'geojson', data: EMPTY })
   map.addSource('sensors', { type: 'geojson', data: EMPTY })
@@ -179,7 +190,7 @@ function addLayers(h: MapHandle) {
     map.addLayer({
       id: 'zone-labels',
       type: 'symbol',
-      source: 'zones',
+      source: 'zone-labels',
       maxzoom: 14.5,
       layout: {
         'text-field': ['get', 'name'],
@@ -261,8 +272,9 @@ export function MonitoringMap({ data, mode, selected, detail, onSelect, focus }:
   useEffect(() => {
     if (!handle) return
     const { map } = handle
-    const { zones, shapes, points } = collections(data, mode)
+    const { zones, zoneLabels, shapes, points } = collections(data, mode)
     ;(map.getSource('zones') as maplibregl.GeoJSONSource).setData(zones)
+    ;(map.getSource('zone-labels') as maplibregl.GeoJSONSource).setData(zoneLabels)
     ;(map.getSource('objects') as maplibregl.GeoJSONSource).setData(shapes)
     ;(map.getSource('points') as maplibregl.GeoJSONSource).setData(points)
 

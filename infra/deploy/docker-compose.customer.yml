@@ -1,0 +1,44 @@
+# Контур заказчика: дополнение к docker-compose.yml (порядок файлов важен).
+#
+#   в .env: COMPOSE_FILE=docker-compose.yml:infra/deploy/docker-compose.customer.yml
+#   после этого все команды docker compose на сервере подхватывают оба файла.
+#
+# Что меняет по сравнению со стендом:
+# - тестовый OpenLDAP и Kafka UI не запускаются (вход — через AD заказчика, см. LDAP_* в .env);
+# - у брокера появляется внешний слушатель для шлюза СМВУ заказчика (KAFKA_EXTERNAL_*);
+# - эмулятор help desk остаётся: адаптер настоящей системы учёта заявок подключается отдельно.
+# Подробно — docs/deployment.md.
+
+services:
+  openldap:
+    profiles: ["stand"]
+
+  kafka-ui:
+    profiles: ["stand"]
+
+  kafka:
+    environment:
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://${KAFKA_EXTERNAL_HOST:?укажите KAFKA_EXTERNAL_HOST — имя или IP сервера для шлюза СМВУ}:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+    # Слушатель публикуется только на интерфейсе, смотрящем в сеть СМВУ; доступ — по списку адресов
+    # на межсетевом экране. Шифрование и SASL для этого слушателя — по требованиям заказчика.
+    ports:
+      - "${KAFKA_EXTERNAL_BIND:-127.0.0.1}:9094:9094"
+
+  # Корневой сертификат ЦС заказчика для ldaps:// (LDAP_CA_CERT=/certs/corp-ca.pem) — каталог infra/deploy/certs
+  migrate:
+    volumes:
+      - ./infra/deploy/certs:/certs:ro
+  backend:
+    volumes:
+      - ./infra/deploy/certs:/certs:ro
+  worker:
+    volumes:
+      - ./infra/deploy/certs:/certs:ro
+  beat:
+    volumes:
+      - ./infra/deploy/certs:/certs:ro
+  consumer:
+    volumes:
+      - ./infra/deploy/certs:/certs:ro

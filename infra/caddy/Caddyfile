@@ -1,8 +1,6 @@
 {
 	# Метрики Caddy для Prometheus
-	servers {
-		metrics
-	}
+	metrics
 }
 
 # Общее для обоих контуров: SPA и заголовки безопасности
@@ -14,10 +12,10 @@
 		file_server
 		# Интерфейс: скрипты только свои (XSS не подгрузит чужой код), в iframe не встраивается.
 		# 'unsafe-inline' для стилей — Mantine задаёт стили атрибутами style; скриптов это не касается.
-		# tiles.versatiles.org — подложка карты мониторинга (стиль, тайлы, шрифты подписей); для своего
-		# сервера тайлов адрес меняется здесь и в MAP_STYLE_LIGHT/DARK
+		# MAP_TILES_ORIGIN — сервер подложки карты мониторинга (стиль, тайлы, шрифты подписей); для своего
+		# сервера тайлов меняется вместе с MAP_STYLE_LIGHT/DARK в .env
 		header {
-			Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.versatiles.org; font-src 'self' data:; connect-src 'self' https://tiles.versatiles.org; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MAP_TILES_ORIGIN:https://tiles.versatiles.org}; font-src 'self' data:; connect-src 'self' {$MAP_TILES_ORIGIN:https://tiles.versatiles.org}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 			X-Frame-Options DENY
 		}
 	}
@@ -31,10 +29,12 @@
 	}
 }
 
-# Локальный стенд: TLS 1.2+ с сертификатом внутреннего CA Caddy (ТЗ §11 — шифрование при передаче).
-# Для боевого домена достаточно заменить адрес сайта — сертификат выпустится автоматически.
-localhost, 127.0.0.1 {
-	tls internal
+# TLS 1.2+ (ТЗ §11 — шифрование при передаче). Адреса и сертификат задаются в .env:
+#   SITE_ADDRESS     — имя сервера, по умолчанию localhost (стенд);
+#   TLS              — internal (внутренний CA Caddy, по умолчанию) или пути к сертификату и ключу
+#                      заказчика внутри контейнера: /certs/fullchain.pem /certs/privkey.pem
+{$SITE_ADDRESS:localhost, 127.0.0.1} {
+	tls {$TLS:internal}
 	encode zstd gzip
 
 	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
@@ -56,8 +56,8 @@ localhost, 127.0.0.1 {
 
 # Учебный контур (профиль training): тот же интерфейс, свой бэкенд и help desk.
 # Другой порт — другой origin, поэтому вход и токены учебного и боевого контуров не смешиваются.
-localhost:8443, 127.0.0.1:8443 {
-	tls internal
+{$TRAINING_ADDRESS:localhost:8443, 127.0.0.1:8443} {
+	tls {$TLS:internal}
 	encode zstd gzip
 
 	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
