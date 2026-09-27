@@ -15,6 +15,7 @@ import { BrowserRouter } from 'react-router-dom'
 
 import { App } from './App'
 import { AuthProvider } from './auth/AuthContext'
+import { BASE } from './contour'
 
 dayjs.locale('ru')
 
@@ -33,7 +34,8 @@ createRoot(document.getElementById('root')!).render(
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <Notifications position="top-right" limit={5} />
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* учебный контур — подсистема под /training/: тот же интерфейс со своим префиксом маршрутов */}
+        <BrowserRouter basename={BASE || undefined}>
           <AuthProvider>
             <App />
           </AuthProvider>

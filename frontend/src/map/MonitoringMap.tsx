@@ -169,37 +169,35 @@ function addLayers(h: MapHandle) {
       'circle-stroke-width': 1,
     },
   })
-  if (h.basemap) {
-    // подписи — только своих объектов и только вблизи, чтобы карта не была перегружена
-    map.addLayer({
-      id: 'labels',
-      type: 'symbol',
-      source: 'points',
-      minzoom: 14.5,
-      filter: ['get', 'mine'],
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': ['noto_sans_regular'],
-        'text-size': 12,
-        'text-offset': [0, 1.3],
-        'text-anchor': 'top',
-        'text-max-width': 10,
-      },
-      paint: { 'text-color': '#343a40', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
-    })
-    map.addLayer({
-      id: 'zone-labels',
-      type: 'symbol',
-      source: 'zone-labels',
-      maxzoom: 14.5,
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': ['noto_sans_bold'],
-        'text-size': 13,
-      },
-      paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
-    })
-  }
+  // подписи — только своих объектов и только вблизи, чтобы карта не была перегружена
+  map.addLayer({
+    id: 'labels',
+    type: 'symbol',
+    source: 'points',
+    minzoom: 14.5,
+    filter: ['get', 'mine'],
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['noto_sans_regular'],
+      'text-size': 12,
+      'text-offset': [0, 1.3],
+      'text-anchor': 'top',
+      'text-max-width': 10,
+    },
+    paint: { 'text-color': '#343a40', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+  })
+  map.addLayer({
+    id: 'zone-labels',
+    type: 'symbol',
+    source: 'zone-labels',
+    maxzoom: 14.5,
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['noto_sans_bold'],
+      'text-size': 13,
+    },
+    paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
+  })
 }
 
 function badge(text: string, color: string, onClick: () => void): HTMLElement {

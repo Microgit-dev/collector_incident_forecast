@@ -24,6 +24,7 @@ import Markdown, { type Components } from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 
+import { openAdmin } from '../api/admin'
 import { api } from '../api/client'
 import { ROLE } from '../api/labels'
 import type { WikiArticle, WikiIndex } from '../api/types'
@@ -170,8 +171,8 @@ export function WikiPage() {
         </Group>
         {index.data?.can_edit && (
           <Button
-            component="a"
-            href={`/admin/wiki/wikipage/${page.data.id}/change/`}
+            // правка — в админке основной системы (вики одна на платформу), тем же входом
+            onClick={() => void openAdmin(`wiki/wikipage/${page.data!.id}/change/`, 'combat')}
             size="compact-sm"
             variant="default"
             leftSection={<IconEdit size={14} />}

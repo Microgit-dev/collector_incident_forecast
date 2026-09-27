@@ -8,6 +8,7 @@ import { api } from '../api/client'
 import type { TrainingLesson, TrainingSession } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { mmss } from '../training/spotlight'
+import { contourHref } from '../contour'
 
 const STATUS = {
   done: { label: 'Пройдено', color: 'teal' },
@@ -16,7 +17,7 @@ const STATUS = {
 }
 
 export function TrainingPage() {
-  const { user, can } = useAuth()
+  const { can } = useAuth()
   const client = useQueryClient()
   const lessons = useQuery({
     queryKey: ['training-lessons'],
@@ -62,8 +63,8 @@ export function TrainingPage() {
               Здесь доступна экскурсия по интерфейсу. Задания со сценариями проходят в учебном контуре: полигон и учебные
               данные, на работу района они не влияют.
             </Text>
-            <Button component="a" href={user?.contour.urls.training} target="_blank" color="violet" size="xs">
-              Открыть учебный контур
+            <Button component="a" href={contourHref('training', '/training')} color="violet" size="xs">
+              Перейти в учебный контур
             </Button>
           </Group>
         </Alert>
@@ -118,7 +119,7 @@ export function TrainingPage() {
                   {l.best ? 'Пройти ещё раз' : 'Начать'}
                 </Button>
               ) : (
-                <Button component="a" href={user?.contour.urls.training} target="_blank" variant="default">
+                <Button component="a" href={contourHref('training', '/training')} variant="default">
                   В учебном контуре
                 </Button>
               )}

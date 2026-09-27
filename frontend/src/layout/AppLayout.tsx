@@ -7,6 +7,8 @@ import {
   Indicator,
   Menu,
   NavLink,
+  ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
   Title,
@@ -56,8 +58,10 @@ import { NavLink as RouterLink, Outlet, useLocation } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { GRAFANA_PERM, openObservability, SYSTEM_PERM } from '../api/observability'
+import type { Me } from '../api/types'
 import { ROLE } from '../api/labels'
 import { useAuth } from '../auth/AuthContext'
+import { CONTOUR, contourHref, type ContourCode } from '../contour'
 import { useNotificationStream } from '../realtime/useNotificationStream'
 import { ExerciseBanner } from '../components/ExerciseBanner'
 import { TrainingDock } from '../training/TrainingDock'
@@ -68,35 +72,103 @@ interface NavItem {
   label: string
   icon: ComponentType<{ size?: number; stroke?: number }>
   perm?: string
+  /** страница живёт в другой подсистеме (учения — в учебном контуре): переход без повторного входа */
+  contour?: ContourCode
+  show?: (ctx: { user: Me; can: (perm: string) => boolean }) => boolean
 }
 
-// Каждый пункт виден только ролям, у которых есть соответствующее право
-const NAV: NavItem[] = [
-  // мониторинг — главный экран каждой роли, открывается после входа
-  { to: '/', label: 'Мониторинг', icon: IconMapPin },
-  { to: '/workspace', label: 'Рабочее место', icon: IconLayoutDashboard },
-  { to: '/overview', label: 'Оперативная обстановка', icon: IconGauge, perm: 'incidents.view_incident' },
-  { to: '/incidents', label: 'Инциденты', icon: IconAlertTriangle, perm: 'incidents.view_incident' },
-  { to: '/map', label: 'Схема объектов', icon: IconMap2, perm: 'topology.view_node' },
-  { to: '/forecasts', label: 'Журнал прогнозов', icon: IconTimeline, perm: 'forecasting.view_prediction' },
-  { to: '/data-health', label: 'Здоровье каналов', icon: IconHeartRateMonitor, perm: 'forecasting.view_channelhealth' },
-  { to: '/models', label: 'Модели', icon: IconBrain, perm: 'forecasting.view_mlmodel' },
-  { to: '/learning', label: 'Обучение и обратная связь', icon: IconSchool, perm: 'forecasting.review_feedback' },
-  { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
-  { to: '/maintenance', label: 'План ТО', icon: IconCalendarDue, perm: 'workorders.plan_maintenance' },
-  { to: '/equipment', label: 'Реестр оборудования', icon: IconTool, perm: 'workorders.plan_maintenance' },
-  { to: '/history', label: 'История', icon: IconCalendarStats, perm: 'telemetry.view_channeldaily' },
-  { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
-  { to: '/teams', label: 'Команды', icon: IconUsersGroup },
-  { to: '/structure', label: 'Зоны и объекты', icon: IconPolygon, perm: 'topology.add_node' },
-  { to: '/training', label: 'Учебные задания', icon: IconCertificate },
-  { to: '/exercises', label: 'Учения', icon: IconFlag },
-  { to: '/wiki', label: 'Вики', icon: IconBook },
-  { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
-  { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
-  { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
-  { to: '/integrations', label: 'Интеграции', icon: IconPlugConnected, perm: 'integrations.manage_integrations' },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const STRUCTURE_PERMS = [
+  'topology.add_node',
+  'topology.change_node',
+  'topology.manage_zones',
+  'assets.change_channel',
+  'accounts.assign_staff',
 ]
+
+// Меню по разделам; каждый пункт виден только ролям с соответствующим правом
+const NAV: NavGroup[] = [
+  {
+    label: 'Оперативная работа',
+    items: [
+      // мониторинг — главный экран каждой роли, открывается после входа
+      { to: '/', label: 'Мониторинг', icon: IconMapPin },
+      { to: '/workspace', label: 'Рабочее место', icon: IconLayoutDashboard },
+      { to: '/overview', label: 'Оперативная обстановка', icon: IconGauge, perm: 'incidents.view_incident' },
+      { to: '/incidents', label: 'Инциденты', icon: IconAlertTriangle, perm: 'incidents.view_incident' },
+      { to: '/map', label: 'Схема объектов', icon: IconMap2, perm: 'topology.view_node' },
+      { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
+      { to: '/maintenance', label: 'План ТО', icon: IconCalendarDue, perm: 'workorders.plan_maintenance' },
+      { to: '/equipment', label: 'Реестр оборудования', icon: IconTool, perm: 'workorders.plan_maintenance' },
+    ],
+  },
+  {
+    label: 'Прогнозы и данные',
+    items: [
+      { to: '/forecasts', label: 'Журнал прогнозов', icon: IconTimeline, perm: 'forecasting.view_prediction' },
+      { to: '/data-health', label: 'Здоровье каналов', icon: IconHeartRateMonitor, perm: 'forecasting.view_channelhealth' },
+      { to: '/models', label: 'Модели', icon: IconBrain, perm: 'forecasting.view_mlmodel' },
+      { to: '/learning', label: 'Обучение и обратная связь', icon: IconSchool, perm: 'forecasting.review_feedback' },
+      { to: '/history', label: 'История', icon: IconCalendarStats, perm: 'telemetry.view_channeldaily' },
+      { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
+      { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
+      { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
+      { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
+    ],
+  },
+  {
+    label: 'Обучение',
+    items: [
+      { to: '/training', label: 'Учебные задания', icon: IconCertificate },
+      { to: '/exercises', label: 'Учения', icon: IconFlag, contour: 'training' },
+    ],
+  },
+  {
+    label: 'Справка',
+    items: [
+      { to: '/teams', label: 'Команды', icon: IconUsersGroup },
+      { to: '/wiki', label: 'Вики', icon: IconBook },
+    ],
+  },
+  {
+    label: 'Администрирование',
+    items: [
+      // задачи роли из матрицы ответственности; админка открывается отсюда без второго входа
+      {
+        to: '/administration',
+        label: 'Мои задачи',
+        icon: IconSettings,
+        show: ({ user }) => user.admin || user.operations.length > 0,
+      },
+      { to: '/structure', label: 'Зоны и объекты', icon: IconPolygon, show: ({ can }) => STRUCTURE_PERMS.some(can) },
+      { to: '/integrations', label: 'Интеграции', icon: IconPlugConnected, perm: 'integrations.manage_integrations' },
+    ],
+  },
+]
+
+/** Переключатель подсистем платформы: основная система и учебный контур — один вход, одна вкладка. */
+function ContourSwitch() {
+  return (
+    <SegmentedControl
+      size="xs"
+      visibleFrom="sm"
+      value={CONTOUR}
+      color={CONTOUR === 'training' ? 'violet' : 'blue'}
+      data={[
+        { value: 'combat', label: 'Рабочий контур' },
+        { value: 'training', label: 'Учебный контур' },
+      ]}
+      onChange={(value) => {
+        if (value !== CONTOUR) window.location.assign(contourHref(value as ContourCode))
+      }}
+      aria-label="Подсистема"
+    />
+  )
+}
 
 function ColorSchemeToggle({ visibleFrom }: { visibleFrom?: string }) {
   const { setColorScheme } = useMantineColorScheme()
@@ -131,10 +203,9 @@ export function AppLayout() {
     refetchInterval: 60_000,
   })
 
-  const isStaff = can('normalization.change_sensorprofile') || user?.is_superuser
-  const training = user?.contour.code === 'training'
-  // Сценарии на полигоне запускают инструкторы: руководитель, аналитик, администратор
-  const instructor = Boolean(user?.is_superuser || user?.roles.some((r) => ['head', 'analyst', 'admin'].includes(r)))
+  const training = CONTOUR === 'training'
+  // Симулятор полигона — тем, кто отвечает за учебный контур (матрица ответственности, accounts/operations.py)
+  const instructor = Boolean(user?.operations.some((op) => op.code === 'training.manage'))
 
   return (
     <AppShell header={{ height: training ? 88 : 56 }} navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
@@ -153,16 +224,17 @@ export function AppLayout() {
             <Title order={4} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               Прогноз инцидентов
             </Title>
-            <Badge variant="light" visibleFrom="md">
+            <Badge variant="light" visibleFrom="lg">
               {user?.scope_node_name ?? 'Все объекты'}
             </Badge>
             {training && (
-              <Badge color="violet" variant="filled" visibleFrom="sm">
+              <Badge color="violet" variant="filled" hiddenFrom="sm">
                 Учебный
               </Badge>
             )}
           </Group>
           <Group gap="xs" wrap="nowrap">
+            <ContourSwitch />
             <Indicator label={unread.data?.count} size={16} disabled={!unread.data?.count} color="red">
               <ActionIcon variant="default" size="lg" aria-label="Сообщения" data-tour="notifications" onClick={openInbox}>
                 <IconBell size={18} />
@@ -207,77 +279,85 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        <Stack gap={2} style={{ flex: 1 }} data-tour="nav">
-          {NAV.filter((item) => !item.perm || can(item.perm)).map((item) => (
+        <ScrollArea style={{ flex: 1 }} type="scroll">
+          <Stack gap={2} data-tour="nav">
+            {NAV.map((group) => {
+              const items = group.items.filter(
+                (item) => (!item.perm || can(item.perm)) && (!item.show || (user && item.show({ user, can }))),
+              )
+              if (!items.length) return null
+              return (
+                <Stack gap={2} key={group.label} mb={6}>
+                  <Text size="xs" c="dimmed" fw={600} tt="uppercase" px="sm" pt={4}>
+                    {group.label}
+                  </Text>
+                  {items.map((item) =>
+                    item.contour && item.contour !== CONTOUR ? (
+                      <NavLink
+                        key={item.to}
+                        href={contourHref(item.contour, item.to)}
+                        label={item.label}
+                        description={item.contour === 'training' ? 'в учебном контуре' : 'в рабочем контуре'}
+                        leftSection={<item.icon size={18} stroke={1.6} />}
+                      />
+                    ) : (
+                      <NavLink
+                        key={item.to}
+                        component={RouterLink}
+                        to={item.to}
+                        label={item.label}
+                        leftSection={<item.icon size={18} stroke={1.6} />}
+                        active={item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)}
+                        onClick={close}
+                      />
+                    ),
+                  )}
+                </Stack>
+              )
+            })}
+          </Stack>
+        </ScrollArea>
+        <Stack gap={2} pt={4} style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+          {training && instructor && (
             <NavLink
-              key={item.to}
-              component={RouterLink}
-              to={item.to}
-              label={item.label}
-              leftSection={<item.icon size={18} stroke={1.6} />}
-              active={item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)}
-              onClick={close}
-            />
-          ))}
-        </Stack>
-        <Stack gap={2} mb={isStaff ? 2 : 0}>
-          {training ? (
-            <>
-              {instructor && (
-                <NavLink
-                  href={user?.contour.urls.simulator}
-                  target="_blank"
-                  label="Симулятор датчиков"
-                  leftSection={<IconRoute size={18} stroke={1.6} />}
-                />
-              )}
-              <NavLink
-                href={user?.contour.urls.combat}
-                label="Перейти в рабочий контур"
-                leftSection={<IconShieldCheck size={18} stroke={1.6} />}
-              />
-            </>
-          ) : (
-            <NavLink
-              href={user?.contour.urls.training}
+              href={user?.contour.urls.simulator}
               target="_blank"
-              label="Учебный контур"
-              description="Полигон для обучения"
+              label="Симулятор датчиков"
               leftSection={<IconRoute size={18} stroke={1.6} />}
             />
           )}
-        </Stack>
-        {(isStaff || can(GRAFANA_PERM) || can(SYSTEM_PERM)) && (
-          <Stack gap={2}>
-            {isStaff && (
-              <NavLink href="/admin/" label="Администрирование" leftSection={<IconSettings size={18} stroke={1.6} />} />
-            )}
-            {(can(GRAFANA_PERM) || can(SYSTEM_PERM)) && (
+          <NavLink
+            href={contourHref(training ? 'combat' : 'training')}
+            label={training ? 'Рабочий контур' : 'Учебный контур'}
+            description={training ? 'вернуться к работе района' : 'полигон для заданий и учений'}
+            leftSection={training ? <IconShieldCheck size={18} stroke={1.6} /> : <IconRoute size={18} stroke={1.6} />}
+          />
+          {/* панели наблюдаемости подключены к основной системе */}
+          {!training && (can(GRAFANA_PERM) || can(SYSTEM_PERM)) && (
+            <NavLink
+              label="Панели Grafana"
+              description="Бизнес-показатели"
+              leftSection={<IconPresentationAnalytics size={18} stroke={1.6} />}
+              onClick={() => openObservability('business')}
+            />
+          )}
+          {!training && can(SYSTEM_PERM) && (
+            <>
               <NavLink
-                label="Панели Grafana"
-                description="Бизнес-показатели"
-                leftSection={<IconPresentationAnalytics size={18} stroke={1.6} />}
-                onClick={() => openObservability('business')}
+                label="Мониторинг системы"
+                description="Сервисы и очереди в Grafana"
+                leftSection={<IconChartBar size={18} stroke={1.6} />}
+                onClick={() => openObservability('system')}
               />
-            )}
-            {can(SYSTEM_PERM) && (
-              <>
-                <NavLink
-                  label="Мониторинг системы"
-                  description="Сервисы и очереди в Grafana"
-                  leftSection={<IconChartBar size={18} stroke={1.6} />}
-                  onClick={() => openObservability('system')}
-                />
-                <NavLink
-                  label="Prometheus"
-                  description="Метрики и цели сбора"
-                  leftSection={<IconActivityHeartbeat size={18} stroke={1.6} />}
-                  onClick={() => openObservability('prometheus')}
-                />
-              </>
-            )}
-          </Stack>
-        )}
+              <NavLink
+                label="Prometheus"
+                description="Метрики и цели сбора"
+                leftSection={<IconActivityHeartbeat size={18} stroke={1.6} />}
+                onClick={() => openObservability('prometheus')}
+              />
+            </>
+          )}
+        </Stack>
       </AppShell.Navbar>
 
       <AppShell.Main>

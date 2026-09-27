@@ -1,7 +1,7 @@
 # Полный стенд одной командой:  docker compose up -d --build
 # Демо-поток СМВУ:              docker compose --profile demo up -d replay
 # Учебный контур и симулятор:   docker compose --profile training up -d --build
-#                               (https://localhost:8443 · симулятор http://localhost:8095)
+#                               (https://localhost/training/ · симулятор http://localhost:8095)
 # Интерфейс: https://localhost  · API: /api/docs/ · Админка: /admin/ · Grafana: /grafana/
 
 # Образ собирает только сервис migrate; остальные backend-сервисы переиспользуют его
@@ -23,8 +23,10 @@ x-backend: &backend
     migrate:
       condition: service_completed_successfully
 
-# Учебный контур: тот же образ, но своя база, тема Kafka, Redis-индекс и help desk; вместо справочников
-# заказчика смонтирован полигон. Пересечься с боевым контуром ему негде.
+# Учебный контур — подсистема платформы на том же адресе (/training/): тот же образ, своя база, тема Kafka,
+# Redis-индекс и help desk; вместо справочников заказчика смонтирован полигон. Данные с боевым контуром
+# не пересекаются, а вход и учётные записи общие: токен выдаёт основная система, учётки, роли и команды
+# читаются из её базы (IDENTITY_DATABASE_URL, apps/accounts/identity.py).
 x-training: &training
   image: collector-forecast/backend:local
   pull_policy: never
@@ -39,7 +41,7 @@ x-training: &training
     HELPDESK_URL: http://mock-helpdesk-training:8080
     # кадры камер — тот же эмулятор VMS (он без состояния); страницы просмотра в учебном контуре нет
     VMS_LIVE_URL: ""
-    CSRF_TRUSTED_ORIGINS: ${TRAINING_URL:-https://localhost:8443}
+    IDENTITY_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     DATA_DIR: /data
     ARTIFACTS_DIR: /artifacts
   volumes:
@@ -208,6 +210,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # учётные записи берутся из базы основной системы — она должна быть готова
+      migrate:
+        condition: service_completed_successfully
 
   backend-training:
     <<: *training
@@ -269,6 +274,7 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
+      # прежний адрес учебного контура: перенаправляет в /training/
       - "${TRAINING_PORT:-8443}:8443"
     # Адреса сайта, сертификат и сервер тайлов — из .env (подставляются в Caddyfile)
     environment:

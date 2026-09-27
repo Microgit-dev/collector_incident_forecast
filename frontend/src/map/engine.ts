@@ -3,6 +3,11 @@
  * Обработчик тайлов собирается отдельным модулем и подключается явно — иначе после сборки он ищется
  * рядом с бандлом и не находится. Логотип и ссылка на библиотеку не выводятся; остаётся только
  * обязательная по лицензии данных пометка «© OpenStreetMap».
+ *
+ * Шрифты подписей (glyph-диапазоны Noto Sans) лежат у нас в public/map/glyphs: латиница, кириллица,
+ * типографские знаки и «№». Сервер подложки отдаёт их не всегда — CORS, прокси или закрытый контур, —
+ * и тогда MapLibre рисует кириллицу запасным локальным шрифтом по одному символу. Поэтому запросы этих
+ * диапазонов перехватываются и идут на свой origin, а редкие диапазоны по-прежнему берутся с сервера.
  */
 import * as maplibregl from 'maplibre-gl'
 import type { ErrorEvent, StyleSpecification } from 'maplibre-gl'
@@ -16,16 +21,34 @@ maplibregl.setWorkerUrl(workerUrl)
 export { maplibregl }
 export type { StyleSpecification }
 
-/** Без подложки (нет сети или сервер тайлов не настроен): видны только контуры зон и объектов. */
+export const LOCAL_FONTS = new Set(['noto_sans_regular', 'noto_sans_bold'])
+const LOCAL_RANGES = new Set(['0-255', '256-511', '1024-1279', '8192-8447', '8448-8703'])
+const GLYPH_PATH = /\/([^/]+)\/(\d+-\d+)\.pbf(?:\?.*)?$/
+
+export function localGlyphs(): string {
+  return `${window.location.origin}/map/glyphs/{fontstack}/{range}.pbf`
+}
+
+/** Адрес glyph-диапазона на своём сервере или null, если такого диапазона у нас нет. */
+export function localGlyphUrl(url: string): string | null {
+  const m = GLYPH_PATH.exec(url)
+  if (!m) return null
+  const font = decodeURIComponent(m[1]).split(',')[0].trim()
+  if (!LOCAL_FONTS.has(font) || !LOCAL_RANGES.has(m[2])) return null
+  return `${window.location.origin}/map/glyphs/${font}/${m[2]}.pbf`
+}
+
+/** Без подложки (нет сети или сервер тайлов не настроен): контуры зон и объектов, подписи — своими шрифтами. */
 export const BLANK_STYLE = (dark: boolean): StyleSpecification => ({
   version: 8,
+  glyphs: localGlyphs(),
   sources: {},
   layers: [{ id: 'background', type: 'background', paint: { 'background-color': dark ? '#1f2227' : '#eef0f3' } }],
 })
 
 export interface MapHandle {
   map: maplibregl.Map
-  /** подложка загрузилась: подписи (шрифты подложки) доступны */
+  /** подложка загрузилась (подписи работают и без неё — шрифты свои) */
   basemap: boolean
 }
 
@@ -46,6 +69,11 @@ export function createMap(
     dragRotate: false,
     pitchWithRotate: false,
     maxPitch: 0,
+    transformRequest: (url, resourceType) => {
+      if (resourceType !== 'Glyphs') return undefined
+      const local = localGlyphUrl(url)
+      return local ? { url: local } : undefined
+    },
   })
   map.touchZoomRotate.disableRotation()
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')

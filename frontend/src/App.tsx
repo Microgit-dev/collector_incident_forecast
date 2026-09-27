@@ -1,9 +1,11 @@
 import { Center, Loader } from '@mantine/core'
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { useAuth } from './auth/AuthContext'
+import { BASE, loginHref } from './contour'
 import { AppLayout } from './layout/AppLayout'
+import { AdministrationPage } from './pages/AdministrationPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
@@ -36,6 +38,7 @@ import { WorkspacePage } from './pages/WorkspacePage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) {
     return (
       <Center mih="100vh">
@@ -43,7 +46,13 @@ function RequireAuth({ children }: { children: ReactNode }) {
       </Center>
     )
   }
-  return user ? children : <Navigate to="/login" replace />
+  if (user) return children
+  // вход один на платформу — в основной системе; из учебного контура уходим туда с возвратом
+  if (BASE) {
+    window.location.replace(loginHref())
+    return null
+  }
+  return <Navigate to={loginHref(location.pathname + location.search)} replace />
 }
 
 export function App() {
@@ -87,6 +96,7 @@ export function App() {
             </Suspense>
           }
         />
+        <Route path="administration" element={<AdministrationPage />} />
         <Route path="wiki" element={<WikiPage />} />
         <Route path="wiki/:slug" element={<WikiPage />} />
         <Route path="data-import" element={<DataImportPage />} />

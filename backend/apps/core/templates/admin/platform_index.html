@@ -1,0 +1,24 @@
+{% extends "admin/index.html" %}
+{% comment %}
+  Главная админки: сначала задачи роли из матрицы ответственности (accounts/operations.py),
+  затем разделы — только те, на которые у пользователя есть права.
+{% endcomment %}
+
+{% block content %}
+<div id="content-main">
+  {% if my_operations %}
+  <div class="module" id="platform-operations">
+    <table>
+      <caption>Ваши задачи</caption>
+      {% for op in my_operations %}
+      <tr>
+        <th scope="row"><a href="{{ op.url }}">{{ op.title }}</a></th>
+        <td>{{ op.description }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}

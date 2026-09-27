@@ -243,6 +243,8 @@
 
 <!-- include: ../monitoring.md -->
 
+<!-- include: ../platform.md -->
+
 <!-- include: ../training.md -->
 
 <!-- include: ../wiki.md -->
@@ -392,11 +394,11 @@ docker compose --profile training up -d --build   # учебный контур 
 |---|---|
 | https://localhost | Интерфейс (сертификат локального центра Caddy — подтвердите исключение) |
 | https://localhost/api/docs/ | REST API (OpenAPI / Swagger) |
-| https://localhost/admin/ | Администрирование |
+| https://localhost/admin/ | Админка (открывается из меню «Администрирование» тем же входом) |
 | https://localhost/grafana/ | Мониторинг и бизнес-показатели |
 | https://localhost/helpdesk/ | Эмулятор системы учёта заявок |
 | http://localhost:8081 | Kafka UI |
-| https://localhost:8443 | Учебный контур (профиль `training`) |
+| https://localhost/training/ | Учебный контур (профиль `training`), вход общий |
 | http://localhost:8095 | Симулятор датчиков (профиль `training`, доступен только с этой машины) |
 
 Так запускается демо-стенд. Установка на серверы заказчика — своё имя сервера и сертификат, AD,
@@ -645,7 +647,7 @@ docker compose exec backend python manage.py demo_scenario sensor    # отка�
 docker compose --profile training up -d --build
 ```
 
-1. https://localhost:8443, вход `disp.petrov`. «Учебные задания» → «Пожар: от сигнала до решения».
+1. https://localhost/training/ (или переключатель «Учебный контур» в шапке), вход `disp.petrov`. «Учебные задания» → «Пожар: от сигнала до решения».
 2. Урок приводит объект Мю полигона в исходное состояние и просит симулятор запустить сценарий
    `fire`. Через 15–20 секунд в очереди появляется карточка пожара (сработка индикатора).
 3. Панель задания ведёт по шагам: открыть, взять в работу, решить («Выезд бригады», «Реальное

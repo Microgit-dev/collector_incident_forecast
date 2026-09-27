@@ -5,7 +5,7 @@
 	acme_dns duckdns {env.DUCKDNS_TOKEN}
 }
 
-# Общее для обоих контуров: SPA и заголовки безопасности
+# SPA и заголовки безопасности (корень и подсистема /training/)
 (spa) {
 	# SPA: неизвестные пути отдаются index.html, маршрутизирует React Router
 	handle {
@@ -61,49 +61,9 @@
 	}
 }
 
-{$SITE_ADDRESS} {
-	encode zstd gzip
-
-	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
-	handle @backend {
-		reverse_proxy backend:8000
-	}
-
-	import observability
-
-	handle_path /helpdesk* {
-		reverse_proxy mock-helpdesk:8080
-	}
-
-	# Эмулятор видеонаблюдения: страница просмотра камеры (у заказчика — ссылка на его VMS, VMS_LIVE_URL)
-	handle /vms/* {
-		reverse_proxy mock-vms:8080
-	}
-
-	import spa
-}
-
-{$TRAINING_ADDRESS} {
-	encode zstd gzip
-
-	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
-	handle @backend {
-		reverse_proxy backend-training:8000
-	}
-
-	handle_path /helpdesk* {
-		reverse_proxy mock-helpdesk-training:8080
-	}
-
-	import spa
-}
-
-# TLS 1.2+ (ТЗ §11 — шифрование при передаче). Адреса и сертификат задаются в .env:
-#   SITE_ADDRESS     — имя сервера, по умолчанию localhost (стенд);
-#   TLS              — internal (внутренний CA Caddy, по умолчанию) или пути к сертификату и ключу
-#                      заказчика внутри контейнера: /certs/fullchain.pem /certs/privkey.pem
-https://localhost, https://127.0.0.1 {
-	tls {$TLS:internal}
+# Платформа целиком на одном адресе: основная система в корне, учебный контур — подсистема /training/
+# со своим бэкендом, базой и help desk, но с тем же входом (токен основной системы) и тем же интерфейсом.
+(platform) {
 	encode zstd gzip
 
 	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
@@ -123,25 +83,48 @@ https://localhost, https://127.0.0.1 {
 		reverse_proxy mock-vms:8080
 	}
 
+	# Учебный контур (профиль training): префикс снимается, бэкенд строит ссылки админки с ним
+	# (FORCE_SCRIPT_NAME). Статика админки и ресурсы интерфейса общие — берутся из корня.
+	redir /training /training/
+	handle_path /training/* {
+		@training-backend path /api/* /admin/* /media/* /health/ /ws/*
+		handle @training-backend {
+			reverse_proxy backend-training:8000
+		}
+		handle_path /helpdesk* {
+			reverse_proxy mock-helpdesk-training:8080
+		}
+		import spa
+	}
+
 	import spa
 }
 
-# Учебный контур (профиль training): тот же интерфейс, свой бэкенд и help desk.
-# Другой порт — другой origin, поэтому вход и токены учебного и боевого контуров не смешиваются.
+# Прежний отдельный адрес учебного контура (порт 8443) ведёт в подсистему /training/
+(training-redirect) {
+	redir https://{host}/training{uri} 302
+}
+
+{$SITE_ADDRESS} {
+	import platform
+}
+
+{$TRAINING_ADDRESS} {
+	import training-redirect
+}
+
+# TLS 1.2+ (ТЗ §11 — шифрование при передаче). Адреса и сертификат задаются в .env:
+#   SITE_ADDRESS     — имя сервера, по умолчанию localhost (стенд);
+#   TLS              — internal (внутренний CA Caddy, по умолчанию) или пути к сертификату и ключу
+#                      заказчика внутри контейнера: /certs/fullchain.pem /certs/privkey.pem
+https://localhost, https://127.0.0.1 {
+	tls {$TLS:internal}
+	import platform
+}
+
 https://localhost:8443, https://127.0.0.1:8443 {
 	tls {$TLS:internal}
-	encode zstd gzip
-
-	@backend path /api/* /admin/* /static/* /media/* /health/ /ws/*
-	handle @backend {
-		reverse_proxy backend-training:8000
-	}
-
-	handle_path /helpdesk* {
-		reverse_proxy mock-helpdesk-training:8080
-	}
-
-	import spa
+	import training-redirect
 }
 
 :2019 {

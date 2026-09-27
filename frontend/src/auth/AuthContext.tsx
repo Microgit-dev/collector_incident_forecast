@@ -42,7 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pending = [
       refresh ? api('/auth/logout/', { method: 'POST', body: { refresh } }) : Promise.resolve(),
       // и закрыть сеанс Grafana / Prometheus (cookie, по которой их пускает Caddy)
-      api('/observability/session/', { method: 'DELETE' }),
+      api('/observability/session/', { method: 'DELETE', contour: 'combat' }),
+      // и закрыть сеансы админки обеих подсистем, открытые без второго пароля
+      api('/auth/admin-session/', { method: 'DELETE', contour: 'combat' }),
+      api('/auth/admin-session/', { method: 'DELETE', contour: 'training' }),
     ]
     tokens.clear()
     queryClient.clear()

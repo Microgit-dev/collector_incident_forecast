@@ -32,6 +32,27 @@ export interface Me {
   permissions: string[]
   is_superuser: boolean
   contour: Contour
+  /** административные операции, доступные пользователю (матрица accounts/operations.py) */
+  operations: Operation[]
+  /** админка открывается без второго входа */
+  admin: boolean
+}
+
+export interface Operation {
+  code: string
+  title: string
+  description: string
+  page: string | null
+  admin: string | null
+  contour: 'combat' | 'training'
+  scope: string
+  responsible: boolean
+}
+
+export interface OperationsMatrix {
+  roles: Record<string, string>
+  matrix: (Omit<Operation, 'page' | 'admin' | 'responsible'> & { responsible: string[] })[]
+  mine: Operation[]
 }
 
 export interface Contour {
@@ -1179,7 +1200,7 @@ export interface StructureSecondment {
 }
 
 export interface Structure {
-  can: { zones: boolean; objects: boolean; sensors: boolean; staff: boolean }
+  can: { zones: boolean; objects: boolean; add_objects: boolean; sensors: boolean; add_sensors: boolean; staff: boolean }
   district: { id: number; name: string }
   zones: StructureZone[]
   objects: StructureObject[]

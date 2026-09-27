@@ -27,6 +27,7 @@ import type { RiskLevel, WorkOrderStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
 import { useCompleteOrder } from '../components/CompleteOrder'
+import { BASE } from '../contour'
 
 interface Recommendation {
   id: number
@@ -311,7 +312,7 @@ function Orders() {
             Обновить из системы заявок
           </Button>
         )}
-        <Anchor href="/helpdesk/" target="_blank" size="xs">
+        <Anchor href={`${BASE}/helpdesk/`} target="_blank" size="xs">
           Система заявок заказчика (эмуляция) ↗
         </Anchor>
         <Text size="xs" c="dimmed">

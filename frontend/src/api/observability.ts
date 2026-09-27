@@ -15,7 +15,7 @@ export async function openObservability(target: Target): Promise<void> {
   // Вкладку открываем сразу, по клику: после await браузер счёл бы её всплывающим окном
   const tab = window.open('about:blank', '_blank')
   try {
-    const links = await api<Record<Target, string | null>>('/observability/session/', { method: 'POST' })
+    const links = await api<Record<Target, string | null>>('/observability/session/', { method: 'POST', contour: 'combat' })
     const url = links[target]
     if (!url) throw new Error('Панель недоступна вашей роли')
     if (tab) tab.location.href = url

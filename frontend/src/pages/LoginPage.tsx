@@ -1,18 +1,38 @@
 import { Alert, Button, Center, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core'
-import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
+import { returnTo } from '../api/admin'
 import { useAuth } from '../auth/AuthContext'
+import { BASE, loginHref, safeNext } from '../contour'
+
+/**
+ * Единственная страница входа платформы (в корне). Учебный контур и админка своих форм входа не имеют:
+ * они присылают сюда с ?next=, а после входа (или сразу, если вход уже выполнен) возвращаем обратно.
+ */
+function leavesThisApp(next: string): boolean {
+  // другая подсистема или админка — полная загрузка страницы, не переход внутри приложения
+  return next.startsWith('/training') || next.startsWith('/admin/')
+}
 
 export function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const next = safeNext(params.get('next'))
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  if (user) return <Navigate to="/" replace />
+  useEffect(() => {
+    // в подсистеме своей формы нет — вход в основной системе с возвратом сюда
+    if (BASE) window.location.replace(loginHref(`${BASE}/`))
+    else if (user && next && leavesThisApp(next)) void returnTo(next)
+  }, [user, next])
+
+  if (BASE || (user && next && leavesThisApp(next))) return null
+  if (user) return <Navigate to={next ?? '/'} replace />
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -20,7 +40,8 @@ export function LoginPage() {
     setError(null)
     try {
       await login(username, password)
-      navigate('/', { replace: true })
+      if (next && leavesThisApp(next)) await returnTo(next)
+      else navigate(next ?? '/', { replace: true })
     } catch {
       setError('Неверный логин или пароль')
     } finally {

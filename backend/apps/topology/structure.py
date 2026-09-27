@@ -125,13 +125,13 @@ def suggest_adjacent(zone: Node) -> list[Node]:
 # ---------- объекты ----------
 
 
-def _target_zone(user, parent_id) -> Node:
+def _target_zone(user, parent_id, perm: str = "topology.add_node") -> Node:
     parent = Node.objects.filter(pk=parent_id).first() if parent_id else None
     if parent is None:
         raise StructureError("Выберите зону")
     if parent.kind not in (NodeKind.ZONE, NodeKind.DISTRICT):
         raise StructureError("Объект создаётся в зоне или районе")
-    _check(user, "topology.add_node", parent)
+    _check(user, perm, parent)
     return parent
 
 
@@ -179,7 +179,8 @@ def update_object(user, obj: Node, data: dict) -> Node:
 def move_object(user, obj: Node, zone_id: int) -> Node:
     """Перенос объекта в другую зону (со всеми частями, датчиками и карточками — они на поддереве)."""
     _check(user, "topology.change_node", obj)
-    target = _target_zone(user, zone_id)
+    # перенос — правка объекта, а не создание нового: хватает права на правку в обеих зонах
+    target = _target_zone(user, zone_id, "topology.change_node")
     if target.pk == obj.pk or target.path.startswith(obj.path):
         raise StructureError("Нельзя перенести объект внутрь самого себя")
     Node.objects.get(pk=obj.pk).move(Node.objects.get(pk=target.pk), pos="sorted-child")

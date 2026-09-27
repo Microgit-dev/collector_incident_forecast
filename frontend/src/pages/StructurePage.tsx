@@ -111,16 +111,14 @@ function StructureMap({
         source: 'point',
         paint: { 'circle-radius': 8, 'circle-color': '#e03131', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
       })
-      if (h.basemap) {
-        m.addLayer({
-          id: 'zone-labels',
-          type: 'symbol',
-          source: 'zone-labels',
-          maxzoom: 15,
-          layout: { 'text-field': ['get', 'name'], 'text-font': ['noto_sans_bold'], 'text-size': 13 },
-          paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#fff', 'text-halo-width': 2 },
-        })
-      }
+      m.addLayer({
+        id: 'zone-labels',
+        type: 'symbol',
+        source: 'zone-labels',
+        maxzoom: 15,
+        layout: { 'text-field': ['get', 'name'], 'text-font': ['noto_sans_bold'], 'text-size': 13 },
+        paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#fff', 'text-halo-width': 2 },
+      })
       const editor = new PolygonEditor(m, () => undefined)
       m.on('click', (e) => {
         const hit = m.queryRenderedFeatures(e.point, { layers: ['objects-fill'] })
@@ -775,18 +773,21 @@ function ObjectsTab({
   const rows = data.objects.filter((o) => !filter || String(o.zone) === filter)
   return (
     <Stack gap="xs">
-      <Button
-        size="xs"
-        leftSection={<IconPlus size={14} />}
-        onClick={() => {
-          setCreating(true)
-          setName('')
-          setZone(filter)
-          startPick()
-        }}
-      >
-        Новый объект
-      </Button>
+      {/* новые объекты заводит аналитик; руководитель правит объекты своей зоны */}
+      {data.can.add_objects && (
+        <Button
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          onClick={() => {
+            setCreating(true)
+            setName('')
+            setZone(filter)
+            startPick()
+          }}
+        >
+          Новый объект
+        </Button>
+      )}
       <Select size="xs" placeholder="Все зоны" data={zoneOptions} value={filter} onChange={setFilter} clearable />
       {rows.map((o) => (
         <UnstyledButton key={o.id} onClick={() => setObjectId(o.id)} py={6} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
@@ -883,7 +884,8 @@ function SensorsTab({
         onChange={(v) => setObjectId(v ? Number(v) : null)}
         placeholder="выберите объект или щёлкните его на карте"
       />
-      {objectId != null && !creating && (
+      {/* новые каналы заводит аналитик; руководитель размещает существующие */}
+      {data.can.add_sensors && objectId != null && !creating && (
         <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => { setCreating(true); setTarget(String(objectId)) }}>
           Новый датчик
         </Button>

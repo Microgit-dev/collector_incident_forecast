@@ -1,8 +1,27 @@
 from django.contrib import admin
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group
 
+from .authentication import is_identity_provider
 from .models import Team, User
 from .services import sync_team_scopes
+
+
+class MirroredAdmin:
+    """
+    В учебном контуре учётки, роли и команды — копия основной системы (identity.py): только просмотр,
+    правка — в админке основной системы.
+    """
+
+    def has_add_permission(self, request, *args):
+        return is_identity_provider() and super().has_add_permission(request, *args)
+
+    def has_change_permission(self, request, obj=None):
+        return is_identity_provider() and super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return is_identity_provider() and super().has_delete_permission(request, obj)
 
 
 class MemberInline(admin.TabularInline):
@@ -20,7 +39,7 @@ class MemberInline(admin.TabularInline):
 
 
 @admin.register(Team)
-class TeamAdmin(admin.ModelAdmin):
+class TeamAdmin(MirroredAdmin, admin.ModelAdmin):
     list_display = ("name", "kind", "scope_node", "parent", "lead", "is_active")
     list_filter = ("kind", "is_active")
     search_fields = ("name", "code")
@@ -33,7 +52,7 @@ class TeamAdmin(admin.ModelAdmin):
 
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(MirroredAdmin, BaseUserAdmin):
     list_display = ("username", "last_name", "first_name", "team", "scope_node", "is_active", "is_staff")
     list_filter = ("groups", "team", "is_active", "is_staff")
     autocomplete_fields = ("scope_node", "team")
@@ -52,3 +71,11 @@ class UserAdmin(BaseUserAdmin):
         if obj.team_id and obj.team.scope_node_id:
             obj.scope_node = obj.team.scope_node
         super().save_model(request, obj, form, change)
+
+
+admin.site.unregister(Group)
+
+
+@admin.register(Group)
+class GroupAdmin(MirroredAdmin, BaseGroupAdmin):
+    pass

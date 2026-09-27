@@ -80,10 +80,14 @@ class StructureView(APIView):
 
     def get(self, request):
         user = request.user
+        # вкладка открыта, если можно править; «новый объект / датчик» — только тем, кто их заводит
+        # (кто за что отвечает — accounts/operations.py)
         can = {
             "zones": user.has_perm("topology.manage_zones"),
-            "objects": user.has_perm("topology.add_node"),
-            "sensors": user.has_perm("assets.add_channel"),
+            "objects": user.has_perm("topology.add_node") or user.has_perm("topology.change_node"),
+            "add_objects": user.has_perm("topology.add_node"),
+            "sensors": user.has_perm("assets.add_channel") or user.has_perm("assets.change_channel"),
+            "add_sensors": user.has_perm("assets.add_channel"),
             "staff": user.has_perm("accounts.assign_staff"),
         }
         if not any(can.values()):

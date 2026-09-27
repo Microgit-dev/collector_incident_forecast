@@ -4,6 +4,9 @@
 
 Видимость данных дополнительно ограничивается зоной ответственности (User.scope_node),
 а право accounts.view_all_scopes снимает это ограничение (ОДС, аналитик, администратор).
+
+Кто отвечает за административные операции (объекты, датчики, контракты датчиков, вики, учебный
+контур, пользователи) — матрица в operations.py; права ниже должны ей соответствовать (test_operations).
 """
 
 from dataclasses import dataclass, field
@@ -69,14 +72,18 @@ ROLES: dict[Role, RoleSpec] = {
             "analytics.export_report",
             "notifications.change_notification",
             "audit.view_actionlog",
-            # структура зоны: зоны, сотрудники, командирование, объекты и датчики на карте
+            # обустройство объектов своей зоны: границы и смежность зон, правка объектов, оборудование,
+            # размещение датчиков; новые объекты и каналы заводит аналитик (operations.py)
             "topology.manage_zones",
-            "topology.add_node",
             "topology.change_node",
-            "assets.add_channel",
             "assets.change_channel",
+            "assets.add_equipment",
+            "assets.change_equipment",
+            # расстановка сотрудников по зонам и командирование
             "accounts.assign_staff",
             "accounts.view_secondment",
+            # информационная база: статьи, разделы, публикация
+            "wiki.*",
             # учения: сценарий, участники, старт и досрочная остановка
             "training.add_exercise",
             "training.change_exercise",
@@ -124,11 +131,15 @@ ROLES: dict[Role, RoleSpec] = {
             "accounts.view_all_scopes",
             "normalization.*",
             "forecasting.*",
-            # объекты и датчики: привязка к местности, новые каналы
+            # новые объекты и датчики, контракты датчиков (normalization.*), правка объектов
             "topology.add_node",
             "topology.change_node",
             "assets.add_channel",
             "assets.change_channel",
+            # информационные материалы: статьи вики (разделы и публикацию ведёт руководитель)
+            "wiki.view_*",
+            "wiki.add_wikipage",
+            "wiki.change_wikipage",
             "ingestion.*",
             "incidents.decide_incident",
             "analytics.export_report",

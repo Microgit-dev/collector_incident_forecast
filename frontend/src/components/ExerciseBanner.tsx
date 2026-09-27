@@ -6,17 +6,23 @@ import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
 import type { Exercise } from '../api/types'
+import { CONTOUR, contourHref } from '../contour'
 
-/** Плашка участнику: назначенные и идущие учения, «ознакомлен», роль «молчащего». */
+/**
+ * Плашка участнику: назначенные и идущие учения, «ознакомлен», роль «молчащего».
+ * Учения живут в учебном контуре, но плашка видна и в основной системе: участник узнаёт о них
+ * на своём рабочем месте, а «Подробнее» ведёт в учебный контур без повторного входа.
+ */
 export function ExerciseBanner() {
   const client = useQueryClient()
   const mine = useQuery({
     queryKey: ['exercises', 'mine'],
-    queryFn: () => api<Exercise[]>('/exercises/mine/'),
+    // учебный контур не запущен — просто нет плашки
+    queryFn: () => api<Exercise[]>('/exercises/mine/', { contour: 'training' }).catch(() => [] as Exercise[]),
     refetchInterval: 30_000,
   })
   const confirm = useMutation({
-    mutationFn: (id: number) => api<Exercise>(`/exercises/${id}/confirm/`, { method: 'POST' }),
+    mutationFn: (id: number) => api<Exercise>(`/exercises/${id}/confirm/`, { method: 'POST', contour: 'training' }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['exercises'] }),
   })
   if (!mine.data?.length) return null
@@ -49,9 +55,15 @@ export function ExerciseBanner() {
                     Ознакомлен(а)
                   </Button>
                 )}
-                <Anchor component={Link} to={`/exercises/${e.id}`} size="sm" c={running ? 'white' : undefined}>
-                  Подробнее
-                </Anchor>
+                {CONTOUR === 'training' ? (
+                  <Anchor component={Link} to={`/exercises/${e.id}`} size="sm" c={running ? 'white' : undefined}>
+                    Подробнее
+                  </Anchor>
+                ) : (
+                  <Anchor href={contourHref('training', `/exercises/${e.id}`)} size="sm" c={running ? 'white' : undefined}>
+                    Подробнее в учебном контуре
+                  </Anchor>
+                )}
               </Group>
             </Group>
           </Alert>

@@ -1,7 +1,12 @@
 /**
  * Тонкий клиент REST API: JWT в заголовке, прозрачное обновление access-токена по refresh,
  * ошибки API превращаются в ApiError с текстом от бэкенда.
+ *
+ * Запросы идут в API своей подсистемы (корень или /training/). Вход, обновление токена и выход — всегда
+ * в основную систему: она выдаёт токены на всю платформу. Вики — одна база знаний платформы.
  */
+
+import { BASE, prefixOf, type ContourCode } from '../contour'
 
 const ACCESS_KEY = 'cf.access'
 const REFRESH_KEY = 'cf.refresh'
@@ -81,8 +86,16 @@ async function refreshAccess(): Promise<boolean> {
 
 type Query = Record<string, string | number | boolean | undefined | null | string[]>
 
-function buildUrl(path: string, query?: Query): string {
-  const url = new URL(path.startsWith('/api') ? path : `/api/v1${path}`, window.location.origin)
+// Общие для всей платформы разделы API — всегда основной системы
+const PLATFORM = ['/auth/token/', '/auth/logout/', '/wiki/']
+
+function apiPrefix(path: string, contour?: ContourCode): string {
+  if (contour) return prefixOf(contour)
+  return PLATFORM.some((p) => path.startsWith(p)) ? '' : BASE
+}
+
+function buildUrl(path: string, query?: Query, contour?: ContourCode): string {
+  const url = new URL(path.startsWith('/api') ? path : `${apiPrefix(path, contour)}/api/v1${path}`, window.location.origin)
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value === undefined || value === null || value === '') continue
     url.searchParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
@@ -92,14 +105,15 @@ function buildUrl(path: string, query?: Query): string {
 
 export async function api<T>(
   path: string,
-  options: { method?: string; body?: unknown; query?: Query } = {},
+  // contour — запрос в другую подсистему тем же входом (например, учения из основной системы)
+  options: { method?: string; body?: unknown; query?: Query; contour?: ContourCode } = {},
   retry = true,
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (tokens.access) headers.Authorization = `Bearer ${tokens.access}`
 
-  const response = await fetch(buildUrl(path, options.query), {
+  const response = await fetch(buildUrl(path, options.query, options.contour), {
     method: options.method ?? 'GET',
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

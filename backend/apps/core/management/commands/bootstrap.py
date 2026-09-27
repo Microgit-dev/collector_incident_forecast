@@ -65,6 +65,7 @@ PERIODIC = [
     ("Учения: старт по таймеру и завершение", "apps.training.tasks.exercise_tick", 15),
     ("Погода Open-Meteo: последние сутки и прогноз", "apps.integrations.tasks.sync_weather", 6 * 3600),
     ("Реестр оборудования из учётной системы", "apps.integrations.tasks.sync_registry", 86400),
+    ("Учётные записи из основной системы", "apps.accounts.tasks.sync_identity", 300),
 ]
 # Учебный контур не обучает модели на полигоне и не ходит во внешние сервисы
 COMBAT_ONLY = {
@@ -74,6 +75,8 @@ COMBAT_ONLY = {
     "apps.integrations.tasks.sync_weather",
     "apps.integrations.tasks.sync_registry",
 }
+# Учебный контур зеркалирует учётные записи основной системы (apps/accounts/identity.py)
+TRAINING_ONLY = {"apps.accounts.tasks.sync_identity"}
 
 
 class Command(BaseCommand):
@@ -115,6 +118,7 @@ class Command(BaseCommand):
         self._reference()
         self._demo()
         self._superuser()
+        self._identity()
         self.stdout.write(self.style.SUCCESS("bootstrap done"))
 
     def _schedules(self):
@@ -123,6 +127,8 @@ class Command(BaseCommand):
 
         for name, task, seconds in PERIODIC:
             if settings.CONTOUR != "combat" and task in COMBAT_ONLY:
+                continue
+            if settings.CONTOUR == "combat" and task in TRAINING_ONLY:
                 continue
             interval, _ = IntervalSchedule.objects.get_or_create(
                 every=seconds, period=IntervalSchedule.SECONDS
@@ -169,6 +175,13 @@ class Command(BaseCommand):
         call_command("seed_geo", stdout=self.stdout)
         # камеры у входов и вдоль трассы: проверка тревоги по камерам (эмулятор VMS)
         call_command("seed_cameras", stdout=self.stdout)
+
+    def _identity(self):
+        """Учебный контур: учётки, роли и команды — из основной системы, до первого входа сотрудников."""
+        from apps.accounts.identity import enabled, sync_all
+
+        if enabled():
+            self.stdout.write(f"identity: {sync_all()}")
 
     def _superuser(self):
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")

@@ -23,7 +23,7 @@ docker compose up -d --build      # первая сборка ~5–10 минут
 |---|---|
 | Интерфейс диспетчера | https://localhost (сертификат локального CA Caddy — подтвердите исключение) |
 | API (OpenAPI/Swagger) | https://localhost/api/docs/ |
-| Администрирование | https://localhost/admin/ |
+| Администрирование | меню → «Администрирование» (админка https://localhost/admin/ открывается тем же входом) |
 | Мониторинг (Grafana) | https://localhost/grafana/ |
 | Kafka UI | http://localhost:8081 |
 
@@ -94,8 +94,10 @@ docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59
 docker compose --profile demo up -d replay
 ```
 
-Учебный контур и симулятор датчиков: отдельная база и тема Kafka, полигон из трёх объектов. Интерфейс
-учебного контура — https://localhost:8443, симулятор (консоль и веб) — http://localhost:8095.
+Учебный контур и симулятор датчиков: отдельная база и тема Kafka, полигон из трёх объектов. Учебный
+контур — подсистема на том же адресе, https://localhost/training/, вход общий с основной системой
+(переключатель в шапке). Симулятор (консоль и веб) — http://localhost:8095. Как устроены общий вход,
+матрица ответственности ролей и админка — [docs/platform.md](docs/platform.md).
 Подробности в [simulator/README.md](simulator/README.md); учебные задания по ролям — в [docs/training.md](docs/training.md).
 
 Режим просмотра истории (показания объекта и канала за любой период с 2019 года) — в [docs/history.md](docs/history.md).

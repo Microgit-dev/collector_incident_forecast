@@ -2,6 +2,7 @@ from rest_framework import permissions, serializers, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .. import operations
 from ..models import Team, User
 from ..roles import ROLES, Role
 from ..selectors import teams_with_members
@@ -20,6 +21,8 @@ class MeSerializer(serializers.ModelSerializer):
     team = TeamRefSerializer(allow_null=True)
     command_chain = serializers.SerializerMethodField()
     contour = serializers.SerializerMethodField()
+    operations = serializers.SerializerMethodField()
+    admin = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -38,6 +41,8 @@ class MeSerializer(serializers.ModelSerializer):
             "permissions",
             "is_superuser",
             "contour",
+            "operations",
+            "admin",
         )
 
     def get_contour(self, obj: User) -> dict:
@@ -46,6 +51,13 @@ class MeSerializer(serializers.ModelSerializer):
 
         return {"code": settings.CONTOUR, "urls": settings.CONTOUR_URLS}
 
+    def get_operations(self, obj: User) -> list[dict]:
+        """Административные операции, доступные пользователю, и где они выполняются."""
+        return [_operation(op, obj) for op in operations.operations_for(obj)]
+
+    def get_admin(self, obj: User) -> bool:
+        return operations.can_use_admin(obj)
+
     def get_permissions(self, obj: User) -> list[str]:
         # Фронтенд прячет недоступные действия по этому списку; реальная проверка — на бэкенде
         return sorted(obj.get_all_permissions())
@@ -53,6 +65,19 @@ class MeSerializer(serializers.ModelSerializer):
     def get_command_chain(self, obj: User) -> list[dict]:
         """Вышестоящие команды: кому уходит эскалация, если смена не отреагировала."""
         return TeamRefSerializer(obj.team.chain()[1:], many=True).data if obj.team else []
+
+
+def _operation(op: operations.Operation, user: User) -> dict:
+    return {
+        "code": op.code,
+        "title": op.title,
+        "description": op.description,
+        "page": op.page,
+        "admin": op.admin,
+        "contour": op.contour,
+        "scope": op.scope,
+        "responsible": any(g in {r.value for r in op.roles} for g in user.role_codes),
+    }
 
 
 class MemberSerializer(serializers.ModelSerializer):
@@ -103,3 +128,18 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(MeSerializer(request.user).data)
+
+
+class OperationsView(APIView):
+    """Матрица ответственности: какие роли отвечают за административные операции (видна всем)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(
+            {
+                "roles": operations.roles_title(),
+                "matrix": operations.matrix(),
+                "mine": [_operation(op, request.user) for op in operations.operations_for(request.user)],
+            }
+        )

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
 import { api, tokens } from '../api/client'
+import { BASE } from '../contour'
 import { RISK } from '../api/labels'
 import type { AppNotification } from '../api/types'
 
@@ -26,7 +27,7 @@ export function useNotificationStream(enabled: boolean) {
       if (closed) return
       const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
       // токен — в заголовке Sec-WebSocket-Protocol, не в адресе: адреса попадают в журналы серверов
-      socket = new WebSocket(`${scheme}://${window.location.host}/ws/notifications/`, ['jwt', tokens.access ?? ''])
+      socket = new WebSocket(`${scheme}://${window.location.host}${BASE}/ws/notifications/`, ['jwt', tokens.access ?? ''])
       socket.onopen = () => {
         attempt = 0
       }

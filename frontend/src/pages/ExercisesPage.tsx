@@ -31,6 +31,7 @@ import { ROLE } from '../api/labels'
 import { EXERCISE_STATUS, when } from '../api/exercises'
 import type { Exercise, ExerciseOptions } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { contourHref } from '../contour'
 
 /** Настройка учений: сценарий, объект полигона, темп, осложнение, участники, старт по кнопке или таймеру. */
 function SetupForm({ onDone }: { onDone: () => void }) {
@@ -284,8 +285,9 @@ export function ExercisesPage() {
         <Alert color="violet" icon={<IconRoute size={18} />} title="Учения проходят в учебном контуре">
           <Group justify="space-between" wrap="wrap">
             <Text size="sm">Там полигон и учебные данные, на работу района учения не влияют.</Text>
-            <Button component="a" href={user?.contour.urls.training} target="_blank" color="violet" size="xs">
-              Открыть учебный контур
+            {/* подсистема платформы: тот же вход, переход в той же вкладке */}
+            <Button component="a" href={contourHref('training', '/exercises')} color="violet" size="xs">
+              Перейти к учениям
             </Button>
           </Group>
         </Alert>

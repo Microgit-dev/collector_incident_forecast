@@ -5,13 +5,14 @@ from django.contrib.auth.models import AnonymousUser
 
 @database_sync_to_async
 def _user_from_token(raw: str):
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+    from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
 
-    auth = JWTAuthentication()
+    from apps.accounts.authentication import PlatformJWTAuthentication
+
+    auth = PlatformJWTAuthentication()
     try:
         return auth.get_user(auth.get_validated_token(raw))
-    except (InvalidToken, TokenError):
+    except (InvalidToken, TokenError, AuthenticationFailed):
         return AnonymousUser()
 
 

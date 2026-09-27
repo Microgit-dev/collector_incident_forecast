@@ -95,9 +95,14 @@ def test_only_managers_create_zones_and_objects(world, make_user):
     assert _client(analyst).post("/api/v1/topology/zones/", {"name": "Х"}, format="json").status_code == 400
 
 
-def test_manual_sensor_gets_its_own_id_and_can_be_attached(world):
+def test_manual_sensor_gets_its_own_id_and_can_be_attached(world, make_user):
+    # новый датчик заводит аналитик, разместить его на объекте своей зоны может руководитель
     head = world["head"]
-    response = _client(head).post(
+    analyst = make_user("analyst-s", "analyst", None)
+    assert _client(head).post(
+        "/api/v1/topology/sensors/", {"node": world["alpha"].pk, "name": "Х"}, format="json"
+    ).status_code in (400, 403)
+    response = _client(analyst).post(
         "/api/v1/topology/sensors/",
         {"node": world["alpha"].pk, "name": "Газ ПК5", "location": [37.6045, 55.7042]},
         format="json",

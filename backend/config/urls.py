@@ -4,9 +4,6 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.core.views import health
 
-admin.site.site_header = "Collector Forecast — администрирование"
-admin.site.site_title = "Collector Forecast"
-
 api_v1 = [
     path("", include("apps.accounts.api.urls")),
     path("", include("apps.topology.api.urls")),

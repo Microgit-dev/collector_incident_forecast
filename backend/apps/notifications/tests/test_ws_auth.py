@@ -24,7 +24,9 @@ def _user_for(scope):
 @pytest.mark.django_db(transaction=True)
 def test_middleware_authenticates_by_subprotocol_not_by_url(make_user):
     user = make_user("petrov", "unit_dispatcher")
-    token = str(AccessToken.for_user(user))
+    access = AccessToken.for_user(user)
+    access["ctr"] = "combat"
+    token = str(access)
     assert _user_for({"type": "websocket", "subprotocols": ["jwt", token], "query_string": b""}).pk == user.pk
     # токен в адресе попадал в журналы сервера — больше не принимается
     url_only = {"type": "websocket", "subprotocols": [], "query_string": f"token={token}".encode()}

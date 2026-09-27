@@ -40,7 +40,8 @@ SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008"]
 USE_X_FORWARDED_HOST = True
 
 DJANGO_APPS = [
-    "django.contrib.admin",
+    # админка по разделам ответственности (apps/core/admin_site.py)
+    "apps.core.apps.PlatformAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -166,15 +167,32 @@ ARTIFACTS_DIR = Path(env("ARTIFACTS_DIR", default=str(BASE_DIR.parent / "artifac
 # Контур: combat — работа на данных заказчика; training — учебный полигон со своей базой, темой Kafka
 # и help desk. Один и тот же образ; контур меняет только окружение, поэтому учебный не может задеть боевой.
 CONTOUR = env("CONTOUR", default="combat")
+# Учебный контур — подсистема основной: тот же адрес с префиксом /training/, общий вход и учётные записи
+# (прежние COMBAT_URL / TRAINING_URL с отдельным портом 8443 больше не читаются)
+TRAINING_PREFIX = env("TRAINING_PREFIX", default="/training")
 CONTOUR_URLS = {
-    "combat": env("COMBAT_URL", default="https://localhost"),
-    "training": env("TRAINING_URL", default="https://localhost:8443"),
+    "combat": "/",
+    "training": f"{TRAINING_PREFIX}/",
     "simulator": env("SIMULATOR_URL", default="http://localhost:8095"),
 }
+# Кто ведёт учётные записи и выдаёт токены (apps/accounts/authentication.py)
+IDENTITY_CONTOUR = "combat"
+if CONTOUR != IDENTITY_CONTOUR:
+    # База основной системы — источник учётных записей, ролей и команд (только чтение, apps/accounts/identity.py)
+    if identity_url := env("IDENTITY_DATABASE_URL", default=""):
+        DATABASES["identity"] = {**env.db_url_config(identity_url), "TEST": {"MIRROR": "default"}}
+        if DATABASES["identity"]["ENGINE"] == "django.db.backends.postgresql":
+            DATABASES["identity"]["ENGINE"] = "django_prometheus.db.backends.postgresql"
+    DATABASE_ROUTERS = ["apps.accounts.identity.IdentityRouter"]
+    # За Caddy по префиксу /training/: ссылки админки строятся с ним, cookie не пересекаются с основными
+    FORCE_SCRIPT_NAME = TRAINING_PREFIX
+    SESSION_COOKIE_NAME = "training_sessionid"
+    CSRF_COOKIE_NAME = "training_csrftoken"
+    SESSION_COOKIE_PATH = CSRF_COOKIE_PATH = f"{FORCE_SCRIPT_NAME}/"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.PlatformJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["apps.core.permissions.RoleModelPermissions"],
@@ -206,6 +224,10 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
+    # логин, а не id: один токен действует в основной системе и в учебном контуре, где id другие
+    "USER_ID_FIELD": "username",
+    "USER_ID_CLAIM": "username",
+    "TOKEN_OBTAIN_SERIALIZER": "apps.accounts.api.auth.PlatformTokenObtainSerializer",
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Collector Incident Forecast API",
