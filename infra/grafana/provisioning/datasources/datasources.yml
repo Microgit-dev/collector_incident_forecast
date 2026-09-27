@@ -8,17 +8,19 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
 
-  # Прямой доступ к витринам TimescaleDB — для бизнес-дашбордов (инциденты, телеметрия)
+  # Витрины TimescaleDB для бизнес-дашбордов (инциденты, телеметрия). Роль только для чтения
+  # с доступом к таблицам панелей (manage.py ensure_grafana_reader): Viewer в Grafana может
+  # отправить в источник произвольный SQL, поэтому владельцем базы источник не подключается
   - name: TimescaleDB
     uid: timescaledb
     type: grafana-postgresql-datasource
     access: proxy
     url: db:5432
-    user: $POSTGRES_USER
+    user: $GRAFANA_DB_USER
     jsonData:
       database: $POSTGRES_DB
       sslmode: disable
       timescaledb: true
       postgresVersion: 1600
     secureJsonData:
-      password: $POSTGRES_PASSWORD
+      password: $GRAFANA_DB_PASSWORD

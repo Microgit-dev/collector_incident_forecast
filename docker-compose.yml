@@ -37,6 +37,8 @@ x-training: &training
     KAFKA_TOPIC_RAW_EVENTS: smvu.training-events
     KAFKA_CONSUMER_GROUP: collector-training
     HELPDESK_URL: http://mock-helpdesk-training:8080
+    # кадры камер — тот же эмулятор VMS (он без состояния); страницы просмотра в учебном контуре нет
+    VMS_LIVE_URL: ""
     CSRF_TRUSTED_ORIGINS: ${TRAINING_URL:-https://localhost:8443}
     DATA_DIR: /data
     ARTIFACTS_DIR: /artifacts
@@ -127,6 +129,9 @@ services:
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py bootstrap"]
     environment:
       DATA_DIR: /data
+      # роль БД только для чтения для источника данных Grafana (ensure_grafana_reader)
+      GRAFANA_DB_USER: ${GRAFANA_DB_USER:-grafana_reader}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana-reader}
     volumes:
       - ./data:/data:ro
     depends_on:
@@ -187,6 +192,12 @@ services:
       STAGE_MINUTES: ${HELPDESK_STAGE_MINUTES:-2,5,20,10}
     volumes:
       - helpdeskdata:/data
+    restart: unless-stopped
+
+  # Эмулятор системы видеонаблюдения заказчика (VMS): кадры камер для проверки тревоги, страница /vms/live/
+  mock-vms:
+    build: ./infra/mock-vms
+    image: collector-forecast/mock-vms:local
     restart: unless-stopped
 
   # ---------- учебный контур (профиль training) ----------
@@ -276,9 +287,14 @@ services:
     restart: unless-stopped
 
   # ---------- наблюдаемость ----------
+  # Prometheus и Grafana открываются из меню системы: Caddy пускает только после проверки учётной записи
+  # и роли (forward_auth → apps/accounts/observability.py); Prometheus — только администратору
   prometheus:
     image: prom/prometheus:v3.5.0
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.external-url=/prometheus/
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - promdata:/prometheus
@@ -292,14 +308,37 @@ services:
       GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_DEFAULT_LANGUAGE: ru-RU
+      # Вход через учётную запись системы: Caddy передаёт X-WEBAUTH-* после проверки роли,
+      # отдельных паролей и формы входа нет. Роль в Grafana (Admin / Viewer) обновляется каждую минуту
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_HEADERS: "Name:X-WEBAUTH-NAME Email:X-WEBAUTH-EMAIL Role:X-WEBAUTH-ROLE"
+      GF_AUTH_PROXY_SYNC_TTL: "1"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_SIGNOUT_REDIRECT_URL: /
+      GF_USERS_ALLOW_SIGN_UP: "false"
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # в TimescaleDB Grafana ходит ролью только для чтения, а не владельцем базы
+      GRAFANA_DB_USER: ${GRAFANA_DB_USER:-grafana_reader}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana-reader}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     restart: unless-stopped
+
+  # Права папок Grafana: «Система» — только администратору, аналитик видит «Аналитику» (идемпотентно)
+  grafana-init:
+    <<: *backend
+    command: ["python", "manage.py", "grafana_setup"]
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      grafana:
+        condition: service_started
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.20.1

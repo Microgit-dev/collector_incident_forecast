@@ -166,3 +166,16 @@ export async function download(path: string, fallbackName: string, retry = true)
   link.click()
   URL.revokeObjectURL(url)
 }
+
+/** Двоичный ответ с авторизацией (кадр камеры): Blob для URL.createObjectURL. */
+export async function apiBlob(path: string, query?: Query, retry = true): Promise<Blob> {
+  const headers: Record<string, string> = {}
+  if (tokens.access) headers.Authorization = `Bearer ${tokens.access}`
+  const response = await fetch(buildUrl(path, query), { headers })
+  if (response.status === 401 && retry && (await refreshAccess())) return apiBlob(path, query, false)
+  if (!response.ok) {
+    const body = response.headers.get('content-type')?.includes('json') ? await response.json() : null
+    throw new ApiError(response.status, body)
+  }
+  return response.blob()
+}

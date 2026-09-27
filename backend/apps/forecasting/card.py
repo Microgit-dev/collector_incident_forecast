@@ -37,11 +37,7 @@ def _realized(task: str, level: str, backtest: bool) -> dict:
 
 def _model(prediction: Prediction) -> dict:
     if prediction.task in INDICATORS:
-        return {
-            "method": "rules",
-            "note": "Индекс по правилам: сумма подтверждающих факторов с поправками. Не вероятность — калибровать его "
-            "не на чем: подтверждённых событий в данных нет.",
-        }
+        return _indicator(prediction)
     model = prediction.model
     if model is None:
         return {"method": "model"}
@@ -64,6 +60,39 @@ def _model(prediction: Prediction) -> dict:
         },
         "baseline": metrics.get("baseline_test"),
     }
+
+
+def _indicator(prediction: Prediction) -> dict:
+    """
+    Индикатор по правилам: индекс — сумма подтверждающих факторов, вероятность — доля случаев с таким
+    же индексом в истории, когда угроза проявилась (тревоги того же рода через 1–24 ч).
+    """
+    from .domain import calibration as cal
+    from .models import IndicatorCalibration
+
+    info = {
+        "method": "rules",
+        "index": prediction.index if prediction.index is not None else prediction.probability,
+        "note": "Индекс — сумма подтверждающих факторов с поправками. Вероятность — по истории: как часто "
+        "угроза проявлялась (тревоги того же рода на объекте через 1–24 ч) при таком же индексе. "
+        "Подтверждённых пожаров и проникновений в данных нет, поэтому это вероятность проявления угрозы, "
+        "а не подтверждённого события.",
+    }
+    row = IndicatorCalibration.objects.filter(task=prediction.task).order_by("-created_at").first()
+    if row is None or prediction.index is None:
+        info["calibrated"] = False
+        return info
+    bin_ = cal.evidence(row.calibration, prediction.index)
+    info.update(
+        calibrated=True,
+        period=row.period,
+        test_period=row.test_period,
+        base_rate=row.calibration["base_rate"],
+        bin=bin_,
+        bins=row.calibration["bins"],
+        test=row.test,
+    )
+    return info
 
 
 def _channel(prediction: Prediction) -> dict | None:

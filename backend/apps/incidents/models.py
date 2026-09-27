@@ -273,6 +273,7 @@ class IncidentEvent(models.Model):
         WORKORDER = "workorder", "Заявка"
         STATUS = "status", "Смена статуса"
         COMMENT = "comment", "Комментарий"
+        VIDEO_CHECK = "video_check", "Проверка по камерам"
 
     incident = models.ForeignKey(Incident, on_delete=models.CASCADE, related_name="events")
     ts = models.DateTimeField(auto_now_add=True, db_index=True)

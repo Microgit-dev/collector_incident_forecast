@@ -48,3 +48,27 @@ class WeatherDaily(models.Model):
 
     def __str__(self):
         return f"{self.day:%Y-%m-%d}"
+
+
+class IntegrationState(models.Model):
+    """
+    Состояние обмена с внешней системой для страницы «Интеграции»: последний успех, последняя ошибка
+    и итог последней синхронизации. Настройки подключения — в .env (apps/integrations/registry.py).
+    """
+
+    code = models.SlugField("интеграция", max_length=32, unique=True)
+    last_ok_at = models.DateTimeField("последний успешный обмен", null=True, blank=True)
+    last_error_at = models.DateTimeField("последняя ошибка", null=True, blank=True)
+    last_error = models.TextField("текст ошибки", blank=True)
+    last_result = models.JSONField("итог последнего обмена", default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "состояние интеграции"
+        verbose_name_plural = "состояния интеграций"
+        permissions = [
+            ("manage_integrations", "Проверять связь и запускать синхронизацию с внешними системами")
+        ]
+
+    def __str__(self):
+        return self.code

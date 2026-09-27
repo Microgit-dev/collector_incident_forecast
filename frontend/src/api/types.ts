@@ -238,6 +238,8 @@ export interface Prediction {
   horizon_hours: number
   valid_until: string
   probability: number
+  // пожар и НСД: индекс правил, из которого получена вероятность
+  index: number | null
   risk_level: RiskLevel
   factors: Factor[]
   summary: string
@@ -409,6 +411,35 @@ export interface Live {
   }
 }
 
+export interface CalibrationBin {
+  lo: number
+  hi: number
+  n: number
+  k: number
+  p: number
+}
+
+export interface CalibrationTest {
+  train_period?: string
+  n?: number
+  k?: number
+  brier?: number
+  brier_base?: number
+  brier_index?: number
+  reliability?: { lo: number; hi: number; p: number; n: number; observed: number | null }[]
+}
+
+export interface IndicatorCalibration {
+  id: number
+  task: string
+  horizon_hours: number
+  period: string
+  test_period: string
+  calibration: { edges: number[]; base_rate: number; bins: CalibrationBin[]; n: number; k: number }
+  test: CalibrationTest
+  created_at: string
+}
+
 export interface PredictionCard extends Prediction {
   viewed_by: Viewer[]
   model_info: {
@@ -422,6 +453,14 @@ export interface PredictionCard extends Prediction {
     base_rate?: number
     level_test?: { precision?: number; recall?: number; alerts_per_day?: number; lead_time_median_h?: number }
     baseline?: { rule: string; precision: number; recall: number }
+    // индикаторы пожара и НСД: индекс и калибровка индекса в вероятность по архиву
+    index?: number
+    calibrated?: boolean
+    period?: string
+    test_period?: string
+    bin?: CalibrationBin
+    bins?: CalibrationBin[]
+    test?: CalibrationTest
   }
   realized: Record<'live' | 'backtest', { confirmed: number; resolved: number; precision: number | null }>
   channel_info: {
@@ -530,8 +569,105 @@ export interface Workspace {
       silent: boolean
       last_seen_at: string | null
     }[]
+    maintenance_due?: MaintenanceDue[]
+    maintenance_recommendations?: MaintenanceRec[]
   }
   map: { color_by: 'risk' | 'health' | 'state'; incidents: boolean; workorders: boolean }
+}
+
+// План ТО (инженер ТО): регламент, рекомендации по состоянию, запланированные работы
+export interface MaintenanceDue {
+  id: number
+  name: string
+  kind: string
+  kind_display: string
+  inventory_number: string
+  node: number
+  node_name: string
+  picket: number | null
+  last_maintenance_at: string | null
+  interval_days: number | null
+  due: string | null
+  overdue_days: number
+  condition: string
+  condition_display: string
+  condition_at: string | null
+  source: string
+  work_type: string
+  planned: { id: number; number: string; status: WorkOrderStatus; due_at: string } | null
+}
+
+export interface MaintenanceRec {
+  id: number
+  node_name: string
+  equipment: number | null
+  equipment_name: string | null
+  channel_name: string | null
+  work_type: string
+  work_type_display: string
+  priority: RiskLevel
+  due_date: string
+  rationale: string
+}
+
+export interface PlannedOrder {
+  id: number
+  number: string
+  title: string
+  status: WorkOrderStatus
+  work_type: string
+  priority: RiskLevel
+  due_at: string
+  node_name: string
+  equipment_name: string | null
+  assignee_name: string | null
+}
+
+export interface MaintenancePlan {
+  today: string
+  horizon_days: number
+  kpis: Record<'overdue' | 'due_30' | 'unplanned_overdue' | 'recommendations' | 'bad_condition' | 'planned', number>
+  due: MaintenanceDue[]
+  bad_condition: MaintenanceDue[]
+  recommendations: MaintenanceRec[]
+  planned: PlannedOrder[]
+  weeks: { week: string; orders: number }[]
+}
+
+export interface Equipment {
+  id: number
+  kind: string
+  kind_display: string
+  node: number
+  node_name: string
+  name: string
+  inventory_number: string
+  picket: string | null
+  channels: number[]
+  commissioned_at: string | null
+  last_maintenance_at: string | null
+  maintenance_interval_days: number | null
+  next_maintenance_at: string | null
+  mtbf_hours: number | null
+  source: 'emulated' | 'imported' | 'manual'
+  condition: string
+  condition_display: string
+  condition_at: string | null
+  is_active: boolean
+  synced_at: string | null
+}
+
+export interface Inspection {
+  id: number
+  equipment: number
+  inspected_at: string
+  inspector_name: string | null
+  condition: string
+  condition_display: string
+  maintenance: boolean
+  notes: string
+  workorder: number | null
+  workorder_number: string | null
 }
 
 export interface TrainingStep {

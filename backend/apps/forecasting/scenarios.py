@@ -36,6 +36,7 @@ TASK_TYPES = {
     ForecastTask.FIRE: FIRE_TYPES | TEMP_TYPES,
     ForecastTask.INTRUSION: INTRUSION_CONTACT | INTRUSION_MOTION,
 }
+GUARD_TYPE = "Состояние охраны"
 TITLES = {ForecastTask.FIRE: "Риск пожара", ForecastTask.INTRUSION: "Риск несанкционированного доступа"}
 
 WINDOW_SQL = """
@@ -158,20 +159,29 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
     from apps.incidents.services import raise_alert
     from apps.topology.models import Node
 
+    from .domain import calibration as cal
+    from .indicator_calibration import latest
+
     assessments = assess(as_of)
     nodes = Node.objects.in_bulk([n for _, n, _ in assessments])
+    calibrations = latest()
     counts: dict[str, dict] = {task: {"nodes": 0, "predictions": 0, "alerts": 0} for task in TASK_TYPES}
     snapshots = []
     for task, node_id, a in assessments:
         lvl = level(a.score)
         counts[task]["nodes"] += 1
+        # Вероятность проявления угрозы за 24 ч — по истории таких же индексов (калибровка по архиву);
+        # без калибровки (архив не загружен) остаётся индекс
+        calibration = calibrations.get(task)
+        bin_ = cal.evidence(calibration, a.score) if calibration else None
+        probability = bin_["p"] if bin_ else a.score
         snapshots.append(
             RiskSnapshot(
                 node_id=node_id,
                 task=task,
                 as_of=as_of,
-                max_probability=a.score,
-                expected_failures=a.score,
+                max_probability=probability,
+                expected_failures=probability,
                 channels_total=len(a.factors),
                 channels_at_risk=1,
                 risk_level=lvl,
@@ -180,9 +190,14 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
         if LEVEL_RANK.index(lvl) < 1:
             continue
         node = nodes[node_id]
-        summary = f"{TITLES[task]} на объекте «{node.name}»: индекс {a.score:.2f}. " + "; ".join(
-            f["title"] for f in a.factors
-        )
+        summary = f"{TITLES[task]} на объекте «{node.name}»: индекс {a.score:.2f}"
+        if bin_:
+            summary += (
+                f", вероятность проявления за {HORIZON_HOURS} ч — {probability:.0%} "
+                f"(по истории {calibration['period']}: {bin_['n']} случаев с индексом "
+                f"{bin_['lo']:.2f}–{bin_['hi']:.2f})"
+            )
+        summary += ". " + "; ".join(f["title"] for f in a.factors)
         journal = Prediction.objects.filter(task=task, node_id=node_id, is_backtest=backtest)
         # Повторный прогон бэктеста за тот же момент не должен дублировать запись, даже с проставленным исходом
         if journal.filter(issued_at=as_of).exists():
@@ -191,13 +206,14 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
         if current and LEVEL_RANK.index(lvl) <= LEVEL_RANK.index(current.risk_level):
             continue
         if current:
-            current.probability, current.risk_level, current.factors, current.summary = (
+            current.probability, current.index, current.risk_level, current.factors, current.summary = (
+                probability,
                 a.score,
                 lvl,
                 a.factors,
                 summary,
             )
-            current.save(update_fields=["probability", "risk_level", "factors", "summary"])
+            current.save(update_fields=["probability", "index", "risk_level", "factors", "summary"])
             prediction = current
         else:
             prediction = Prediction.objects.create(
@@ -207,7 +223,8 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
                 issued_at=as_of,
                 horizon_hours=HORIZON_HOURS,
                 valid_until=as_of + timedelta(hours=HORIZON_HOURS),
-                probability=a.score,
+                probability=probability,
+                index=a.score,
                 risk_level=lvl,
                 factors=a.factors,
                 summary=summary,
@@ -228,9 +245,9 @@ def run_scenarios(as_of: datetime, backtest: bool = False) -> dict:
                 title=f"{TITLES[task]}: {node.name}",
                 source=Alert.Source.FORECAST,
                 raised_at=as_of,
-                probability=a.score,
+                probability=probability,
                 horizon_hours=HORIZON_HOURS,
-                details={"factors": a.factors},
+                details={"factors": a.factors, "index": a.score},
             )
             counts[task]["alerts"] += 1
     RiskSnapshot.objects.bulk_create(

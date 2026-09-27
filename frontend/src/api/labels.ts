@@ -60,6 +60,7 @@ export const ROLE: Record<string, string> = {
   unit_dispatcher: 'Диспетчер подразделения',
   analyst: 'Аналитик',
   technician: 'Ремонтная бригада',
+  maintenance_engineer: 'Инженер ТО',
   observer: 'Наблюдатель',
 }
 
@@ -121,5 +122,31 @@ export const WO_STATUS: Record<WorkOrderStatus, { label: string; color: string }
   cancelled: { label: 'Отменена', color: 'gray' },
 }
 
-// Пожар и НСД — индикаторы по правилам (подтверждённых событий в данных нет): индекс 0–1, не вероятность
+// Пожар и НСД — индикаторы по правилам (подтверждённых событий в данных нет): индекс 0–1 складывает признаки,
+// вероятность проявления угрозы за 24 ч получается из индекса калибровкой по архиву
 export const isIndicator = (task: string) => task === 'fire' || task === 'intrusion'
+
+// Фактическое состояние оборудования по последнему осмотру или ТО
+export const CONDITION: Record<string, { label: string; color: string }> = {
+  good: { label: 'Исправно', color: 'teal' },
+  remarks: { label: 'Есть замечания', color: 'yellow' },
+  needs_repair: { label: 'Требует ремонта', color: 'orange' },
+  faulty: { label: 'Неисправно', color: 'red' },
+}
+
+export const WORK_TYPE: Record<string, string> = {
+  inspection: 'Осмотр / проверка',
+  sensor_replacement: 'Замена датчика',
+  calibration: 'Калибровка / поверка',
+  power_check: 'Проверка электропитания',
+  pump_service: 'Обслуживание насосов',
+  ventilation: 'Обслуживание вентиляции',
+  cleaning: 'Очистка / откачка',
+  security: 'Проверка охраны периметра',
+}
+
+export const EQUIPMENT_SOURCE: Record<string, { label: string; color: string }> = {
+  imported: { label: 'реестр заказчика', color: 'teal' },
+  manual: { label: 'вручную', color: 'blue' },
+  emulated: { label: 'эмуляция', color: 'gray' },
+}

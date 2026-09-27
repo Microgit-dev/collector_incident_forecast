@@ -45,6 +45,7 @@ TEAMS = [
     TeamSpec("ods", "ОДС района", TeamKind.ODS, DISTRICT, "management"),
     TeamSpec("analytics", "Аналитическая группа", TeamKind.ANALYTICS, DISTRICT, "management"),
     TeamSpec("support", "Администрирование и смежные службы", TeamKind.SUPPORT, DISTRICT, "management"),
+    TeamSpec("maintenance", "Служба технического обслуживания", TeamKind.MAINTENANCE, DISTRICT, "management"),
     TeamSpec("unit-mu", "Диспетчерская объекта Мю", TeamKind.UNIT, "объект Мю", "ods"),
     TeamSpec("unit-ksi", "Диспетчерская объекта Кси", TeamKind.UNIT, "объект Кси", "ods"),
     TeamSpec("unit-tau", "Диспетчерская объекта Тау", TeamKind.UNIT, "объект Тау", "ods"),
@@ -74,6 +75,15 @@ PEOPLE = [
     ),
     PersonSpec(
         "disp.fedorova", "Фёдорова", "Ольга", Role.UNIT_DISPATCHER, "unit-tau", "Диспетчер объекта", lead=True
+    ),
+    PersonSpec(
+        "engineer.belov",
+        "Белов",
+        "Павел",
+        Role.MAINTENANCE_ENGINEER,
+        "maintenance",
+        "Инженер по техническому обслуживанию",
+        lead=True,
     ),
     PersonSpec("brigade.smirnov", "Смирнов", "Сергей", Role.TECHNICIAN, "brigade-mu", "Бригадир", lead=True),
     PersonSpec("brigade.popov", "Попов", "Андрей", Role.TECHNICIAN, "brigade-ksi", "Бригадир", lead=True),

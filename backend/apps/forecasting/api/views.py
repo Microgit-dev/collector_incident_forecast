@@ -8,7 +8,16 @@ from apps.audit.services import log_action, log_view
 from apps.core.permissions import require_perm
 from apps.topology.mixins import ScopedQuerySetMixin
 
-from ..models import ChannelHealth, ChannelRisk, MLModel, Prediction, RiskPolicy, RiskSnapshot, TrainingRun
+from ..models import (
+    ChannelHealth,
+    ChannelRisk,
+    IndicatorCalibration,
+    MLModel,
+    Prediction,
+    RiskPolicy,
+    RiskSnapshot,
+    TrainingRun,
+)
 
 
 class MLModelSerializer(serializers.ModelSerializer):
@@ -63,6 +72,7 @@ class PredictionSerializer(serializers.ModelSerializer):
             "horizon_hours",
             "valid_until",
             "probability",
+            "index",
             "risk_level",
             "factors",
             "summary",
@@ -106,6 +116,35 @@ class MLModelViewSet(viewsets.ReadOnlyModelViewSet):
         model = activate(self.get_object())
         log_action(request, "forecasting.activate", obj=model)
         return Response(self.get_serializer(model).data)
+
+
+class IndicatorCalibrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IndicatorCalibration
+        fields = ("id", "task", "horizon_hours", "period", "test_period", "calibration", "test", "created_at")
+
+
+class IndicatorCalibrationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Калибровки индекса пожара и НСД в вероятность: действующая — последняя по задаче."""
+
+    queryset = IndicatorCalibration.objects.all()
+    serializer_class = IndicatorCalibrationSerializer
+    filterset_fields = ("task",)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[require_perm("forecasting.add_indicatorcalibration")],
+    )
+    def recalibrate(self, request):
+        """Пересчитать по архиву в фоне (минуты: год архива ~15 с)."""
+        from ..tasks import calibrate_indicators
+
+        calibrate_indicators.delay()
+        log_action(request, "forecasting.recalibrate")
+        return Response(
+            {"detail": "Калибровка запущена, результат появится через несколько минут"}, status=202
+        )
 
 
 class RiskPolicyViewSet(viewsets.ModelViewSet):

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import MaintenanceRecommendation, WorkOrder
+from .models import EquipmentInspection, MaintenanceRecommendation, WorkOrder
 
 
 @admin.register(WorkOrder)
@@ -33,3 +33,12 @@ class MaintenanceRecommendationAdmin(admin.ModelAdmin):
     list_display = ("node", "work_type", "priority", "due_date", "status")
     list_filter = ("status", "work_type", "priority")
     raw_id_fields = ("node", "equipment", "channel", "prediction")
+
+
+@admin.register(EquipmentInspection)
+class EquipmentInspectionAdmin(admin.ModelAdmin):
+    list_display = ("equipment", "inspected_at", "condition", "maintenance", "inspector", "workorder")
+    list_filter = ("condition", "maintenance")
+    search_fields = ("equipment__name", "equipment__inventory_number")
+    autocomplete_fields = ("equipment",)
+    raw_id_fields = ("workorder",)

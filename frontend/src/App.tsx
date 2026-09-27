@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
 import { DataQualityPage } from './pages/DataQualityPage'
+import { EquipmentPage } from './pages/EquipmentPage'
 import { ExerciseDetailPage } from './pages/ExerciseDetailPage'
 import { ExercisesPage } from './pages/ExercisesPage'
 import { ForecastCardPage } from './pages/ForecastCardPage'
@@ -16,8 +17,10 @@ import { ForecastsPage } from './pages/ForecastsPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentsPage } from './pages/IncidentsPage'
+import { IntegrationsPage } from './pages/IntegrationsPage'
 import { LearningPage } from './pages/LearningPage'
 import { LoginPage } from './pages/LoginPage'
+import { MaintenancePage } from './pages/MaintenancePage'
 import { ModelsPage } from './pages/ModelsPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ReplayPage } from './pages/ReplayPage'
@@ -66,6 +69,9 @@ export function App() {
         <Route path="learning" element={<LearningPage />} />
         <Route path="data-health" element={<DataHealthPage />} />
         <Route path="workorders" element={<WorkOrdersPage />} />
+        <Route path="maintenance" element={<MaintenancePage />} />
+        <Route path="equipment" element={<EquipmentPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="replay" element={<ReplayPage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />

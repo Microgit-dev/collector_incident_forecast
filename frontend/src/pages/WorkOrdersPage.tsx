@@ -26,6 +26,7 @@ import { WO_STATUS } from '../api/labels'
 import type { RiskLevel, WorkOrderStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
+import { useCompleteOrder } from '../components/CompleteOrder'
 
 interface Recommendation {
   id: number
@@ -50,6 +51,8 @@ interface WorkOrder {
   node_name: string
   incident: number | null
   recommendation: number | null
+  equipment: number | null
+  equipment_name: string | null
   work_type: string
   priority: RiskLevel
   title: string
@@ -285,8 +288,11 @@ function Orders() {
     },
     onError: (e) => notifications.show({ color: 'red', message: e.message }),
   })
+  // «Выполнена» — с отчётом и фактическим состоянием оборудования
+  const complete = useCompleteOrder(() => void queryClient.invalidateQueries({ queryKey: ['workorders'] }))
   return (
     <Stack>
+      {complete.modal}
       <Select
         size="xs"
         placeholder="Статус"
@@ -346,6 +352,7 @@ function Orders() {
                       <Text size="sm">{o.title}</Text>
                       <Text size="xs" c="dimmed">
                         {o.node_name}
+                        {o.equipment_name && ` · ${o.equipment_name}`}
                       </Text>
                       {o.report && (
                         <Text size="xs" c="teal.8">
@@ -404,7 +411,13 @@ function Orders() {
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">
                         {next && can(next.perm) && (
-                          <Button data-tour="wo-action" size="compact-xs" onClick={() => move.mutate({ id: o.id, next: next.status })}>
+                          <Button
+                            data-tour="wo-action"
+                            size="compact-xs"
+                            onClick={() =>
+                              next.status === 'done' ? complete.open(o.id) : move.mutate({ id: o.id, next: next.status })
+                            }
+                          >
                             {next.label}
                           </Button>
                         )}

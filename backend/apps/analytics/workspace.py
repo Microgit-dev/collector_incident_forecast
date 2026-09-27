@@ -20,7 +20,16 @@ from apps.topology.selectors import scope_queryset
 from apps.workorders.models import WorkOrder
 
 # Порядок выбора рабочего места по умолчанию: самая «оперативная» роль пользователя
-ROLE_ORDER = ["technician", "unit_dispatcher", "ods_dispatcher", "head", "analyst", "observer", "admin"]
+ROLE_ORDER = [
+    "technician",
+    "unit_dispatcher",
+    "ods_dispatcher",
+    "maintenance_engineer",
+    "head",
+    "analyst",
+    "observer",
+    "admin",
+]
 OPEN = (Incident.Status.NEW, Incident.Status.ACKNOWLEDGED, Incident.Status.IN_PROGRESS)
 CLOSED_ORDERS = (WorkOrder.Status.DONE, WorkOrder.Status.CANCELLED)
 HIGH = ("high", "critical")
@@ -272,6 +281,49 @@ def _technician(user, now) -> dict:
     }
 
 
+def _maintenance_engineer(user, now) -> dict:
+    """Инженер ТО: что просрочено по регламенту, что рекомендует система, что уже в плане."""
+    from apps.workorders.maintenance import plan
+
+    data = plan(user, horizon_days=30)
+    k = data["kpis"]
+    return {
+        "kpis": [
+            _kpi(
+                "overdue",
+                "ТО просрочено",
+                k["overdue"],
+                hint=f"не в плане: {k['unplanned_overdue']}",
+                color="red",
+                to="/maintenance",
+            ),
+            _kpi("due_30", "ТО в ближайшие 30 дней", k["due_30"], color="orange", to="/maintenance"),
+            _kpi(
+                "recommendations",
+                "Рекомендации по состоянию",
+                k["recommendations"],
+                hint="по прогнозам и осмотрам",
+                color="blue",
+                to="/maintenance",
+            ),
+            _kpi(
+                "bad",
+                "Требует ремонта",
+                k["bad_condition"],
+                hint="по последнему осмотру",
+                color="grape",
+                to="/equipment",
+            ),
+            _kpi("planned", "Работ в плане", k["planned"], color="teal", to="/workorders"),
+        ],
+        "lists": {
+            "maintenance_due": [r for r in data["due"] if r["overdue_days"] and not r["planned"]][:8],
+            "maintenance_recommendations": data["recommendations"][:6],
+        },
+        "map": {"color_by": "state", "incidents": False, "workorders": True},
+    }
+
+
 def _observer(user, now) -> dict:
     incidents = _incidents(user)
     health = _health(user)
@@ -336,6 +388,7 @@ def _admin(user, now) -> dict:
 
 BUILDERS = {
     "technician": _technician,
+    "maintenance_engineer": _maintenance_engineer,
     "unit_dispatcher": _dispatcher,
     "ods_dispatcher": _dispatcher,
     "head": _head,

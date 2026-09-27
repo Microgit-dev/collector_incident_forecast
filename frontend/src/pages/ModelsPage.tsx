@@ -21,7 +21,7 @@ import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 
 import { api, type Page } from '../api/client'
-import type { Metrics, MLModel, TrainingRun } from '../api/types'
+import type { IndicatorCalibration, Metrics, MLModel, TrainingRun } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 
 const STATUS: Record<MLModel['status'], { label: string; color: string }> = {
@@ -283,6 +283,102 @@ function TrainingPanel() {
   )
 }
 
+const INDICATOR_TITLE: Record<string, string> = { fire: 'Пожар', intrusion: 'Несанкционированный доступ' }
+
+function CalibrationPanel() {
+  const { can } = useAuth()
+  const client = useQueryClient()
+  const list = useQuery({
+    queryKey: ['calibrations'],
+    queryFn: () => api<Page<IndicatorCalibration>>('/forecasting/calibrations/', { query: { page_size: 20 } }),
+  })
+  const run = useMutation({
+    mutationFn: () => api<{ detail: string }>('/forecasting/calibrations/recalibrate/', { method: 'POST' }),
+    onSuccess: (r) => {
+      notifications.show({ color: 'teal', message: r.detail })
+      setTimeout(() => void client.invalidateQueries({ queryKey: ['calibrations'] }), 60_000)
+    },
+    onError: (e) => notifications.show({ color: 'red', message: e.message }),
+  })
+  // действующая калибровка — последняя по задаче
+  const latest = new Map<string, IndicatorCalibration>()
+  for (const c of list.data?.results ?? []) if (!latest.has(c.task)) latest.set(c.task, c)
+  return (
+    <Card withBorder radius="md">
+      <Group justify="space-between" mb="xs">
+        <Text fw={600}>Индикаторы пожара и НСД: вероятность по истории</Text>
+        {can('forecasting.add_indicatorcalibration') && (
+          <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} loading={run.isPending} onClick={() => run.mutate()}>
+            Пересчитать по архиву
+          </Button>
+        )}
+      </Group>
+      <Text size="sm" c="dimmed" mb="sm">
+        Индекс правил считается по Parquet-архиву теми же правилами, что в работе, каждый час; исход — угроза проявилась
+        (тревоги того же рода на объекте через 1–24 ч). Доля проявившихся среди случаев с похожим индексом, сглаженная
+        и выровненная по возрастанию, — вероятность в карточке. Пересчёт — раз в неделю. Brier: меньше — лучше;
+        сравнение с «частотой» показывает, что даёт индекс сверх средней доли.
+      </Text>
+      {list.isLoading ? (
+        <Loader size="sm" />
+      ) : latest.size === 0 ? (
+        <Text size="sm" c="dimmed">
+          Калибровки ещё нет: нужен загруженный архив журналов.
+        </Text>
+      ) : (
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          {[...latest.values()].map((c) => (
+            <Stack key={c.id} gap={6}>
+              <Group justify="space-between">
+                <Text fw={500}>{INDICATOR_TITLE[c.task] ?? c.task}</Text>
+                <Text size="xs" c="dimmed">
+                  архив {c.period} · {dayjs(c.created_at).format('DD.MM.YYYY')}
+                </Text>
+              </Group>
+              <Table>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Индекс</Table.Th>
+                    <Table.Th>Случаев</Table.Th>
+                    <Table.Th>Вероятность</Table.Th>
+                    <Table.Th>
+                      Проверка {c.test_period}: прогноз → факт
+                    </Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {c.calibration.bins.map((b, i) => {
+                    const check = c.test.reliability?.[i]
+                    return (
+                      <Table.Tr key={b.lo}>
+                        <Table.Td>
+                          {b.lo.toFixed(2)}–{b.hi.toFixed(2)}
+                        </Table.Td>
+                        <Table.Td>{b.n.toLocaleString('ru-RU')}</Table.Td>
+                        <Table.Td fw={600}>{pct(b.p)}</Table.Td>
+                        <Table.Td>
+                          {check?.observed != null
+                            ? `${pct(check.p)} → ${pct(check.observed)} (${check.n.toLocaleString('ru-RU')})`
+                            : '—'}
+                        </Table.Td>
+                      </Table.Tr>
+                    )
+                  })}
+                </Table.Tbody>
+              </Table>
+              <Text size="xs" c="dimmed">
+                Всего случаев {c.calibration.n.toLocaleString('ru-RU')}, угроза проявилась в {pct(c.calibration.base_rate)}.
+                {c.test.brier != null &&
+                  ` Проверка — версия, обученная на ${c.test.train_period}, на ${c.test_period}: Brier ${c.test.brier} против ${c.test.brier_base} для постоянной частоты и ${c.test.brier_index} для «индекс как вероятность».`}
+              </Text>
+            </Stack>
+          ))}
+        </SimpleGrid>
+      )}
+    </Card>
+  )
+}
+
 export function ModelsPage() {
   const { can } = useAuth()
   const models = useQuery({
@@ -299,8 +395,8 @@ export function ModelsPage() {
     <Stack>
       <Title order={3}>Модели прогнозирования</Title>
       <Alert color="gray" variant="light">
-        Три модели на LightGBM: отказ датчика, превышение 1 % метана, подтопление (пожар и проникновение — правила-индикаторы,
-        см. журнал прогнозов). Цели ТЗ по точности и полноте (P &gt; 0,7, R &gt; 0,5) одновременно на этих данных
+        Три модели на LightGBM: отказ датчика, превышение 1 % метана, подтопление. Пожар и проникновение — правила-индикаторы
+        с вероятностью по истории (внизу страницы). Цели ТЗ по точности и полноте (P &gt; 0,7, R &gt; 0,5) одновременно на этих данных
         недостижимы: события редки (доли процента каналов в сутки), журналов ремонтов нет, метки слабые. Поэтому уровни риска настроены по
         точности: «критический» — самые надёжные прогнозы, «средний» — список наблюдения для планового ТО. Модель
         сравнивается с простым правилом, чтобы было видно, что она даёт сверх него.
@@ -311,6 +407,7 @@ export function ModelsPage() {
       ) : (
         shown.map((m) => <ModelCard key={m.id} model={m} canTrain={canTrain} />)
       )}
+      <CalibrationPanel />
     </Stack>
   )
 }

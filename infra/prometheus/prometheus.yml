@@ -29,5 +29,7 @@ scrape_configs:
       - targets: ["web:2019"]
 
   - job_name: prometheus
+    # веб-интерфейс опубликован под /prometheus/ (--web.external-url), метрики — там же
+    metrics_path: /prometheus/metrics
     static_configs:
       - targets: ["localhost:9090"]

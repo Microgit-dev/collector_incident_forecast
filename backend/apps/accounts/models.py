@@ -7,6 +7,7 @@ class TeamKind(models.TextChoices):
     ODS = "ods", "Объединённая диспетчерская служба"
     UNIT = "unit", "Диспетчерская подразделения"
     BRIGADE = "brigade", "Ремонтная бригада"
+    MAINTENANCE = "maintenance", "Служба технического обслуживания"
     ANALYTICS = "analytics", "Аналитическая группа"
     SUPPORT = "support", "Администрирование и смежные службы"
 
@@ -100,6 +101,8 @@ class User(AbstractUser):
         permissions = [
             ("view_all_scopes", "Видит все зоны ответственности"),
             ("assign_staff", "Назначает сотрудников в зоны и командирует в другие зоны"),
+            ("view_grafana", "Аналитические панели Grafana"),
+            ("view_system_monitoring", "Мониторинг системы: Prometheus и системные панели Grafana"),
         ]
 
     @property

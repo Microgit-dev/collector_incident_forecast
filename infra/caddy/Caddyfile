@@ -31,6 +31,36 @@
 	}
 }
 
+# Панели наблюдаемости рабочего контура: вход через учётную запись системы, без своих паролей.
+# Перед каждым запросом Caddy спрашивает бэкенд (apps/accounts/observability.py): подписанная cookie
+# сеанса, активная учётка, право роли. Ответ 200 несёт X-WEBAUTH-*, по ним Grafana входит (auth.proxy).
+# Заголовки X-WEBAUTH-* от клиента удаляются до проверки — подделать вход ими нельзя.
+(observability) {
+	handle /grafana* {
+		route {
+			request_header -X-WEBAUTH-USER
+			request_header -X-WEBAUTH-NAME
+			request_header -X-WEBAUTH-EMAIL
+			request_header -X-WEBAUTH-ROLE
+			forward_auth backend:8000 {
+				uri /api/v1/observability/auth/?service=grafana
+				copy_headers X-WEBAUTH-USER X-WEBAUTH-NAME X-WEBAUTH-EMAIL X-WEBAUTH-ROLE
+			}
+			reverse_proxy grafana:3000
+		}
+	}
+
+	# Prometheus — только администратору
+	handle /prometheus* {
+		route {
+			forward_auth backend:8000 {
+				uri /api/v1/observability/auth/?service=prometheus
+			}
+			reverse_proxy prometheus:9090
+		}
+	}
+}
+
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
@@ -39,12 +69,15 @@
 		reverse_proxy backend:8000
 	}
 
-	handle /grafana* {
-		reverse_proxy grafana:3000
-	}
+	import observability
 
 	handle_path /helpdesk* {
 		reverse_proxy mock-helpdesk:8080
+	}
+
+	# Эмулятор видеонаблюдения: страница просмотра камеры (у заказчика — ссылка на его VMS, VMS_LIVE_URL)
+	handle /vms/* {
+		reverse_proxy mock-vms:8080
 	}
 
 	import spa
@@ -78,13 +111,16 @@ https://localhost, https://127.0.0.1 {
 		reverse_proxy backend:8000
 	}
 
-	handle /grafana* {
-		reverse_proxy grafana:3000
-	}
+	import observability
 
 	# Эмулятор help desk заказчика (страница заявок «с их стороны»)
 	handle_path /helpdesk* {
 		reverse_proxy mock-helpdesk:8080
+	}
+
+	# Эмулятор видеонаблюдения: страница просмотра камеры (у заказчика — ссылка на его VMS, VMS_LIVE_URL)
+	handle /vms/* {
+		reverse_proxy mock-vms:8080
 	}
 
 	import spa

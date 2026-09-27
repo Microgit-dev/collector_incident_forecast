@@ -118,6 +118,18 @@ departmentNumber: unit-tau
 mail: disp.fedorova@collector.local
 userPassword: Passw0rd!
 
+dn: uid=engineer.belov,ou=people,dc=collector,dc=local
+objectClass: inetOrgPerson
+uid: engineer.belov
+cn:: 0J/QsNCy0LXQuyDQkdC10LvQvtCy
+givenName:: 0J/QsNCy0LXQuw==
+sn:: 0JHQtdC70L7Qsg==
+title:: 0JjQvdC20LXQvdC10YAg0L/QviDRgtC10YXQvdC40YfQtdGB0LrQvtC80YMg0L7QsdGB0LvRg9C20LjQstCw0L3QuNGO
+ou:: 0KHQu9GD0LbQsdCwINGC0LXRhdC90LjRh9C10YHQutC+0LPQviDQvtCx0YHQu9GD0LbQuNCy0LDQvdC40Y8=
+departmentNumber: maintenance
+mail: engineer.belov@collector.local
+userPassword: Passw0rd!
+
 dn: uid=brigade.smirnov,ou=people,dc=collector,dc=local
 objectClass: inetOrgPerson
 uid: brigade.smirnov
@@ -186,6 +198,11 @@ cn: unit_dispatcher
 member: uid=disp.petrov,ou=people,dc=collector,dc=local
 member: uid=disp.nikolaev,ou=people,dc=collector,dc=local
 member: uid=disp.fedorova,ou=people,dc=collector,dc=local
+
+dn: cn=maintenance_engineer,ou=roles,dc=collector,dc=local
+objectClass: groupOfNames
+cn: maintenance_engineer
+member: uid=engineer.belov,ou=people,dc=collector,dc=local
 
 dn: cn=technician,ou=roles,dc=collector,dc=local
 objectClass: groupOfNames

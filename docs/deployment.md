@@ -185,7 +185,7 @@ OU, где лежат только эти семь групп, иначе в с�
 
 Формат события и проверка — в разделе 6.1.
 
-### 4.5 Карта, погода, заявки
+### 4.5 Карта, погода, интеграции
 
 | Переменная | Значение |
 |---|---|
@@ -193,7 +193,10 @@ OU, где лежат только эти семь групп, иначе в с�
 | `MAP_TILES_ORIGIN` | адрес сервера тайлов для CSP, например `https://tiles.corp.local` |
 | `OVERPASS_URL` | адрес Overpass API; пусто — автовыделение зданий выключено |
 | `WEATHER_URL` | Open-Meteo; без интернета задача погоды выключается (раздел 6.4) |
-| `HELPDESK_URL` | эмулятор `http://mock-helpdesk:8080` (раздел 6.5) |
+| `HELPDESK_MODE`, `HELPDESK_URL`, `HELPDESK_TOKEN`… | система учёта заявок: `mock`, `rest` или `off` (раздел 6.5) |
+| `REGISTRY_MODE`, `REGISTRY_URL`, `REGISTRY_TOKEN` | реестр оборудования: `emulated`, `api` или `file` (раздел 6.6) |
+| `VMS_MODE`, `VMS_URL`, `VMS_TOKEN`, `VMS_LIVE_URL`… | видеонаблюдение: `mock`, `http` или `off` (раздел 6.7) |
+| `GRAFANA_DB_PASSWORD` | пароль роли БД только для чтения, под которой Grafana читает витрины (раздел 6.8) |
 
 ## 5. Первый запуск
 
@@ -308,10 +311,53 @@ docker compose exec worker python manage.py forecast
 
 ### 6.5 Система учёта заявок
 
-Адаптер help desk заказчика не разрабатывался: систему и её API на этапе MVP не предоставили.
-Контур работает с эмулятором `mock-helpdesk`. Для подключения нужен адаптер по API help desk
-заказчика: клиент в `backend/apps/integrations/` с теми же операциями (передать заявку, прочитать
-статус и отчёт исполнителя), адрес — в `HELPDESK_URL`.
+По умолчанию контур работает с эмулятором `mock-helpdesk`. Для help desk заказчика:
+
+```bash
+HELPDESK_MODE=rest
+HELPDESK_URL=https://helpdesk.corp.local
+HELPDESK_TOKEN=<токен сервисной учётки>
+HELPDESK_AUTH_SCHEME=Token                      # Bearer | Token | Basic
+HELPDESK_SUBMIT_PATH=/api/tickets/
+HELPDESK_STATUS_PATH=/api/tickets/statuses/
+HELPDESK_STATUS_MAP={"Исполнено":"done","В работе":"in_progress","Назначена":"assigned"}
+HELPDESK_CA_CERT=/certs/corp-ca.pem
+```
+
+Контракт API и соответствие статусов описаны в `docs/integrations.md`. Если система не готова,
+укажите `HELPDESK_MODE=off`: заявки остаются в системе, статусы ведёт бригада. Проверка — страница
+«Интеграции» → «Проверить связь».
+
+### 6.6 Реестр оборудования
+
+Пока реестра нет, работает эмуляция по каналам. Выгрузку учётной системы (CSV или XLSX по шаблону)
+загружает администратор на странице «Интеграции» или инженер ТО в «Реестре оборудования». Для
+ежедневной синхронизации по API задайте `REGISTRY_MODE=api`, `REGISTRY_URL`, `REGISTRY_TOKEN`
+(при необходимости `REGISTRY_CA_CERT`). Эмулированные записи удаляются при первой успешной загрузке.
+
+### 6.7 Видеонаблюдение
+
+Камеры заводятся в администрировании («Камеры видеонаблюдения»): объект, пикет, ид камеры в системе
+видеонаблюдения. Подключение VMS заказчика:
+
+```bash
+VMS_MODE=http
+VMS_URL=https://vms.corp.local
+VMS_TOKEN=<токен только на чтение>
+VMS_SNAPSHOT_PATH=/api/cameras/{id}/snapshot    # параметр at — момент кадра (ISO 8601)
+VMS_LIVE_URL=https://vms.corp.local/live/{id}?t={at}
+```
+
+Сервис `mock-vms` в контуре заказчика не нужен: `docker compose stop mock-vms`. `VMS_MODE=off`
+убирает блок камер из карточек.
+
+### 6.8 Grafana и Prometheus
+
+Вход — через учётную запись системы. Администратор видит всё, аналитик — бизнес-панели. Форма входа
+Grafana выключена. Пароль `GRAFANA_ADMIN_PASSWORD` нужен только сервису `grafana-init`: он
+выставляет права папок. Витрины Grafana читает ролью `grafana_reader` с доступом только на чтение
+к таблицам панелей. Задайте ей свой пароль `GRAFANA_DB_PASSWORD` в `.env` до первого запуска или
+перезапустите `migrate` и `grafana` после смены пароля.
 
 ## 7. Учебный контур
 

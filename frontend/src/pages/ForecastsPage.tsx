@@ -255,8 +255,8 @@ export function ForecastsPage() {
                       <Table.Td>{p.channel_name ?? '—'}</Table.Td>
                       <Table.Td>{p.node_name}</Table.Td>
                       <Table.Td>
-                        {isIndicator(p.task) ? (
-                          <Text size="sm" title="Индикатор по правилам: индекс риска 0–1, не вероятность">
+                        {isIndicator(p.task) && p.index == null ? (
+                          <Text size="sm" title="Индикатор по правилам без калибровки: индекс риска 0–1">
                             индекс {p.probability.toFixed(2)}
                           </Text>
                         ) : (

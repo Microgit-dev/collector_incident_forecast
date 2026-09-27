@@ -241,8 +241,33 @@ KAFKA = {
     "TOPIC_SIM_COMMANDS": env("KAFKA_TOPIC_SIM_COMMANDS", default="sim.training-commands"),
 }
 
+# Внешние системы заказчика (ТЗ §6, §10, §13) — все в режиме «только чтение», кроме передачи заявок.
+# Режим mock — эмуляторы стенда из compose; боевые режимы подключают системы заказчика без правки кода
+# (docs/integrations.md). Состояние обмена и проверка связи — страница «Интеграции» у администратора.
 INTEGRATIONS = {
+    # Система учёта заявок: mock | rest | off (off — заявки остаются в системе, статусы ведёт бригада)
+    "HELPDESK_MODE": env("HELPDESK_MODE", default="mock"),
     "HELPDESK_URL": env("HELPDESK_URL", default="http://mock-helpdesk:8080"),
+    "HELPDESK_TOKEN": env("HELPDESK_TOKEN", default=""),
+    "HELPDESK_AUTH_SCHEME": env("HELPDESK_AUTH_SCHEME", default="Bearer"),  # Bearer | Token | Basic
+    "HELPDESK_SUBMIT_PATH": env("HELPDESK_SUBMIT_PATH", default="/api/tickets/"),
+    "HELPDESK_STATUS_PATH": env("HELPDESK_STATUS_PATH", default="/api/tickets/statuses/"),
+    # Статусы help desk заказчика → наши: {"Выполнено": "done", "В работе": "in_progress", ...}
+    "HELPDESK_STATUS_MAP": env.json("HELPDESK_STATUS_MAP", default={}),
+    "HELPDESK_CA_CERT": env("HELPDESK_CA_CERT", default=""),
+    # Реестр оборудования: emulated (по каналам) | api (учётная система, раз в сутки) | file (выгрузки CSV/XLSX)
+    "REGISTRY_MODE": env("REGISTRY_MODE", default="emulated"),
+    "REGISTRY_URL": env("REGISTRY_URL", default=""),
+    "REGISTRY_TOKEN": env("REGISTRY_TOKEN", default=""),
+    "REGISTRY_CA_CERT": env("REGISTRY_CA_CERT", default=""),
+    # Видеонаблюдение (VMS): mock | http | off. Кадр берётся бэкендом и отдаётся интерфейсу через API
+    "VMS_MODE": env("VMS_MODE", default="mock"),
+    "VMS_URL": env("VMS_URL", default="http://mock-vms:8080"),
+    "VMS_TOKEN": env("VMS_TOKEN", default=""),
+    "VMS_SNAPSHOT_PATH": env("VMS_SNAPSHOT_PATH", default="/api/cameras/{id}/snapshot"),
+    # Ссылка для браузера на поток или архив камеры ({id}, {at}); пусто — кнопки «Открыть поток» нет
+    "VMS_LIVE_URL": env("VMS_LIVE_URL", default="/vms/live/{id}?at={at}"),
+    "VMS_CA_CERT": env("VMS_CA_CERT", default=""),
     "WEATHER_URL": env("WEATHER_URL", default="https://archive-api.open-meteo.com/v1/archive"),
 }
 

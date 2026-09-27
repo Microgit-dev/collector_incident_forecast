@@ -8,7 +8,8 @@
     прогноз превышения метана → калибровка сигнализатора и проверка вентиляции;
     прогноз подтопления → обслуживание насосов АНС;
     молчание регулярного канала и низкий Data Health Score → проверка канала и связи;
-    просроченное ТО по реестру оборудования → плановое ТО; риск по каналам единицы поднимает приоритет.
+    просроченное ТО по реестру оборудования → плановое ТО; риск по каналам единицы поднимает приоритет;
+    фактическое состояние по осмотру «требует ремонта» / «неисправно» → ремонт или замена.
 Открытая рекомендация на тот же объект (канал/единицу) и вид работ обновляется, а не дублируется.
 """
 
@@ -103,7 +104,8 @@ def _from_registry(today: date) -> list[Draft]:
     )
     candidates = []
     for eq in (
-        Equipment.objects.exclude(last_maintenance_at=None)
+        Equipment.objects.filter(is_active=True)
+        .exclude(last_maintenance_at=None)
         .exclude(maintenance_interval_days=None)
         .select_related("node")
         .prefetch_related("channels")
@@ -132,12 +134,33 @@ def _from_registry(today: date) -> list[Draft]:
     return drafts
 
 
+def _from_condition() -> list[Draft]:
+    """Оборудование, которое по последнему осмотру требует ремонта или неисправно."""
+    from apps.assets.models import Equipment, EquipmentCondition
+
+    priority = {
+        EquipmentCondition.NEEDS_REPAIR: RiskLevel.HIGH,
+        EquipmentCondition.FAULTY: RiskLevel.CRITICAL,
+    }
+    drafts = []
+    for eq in Equipment.objects.filter(is_active=True, condition__in=list(priority)).select_related("node"):
+        work = (
+            WorkType.SENSOR_REPLACEMENT
+            if eq.kind == "sensor"
+            else EQUIPMENT_WORK.get(eq.kind, WorkType.INSPECTION)
+        )
+        when = f" ({eq.condition_at:%d.%m.%Y})" if eq.condition_at else ""
+        text = f"По последнему осмотру{when} «{eq.name}»: {eq.get_condition_display().lower()}."
+        drafts.append(Draft(eq.node_id, work, priority[eq.condition], text, equipment_id=eq.pk))
+    return drafts
+
+
 @transaction.atomic
 def generate(today: date | None = None) -> dict:
     from django.utils import timezone
 
     today = today or timezone.localdate()
-    drafts = _from_risks(today) + _from_health() + _from_registry(today)
+    drafts = _from_risks(today) + _from_health() + _from_registry(today) + _from_condition()
     created = updated = 0
     for d in drafts:
         key = Q(node_id=d.node_id, work_type=d.work_type, status__in=OPEN)

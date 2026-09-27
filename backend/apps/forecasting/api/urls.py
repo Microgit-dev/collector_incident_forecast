@@ -6,6 +6,7 @@ from .views import (
     ChannelHealthViewSet,
     ChannelRiskViewSet,
     CycleViewSet,
+    IndicatorCalibrationViewSet,
     MLModelViewSet,
     NodeRiskViewSet,
     PredictionViewSet,
@@ -15,6 +16,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register("forecasting/models", MLModelViewSet)
+router.register("forecasting/calibrations", IndicatorCalibrationViewSet)
 router.register("forecasting/policies", RiskPolicyViewSet)
 router.register("forecasting/predictions", PredictionViewSet)
 router.register("forecasting/training-runs", TrainingRunViewSet)

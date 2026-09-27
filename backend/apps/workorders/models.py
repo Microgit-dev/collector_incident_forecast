@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 
+from apps.assets.models import EquipmentCondition
 from apps.core.models import TimeStampedModel
 from apps.forecasting.models import RiskLevel
 
@@ -133,7 +134,45 @@ class WorkOrder(TimeStampedModel):
         permissions = [
             ("approve_workorder", "Утверждать заявки"),
             ("execute_workorder", "Исполнять заявки (бригада)"),
+            ("plan_maintenance", "Планировать ТО: план работ, реестр оборудования, фактическое состояние"),
         ]
 
     def __str__(self):
         return f"{self.number} {self.title}"
+
+
+class EquipmentInspection(TimeStampedModel):
+    """
+    Осмотр или ТО единицы оборудования с оценкой фактического состояния. Записывает бригада при
+    выполнении заявки или инженер ТО при обходе; последнее состояние копируется в реестр
+    (Equipment.condition), ТО обновляет дату последнего обслуживания.
+    """
+
+    equipment = models.ForeignKey(
+        "assets.Equipment", verbose_name="оборудование", on_delete=models.CASCADE, related_name="inspections"
+    )
+    inspected_at = models.DateTimeField("когда")
+    inspector = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="кто",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    condition = models.CharField("фактическое состояние", max_length=16, choices=EquipmentCondition.choices)
+    maintenance = models.BooleanField("выполнено ТО", default=False)
+    notes = models.TextField("замечания", blank=True)
+    workorder = models.ForeignKey(
+        WorkOrder,
+        verbose_name="заявка",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inspections",
+    )
+
+    class Meta:
+        verbose_name = "осмотр оборудования"
+        verbose_name_plural = "осмотры оборудования"
+        ordering = ("-inspected_at",)

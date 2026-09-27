@@ -17,6 +17,7 @@ class Role(StrEnum):
     UNIT_DISPATCHER = "unit_dispatcher"
     ANALYST = "analyst"
     TECHNICIAN = "technician"
+    MAINTENANCE_ENGINEER = "maintenance_engineer"
     OBSERVER = "observer"
 
 
@@ -62,6 +63,9 @@ ROLES: dict[Role, RoleSpec] = {
             "workorders.add_workorder",
             "workorders.change_workorder",
             "workorders.approve_workorder",
+            # план ТО зоны — руководитель видит и корректирует план инженера ТО
+            "workorders.plan_maintenance",
+            "workorders.change_maintenancerecommendation",
             "analytics.export_report",
             "notifications.change_notification",
             "audit.view_actionlog",
@@ -130,6 +134,8 @@ ROLES: dict[Role, RoleSpec] = {
             "analytics.export_report",
             "audit.view_actionlog",
             "notifications.change_notification",
+            # бизнес-панели Grafana; системные панели и Prometheus — только администратору
+            "accounts.view_grafana",
         ],
     ),
     Role.TECHNICIAN: RoleSpec(
@@ -140,7 +146,27 @@ ROLES: dict[Role, RoleSpec] = {
             "assets.view_*",
             "workorders.view_workorder",
             "workorders.execute_workorder",
+            # фактическое состояние оборудования при выполнении заявки
+            "workorders.view_equipmentinspection",
+            "workorders.add_equipmentinspection",
             "notifications.view_notification",
+            "notifications.change_notification",
+        ],
+    ),
+    Role.MAINTENANCE_ENGINEER: RoleSpec(
+        "Инженер ТО",
+        "Планирование профилактических работ: план ТО по регламенту и состоянию, реестр оборудования, "
+        "фактическое состояние, черновики заявок на ТО",
+        [
+            *_VIEW_ALL,
+            "workorders.plan_maintenance",
+            "workorders.add_workorder",
+            "workorders.change_workorder",
+            "workorders.change_maintenancerecommendation",
+            "workorders.add_equipmentinspection",
+            "assets.add_equipment",
+            "assets.change_equipment",
+            "analytics.export_report",
             "notifications.change_notification",
         ],
     ),

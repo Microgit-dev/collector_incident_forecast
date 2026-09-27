@@ -39,6 +39,7 @@ import type {
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
+import { useCompleteOrder } from '../components/CompleteOrder'
 import { LEGEND, MODE_HINT, MODE_LABEL, SENSOR_COLOR, objectColor, objectWeight } from '../map/status'
 
 // движок карты тяжёлый — грузится только на этой странице
@@ -230,12 +231,17 @@ function ObjectPanel({ id, detail, loading, onBack }: { id: number; detail?: Mon
     },
     onError: (e) => notifications.show({ color: 'red', message: e.message }),
   })
+  const complete = useCompleteOrder(() => {
+    void client.invalidateQueries({ queryKey: ['monitoring'] })
+    void client.invalidateQueries({ queryKey: ['monitoring-object', id] })
+  })
   if (loading || !detail) return <Loader size="sm" />
   const sensors = detail.sensors ?? []
   const bad = sensors.filter((s) => s.state !== 'normal' || s.silent)
   const shown = allSensors ? sensors : bad
   return (
     <Stack gap="sm">
+      {complete.modal}
       <Group gap={4} wrap="nowrap">
         <ActionIcon variant="subtle" onClick={onBack} aria-label="К списку">
           <IconArrowLeft size={16} />
@@ -315,7 +321,10 @@ function ObjectPanel({ id, detail, loading, onBack }: { id: number; detail?: Mon
                         </Text>
                       </Group>
                       {next ? (
-                        <Button size="sm" fullWidth loading={move.isPending} onClick={() => move.mutate({ order: o.id, status: next.status })}>
+                        <Button size="sm" fullWidth loading={move.isPending} onClick={() =>
+                            next.status === 'done' ? complete.open(o.id) : move.mutate({ order: o.id, status: next.status })
+                          }
+                        >
                           {next.label}
                         </Button>
                       ) : o.status === 'draft' ? (

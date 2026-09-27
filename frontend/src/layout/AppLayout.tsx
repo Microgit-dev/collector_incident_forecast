@@ -16,8 +16,10 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
+  IconActivityHeartbeat,
   IconAlertTriangle,
   IconBrain,
+  IconCalendarDue,
   IconCalendarStats,
   IconCertificate,
   IconSchool,
@@ -37,11 +39,14 @@ import {
   IconLogout,
   IconMap2,
   IconMoon,
+  IconPlugConnected,
+  IconPresentationAnalytics,
   IconRoute,
   IconSettings,
   IconShieldCheck,
   IconSun,
   IconTimeline,
+  IconTool,
   IconUser,
   IconUsersGroup,
 } from '@tabler/icons-react'
@@ -50,6 +55,7 @@ import type { ComponentType } from 'react'
 import { NavLink as RouterLink, Outlet, useLocation } from 'react-router-dom'
 
 import { api } from '../api/client'
+import { GRAFANA_PERM, openObservability, SYSTEM_PERM } from '../api/observability'
 import { ROLE } from '../api/labels'
 import { useAuth } from '../auth/AuthContext'
 import { useNotificationStream } from '../realtime/useNotificationStream'
@@ -77,6 +83,8 @@ const NAV: NavItem[] = [
   { to: '/models', label: 'Модели', icon: IconBrain, perm: 'forecasting.view_mlmodel' },
   { to: '/learning', label: 'Обучение и обратная связь', icon: IconSchool, perm: 'forecasting.review_feedback' },
   { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
+  { to: '/maintenance', label: 'План ТО', icon: IconCalendarDue, perm: 'workorders.plan_maintenance' },
+  { to: '/equipment', label: 'Реестр оборудования', icon: IconTool, perm: 'workorders.plan_maintenance' },
   { to: '/history', label: 'История', icon: IconCalendarStats, perm: 'telemetry.view_channeldaily' },
   { to: '/replay', label: 'Разбор эпизода', icon: IconHistory, perm: 'incidents.view_incident' },
   { to: '/teams', label: 'Команды', icon: IconUsersGroup },
@@ -87,6 +95,7 @@ const NAV: NavItem[] = [
   { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
   { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
   { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
+  { to: '/integrations', label: 'Интеграции', icon: IconPlugConnected, perm: 'integrations.manage_integrations' },
 ]
 
 function ColorSchemeToggle({ visibleFrom }: { visibleFrom?: string }) {
@@ -238,10 +247,35 @@ export function AppLayout() {
             />
           )}
         </Stack>
-        {isStaff && (
+        {(isStaff || can(GRAFANA_PERM) || can(SYSTEM_PERM)) && (
           <Stack gap={2}>
-            <NavLink href="/admin/" label="Администрирование" leftSection={<IconSettings size={18} stroke={1.6} />} />
-            <NavLink href="/grafana/" label="Мониторинг системы" leftSection={<IconChartBar size={18} stroke={1.6} />} />
+            {isStaff && (
+              <NavLink href="/admin/" label="Администрирование" leftSection={<IconSettings size={18} stroke={1.6} />} />
+            )}
+            {(can(GRAFANA_PERM) || can(SYSTEM_PERM)) && (
+              <NavLink
+                label="Панели Grafana"
+                description="Бизнес-показатели"
+                leftSection={<IconPresentationAnalytics size={18} stroke={1.6} />}
+                onClick={() => openObservability('business')}
+              />
+            )}
+            {can(SYSTEM_PERM) && (
+              <>
+                <NavLink
+                  label="Мониторинг системы"
+                  description="Сервисы и очереди в Grafana"
+                  leftSection={<IconChartBar size={18} stroke={1.6} />}
+                  onClick={() => openObservability('system')}
+                />
+                <NavLink
+                  label="Prometheus"
+                  description="Метрики и цели сбора"
+                  leftSection={<IconActivityHeartbeat size={18} stroke={1.6} />}
+                  onClick={() => openObservability('prometheus')}
+                />
+              </>
+            )}
           </Stack>
         )}
       </AppShell.Navbar>

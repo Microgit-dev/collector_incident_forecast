@@ -18,7 +18,16 @@ from apps.audit.models import ActionLog
 from apps.incidents.models import Decision, DecisionCause, DecisionOutcome, Incident, IncidentEvent
 
 DISPATCHERS = ("unit_dispatcher", "ods_dispatcher")
-ALL_ROLES = ("unit_dispatcher", "ods_dispatcher", "head", "analyst", "technician", "observer", "admin")
+ALL_ROLES = (
+    "unit_dispatcher",
+    "ods_dispatcher",
+    "head",
+    "analyst",
+    "technician",
+    "maintenance_engineer",
+    "observer",
+    "admin",
+)
 
 
 @dataclass(frozen=True)

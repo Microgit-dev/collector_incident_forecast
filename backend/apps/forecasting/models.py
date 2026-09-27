@@ -116,6 +116,8 @@ class Prediction(models.Model):
     horizon_hours = models.PositiveSmallIntegerField("горизонт, ч")
     valid_until = models.DateTimeField("действует до")
     probability = models.FloatField("вероятность")
+    # Пожар и НСД: индекс правил 0–1, из которого по истории получена вероятность (IndicatorCalibration)
+    index = models.FloatField("индекс правил", null=True, blank=True)
     risk_level = models.CharField("уровень риска", max_length=16, choices=RiskLevel.choices, db_index=True)
     # [{"feature": "...", "title": "...", "value": ..., "contribution": ...}] + описательные факторы
     factors = models.JSONField("факторы риска", default=list, blank=True)
@@ -134,6 +136,30 @@ class Prediction(models.Model):
 
     def __str__(self):
         return f"{self.get_task_display()} {self.probability:.0%} ({self.issued_at:%Y-%m-%d %H:%M})"
+
+
+class IndicatorCalibration(TimeStampedModel):
+    """
+    Калибровка индекса правил пожара и НСД в вероятность «угроза проявится за 24 ч» по архиву
+    (domain/calibration.py). Действует последняя запись задачи; прежние остаются для истории.
+    """
+
+    task = models.CharField("задача", max_length=32, choices=ForecastTask.choices, db_index=True)
+    horizon_hours = models.PositiveSmallIntegerField("горизонт, ч", default=24)
+    period = models.CharField("период обучения", max_length=64)
+    test_period = models.CharField("период проверки", max_length=64, blank=True)
+    # {"edges", "base_rate", "bins": [{"lo", "hi", "n", "k", "p"}], "n", "k"}
+    calibration = models.JSONField("интервалы индекса и вероятности")
+    # {"n", "k", "brier", "brier_base", "reliability": [...]} на отложенном периоде
+    test = models.JSONField("проверка на отложенных данных", default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "калибровка индикатора"
+        verbose_name_plural = "калибровки индикаторов"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.get_task_display()} · {self.period}"
 
 
 class TrainingRun(TimeStampedModel):

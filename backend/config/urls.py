@@ -22,6 +22,7 @@ api_v1 = [
     path("", include("apps.training.api.urls")),
     path("", include("apps.wiki.api.urls")),
     path("", include("apps.audit.api.urls")),
+    path("", include("apps.integrations.api.urls")),
 ]
 
 urlpatterns = [

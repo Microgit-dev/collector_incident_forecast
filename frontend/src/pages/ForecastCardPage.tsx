@@ -27,6 +27,7 @@ import { CHANNEL_STATE, HEALTH_COMPONENT, INCIDENT_TYPE, isIndicator, PREDICTION
 import type { PredictionCard } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
+import { CameraPanel } from '../components/CameraPanel'
 
 const pct = (v: number | null | undefined, digits = 0) => (v == null ? '—' : `${(v * 100).toFixed(digits)}%`)
 const scoreColor = (v: number) => (v >= 80 ? 'teal' : v >= 50 ? 'yellow' : 'red')
@@ -51,12 +52,44 @@ function TrustCard({ card }: { card: PredictionCard }) {
   const live = card.realized.live
   const back = card.realized.backtest
   if (m.method === 'rules') {
+    const test = m.test
     return (
       <Card withBorder radius="md">
         <Text fw={600} mb="xs">
           Насколько доверять
         </Text>
         <Text size="sm">{m.note}</Text>
+        {m.calibrated && m.bin ? (
+          <>
+            <SimpleGrid cols={{ base: 2, sm: 4 }} mt="sm">
+              <Metric
+                label="Похожих случаев в истории"
+                value={m.bin.n.toLocaleString('ru-RU')}
+                hint={`Моменты ${m.period} с индексом ${m.bin.lo.toFixed(2)}–${m.bin.hi.toFixed(2)}`}
+              />
+              <Metric label="Угроза проявилась" value={pct(m.bin.p)} hint={`${m.bin.k} из ${m.bin.n}, со сглаживанием`} />
+              <Metric
+                label="Обычная частота"
+                value={pct(test?.n ? test.k! / test.n : undefined)}
+                hint="Доля проявившихся среди всех случаев с индексом от 0,15 на отложенном периоде"
+              />
+              <Metric
+                label="Проверка (Brier)"
+                value={test?.brier != null ? test.brier.toFixed(3) : '—'}
+                hint={`Отложенный ${m.test_period}: ${test?.brier ?? '—'} против ${test?.brier_base ?? '—'} для постоянной частоты. Меньше — лучше`}
+              />
+            </SimpleGrid>
+            <Text size="xs" c="dimmed" mt="xs">
+              Калибровка по архиву {m.period}; проверка — версия, обученная на {test?.train_period ?? '—'}, на
+              {' '}{m.test_period}. Вероятность по интервалам индекса:{' '}
+              {m.bins?.map((b) => `${b.lo.toFixed(2)}–${b.hi.toFixed(2)}: ${pct(b.p)}`).join(' · ')}
+            </Text>
+          </>
+        ) : (
+          <Text size="sm" mt="xs" c="orange.8">
+            Калибровки ещё нет (архив журналов не загружен) — показан индекс правил.
+          </Text>
+        )}
         <Text size="sm" mt="xs">
           Итог журнала на этом уровне: угроза проявилась в {back.confirmed} из {back.resolved} записей бэктеста (
           {pct(back.precision)}), в работе — {live.confirmed} из {live.resolved}.
@@ -319,11 +352,20 @@ export function ForecastCardPage() {
               <Group align="flex-end" gap="xl" mb="xs">
                 <div>
                   <Text size="xs" c="dimmed">
-                    {indicator ? 'Индекс риска' : `Вероятность за ${card.horizon_hours} ч`}
+                    {indicator && !card.model_info.calibrated
+                      ? 'Индекс риска'
+                      : indicator
+                        ? `Вероятность проявления за ${card.horizon_hours} ч`
+                        : `Вероятность за ${card.horizon_hours} ч`}
                   </Text>
                   <Text fz={40} fw={700} lh={1}>
-                    {indicator ? card.probability.toFixed(2) : pct(card.probability)}
+                    {indicator && !card.model_info.calibrated ? card.probability.toFixed(2) : pct(card.probability)}
                   </Text>
+                  {indicator && card.index != null && card.model_info.calibrated && (
+                    <Text size="xs" c="dimmed" mt={4}>
+                      индекс правил {card.index.toFixed(2)}
+                    </Text>
+                  )}
                 </div>
                 <Text size="sm" style={{ flex: 1 }}>
                   {card.summary}
@@ -371,7 +413,7 @@ export function ForecastCardPage() {
                             {dayjs(h.issued_at).format('DD.MM.YYYY HH:mm')}
                           </Anchor>
                         </Table.Td>
-                        <Table.Td>{indicator ? h.probability.toFixed(2) : pct(h.probability)}</Table.Td>
+                        <Table.Td>{pct(h.probability)}</Table.Td>
                         <Table.Td>
                           <RiskBadge level={h.risk_level} />
                         </Table.Td>
@@ -391,6 +433,7 @@ export function ForecastCardPage() {
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
             <ActionCard card={card} />
+            {indicator && <CameraPanel prediction={card.id} />}
             <DataQuality card={card} />
             <Card withBorder radius="md">
               <Text fw={600} mb="xs">

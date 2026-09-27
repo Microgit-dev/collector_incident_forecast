@@ -46,6 +46,17 @@ def weekly_retrain() -> int | None:
 
 
 @shared_task
+def calibrate_indicators() -> dict:
+    """Раз в неделю: калибровка индекса пожара и НСД в вероятность по архиву (пополняется загрузками)."""
+    from .indicator_calibration import available_years, calibrate
+
+    years = available_years()
+    if not years:
+        return {}
+    return {task: row.pk for task, row in calibrate(years).items()}
+
+
+@shared_task
 def check_model_degradation() -> dict:
     """Раз в сутки: реализованная точность журнала против ожидаемой."""
     from .training import check_degradation

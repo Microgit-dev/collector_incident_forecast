@@ -101,10 +101,22 @@ class EquipmentKind(models.TextChoices):
     SENSOR = "sensor", "Датчик"
 
 
+class EquipmentCondition(models.TextChoices):
+    """Фактическое состояние по последнему осмотру или ТО (ТЗ §1, «фактическое состояние»)."""
+
+    GOOD = "good", "Исправно"
+    REMARKS = "remarks", "Работоспособно, есть замечания"
+    NEEDS_REPAIR = "needs_repair", "Требует ремонта"
+    FAULTY = "faulty", "Неисправно"
+
+
 class Equipment(TimeStampedModel):
     """
-    Реестр оборудования. У заказчика его нет — заполняется эмуляцией на основе каналов
-    и средних значений наработки на отказ из открытых источников (source=emulated).
+    Реестр оборудования (ТЗ §6, §10: синхронизация с базой оборудования заказчика).
+
+    Источник записи: реестр заказчика по API или файлом CSV/XLSX (imported, apps/assets/registry_sync.py),
+    ручной ввод (manual) или, пока реестра нет, эмуляция по каналам и средней наработке на отказ
+    из открытых источников (emulated). Фактическое состояние — по последнему осмотру (EquipmentInspection).
     """
 
     kind = models.CharField("вид", max_length=16, choices=EquipmentKind.choices)
@@ -125,12 +137,54 @@ class Equipment(TimeStampedModel):
         "источник записи",
         max_length=16,
         default="emulated",
-        choices=[("emulated", "эмуляция"), ("imported", "импорт"), ("manual", "вручную")],
+        choices=[("emulated", "эмуляция"), ("imported", "реестр заказчика"), ("manual", "вручную")],
     )
+    condition = models.CharField(
+        "фактическое состояние", max_length=16, choices=EquipmentCondition.choices, blank=True
+    )
+    condition_at = models.DateTimeField("состояние на", null=True, blank=True)
+    is_active = models.BooleanField("в эксплуатации", default=True, help_text="False — списано или выведено")
+    synced_at = models.DateTimeField("синхронизировано с реестром", null=True, blank=True)
 
     class Meta:
         verbose_name = "единица оборудования"
         verbose_name_plural = "реестр оборудования"
+        indexes = [models.Index(fields=["inventory_number"])]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def next_maintenance_at(self):
+        """Срок следующего ТО по регламенту: последнее ТО (или ввод) + интервал."""
+        from datetime import timedelta
+
+        base = self.last_maintenance_at or self.commissioned_at
+        if base is None or not self.maintenance_interval_days:
+            return None
+        return base + timedelta(days=self.maintenance_interval_days)
+
+
+class Camera(TimeStampedModel):
+    """
+    Камера видеонаблюдения на объекте: проверка тревоги по камерам (ТЗ §12, шаг «Верификация»).
+    Кадры и поток берутся из системы видеонаблюдения заказчика (VMS) по external_id,
+    см. apps/integrations/video.py; на стенде — эмулятор mock-vms.
+    """
+
+    node = models.ForeignKey(
+        "topology.Node", verbose_name="объект", on_delete=models.CASCADE, related_name="cameras"
+    )
+    name = models.CharField("название", max_length=255)
+    external_id = models.CharField("ид камеры в системе видеонаблюдения", max_length=64, unique=True)
+    picket = models.DecimalField("пикет", max_digits=8, decimal_places=2, null=True, blank=True)
+    location = models.JSONField("точка на карте", null=True, blank=True)
+    is_active = models.BooleanField("работает", default=True)
+
+    class Meta:
+        verbose_name = "камера видеонаблюдения"
+        verbose_name_plural = "камеры видеонаблюдения"
+        ordering = ("node", "picket", "name")
 
     def __str__(self):
         return self.name

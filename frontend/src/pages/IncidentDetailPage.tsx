@@ -29,6 +29,7 @@ import { CAUSE, INCIDENT_TYPE, isIndicator, OUTCOME } from '../api/labels'
 import type { DecisionCause, DecisionOutcome, DecisionReason, IncidentDetail } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
+import { CameraPanel } from '../components/CameraPanel'
 import { ActionsCard, EpisodeCard, HypothesesCard } from '../components/EpisodePanels'
 
 function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail; opened: boolean; onClose: () => void }) {
@@ -279,8 +280,8 @@ export function IncidentDetailPage() {
               {incident.probability !== null &&
                 (isIndicator(incident.type) ? (
                   <Text size="sm">
-                    Индекс риска: {incident.probability.toFixed(2)} на {incident.horizon_hours} ч — индикатор по правилам,
-                    не вероятность
+                    Вероятность проявления угрозы: {(incident.probability * 100).toFixed(0)}% за {incident.horizon_hours} ч —
+                    индикатор по правилам, вероятность по истории похожих случаев (подробно — в карточке прогноза)
                   </Text>
                 ) : (
                   <Text size="sm">
@@ -320,6 +321,7 @@ export function IncidentDetailPage() {
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
+            <CameraPanel incident={incident.id} />
             <Card withBorder radius="md">
               <Text fw={600} mb="sm">
                 Просмотрели карточку

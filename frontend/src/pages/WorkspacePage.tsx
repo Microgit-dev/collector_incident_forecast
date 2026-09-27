@@ -29,6 +29,7 @@ import { INCIDENT_TYPE, WO_STATUS } from '../api/labels'
 import type { Live, MyMetrics, Workspace, WorkspaceKpi, WorkspaceOrder, WorkOrderStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
+import { useCompleteOrder } from '../components/CompleteOrder'
 import { IncidentLine, RisksPanel } from '../components/LivePanels'
 import { SchemeLegend, SchemeMap, SegmentDetails, type SegmentProps } from '../components/SchemeMap'
 import { useRoutes } from '../components/useScheme'
@@ -110,6 +111,47 @@ function OrderLine({ order, action }: { order: WorkspaceOrder; action?: React.Re
         {action}
       </Group>
     </Stack>
+  )
+}
+
+function EngineerPanel({ data }: { data: Workspace }) {
+  const due = data.lists.maintenance_due ?? []
+  const recs = data.lists.maintenance_recommendations ?? []
+  return (
+    <Panel title="Просрочено и не в плане" to="/maintenance">
+      {due.length ? (
+        <Stack gap={0}>
+          {due.map((r) => (
+            <Stack key={r.id} gap={2} py={6} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+              <Text size="sm" fw={500} lineClamp={1}>
+                {r.name}
+              </Text>
+              <Text size="xs" c="red">
+                {r.node_name} · ТО просрочено на {r.overdue_days} сут
+                {r.condition_display ? ` · ${r.condition_display.toLowerCase()}` : ''}
+              </Text>
+            </Stack>
+          ))}
+        </Stack>
+      ) : (
+        <Empty>Просроченного ТО вне плана нет.</Empty>
+      )}
+      {recs.length > 0 && (
+        <>
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase" mt="md" mb={4}>
+            Рекомендации по состоянию
+          </Text>
+          {recs.map((r) => (
+            <Group key={r.id} gap={6} wrap="nowrap" py={4}>
+              <RiskBadge level={r.priority} />
+              <Text size="sm" lineClamp={1} style={{ flex: 1 }}>
+                {r.work_type_display} · {r.equipment_name ?? r.channel_name ?? r.node_name}
+              </Text>
+            </Group>
+          ))}
+        </>
+      )}
+    </Panel>
   )
 }
 
@@ -307,8 +349,13 @@ function TechnicianPanel({ data }: { data: Workspace }) {
     },
     onError: (e) => notifications.show({ color: 'red', message: e.message }),
   })
+  const complete = useCompleteOrder(() => {
+    client.invalidateQueries({ queryKey: ['workspace'] })
+    client.invalidateQueries({ queryKey: ['scheme'] })
+  })
   return (
     <Panel title="Мои заявки" to="/workorders">
+      {complete.modal}
       {orders.length ? (
         <Stack gap={0}>
           {orders.map((o) => {
@@ -324,7 +371,9 @@ function TechnicianPanel({ data }: { data: Workspace }) {
                       size="sm"
                       fullWidth={phone}
                       loading={move.isPending && move.variables?.id === o.id}
-                      onClick={() => move.mutate({ id: o.id, status: next.status })}
+                      onClick={() =>
+                        next.status === 'done' ? complete.open(o.id) : move.mutate({ id: o.id, status: next.status })
+                      }
                     >
                       {next.label}
                     </Button>
@@ -439,6 +488,8 @@ export function WorkspacePage() {
             <AnalystPanel data={data} />
           ) : data.role === 'technician' ? (
             <TechnicianPanel data={data} />
+          ) : data.role === 'maintenance_engineer' ? (
+            <EngineerPanel data={data} />
           ) : (
             <Panel title="Участок схемы">
               <Empty>Щелчок по участку схемы покажет каналы, их состояние и риск.</Empty>

@@ -41,6 +41,7 @@ DEFAULT_MODE = {
     "head": "situation",
     "analyst": "health",
     "technician": "orders",
+    "maintenance_engineer": "orders",
     "observer": "situation",
     "admin": "situation",
 }

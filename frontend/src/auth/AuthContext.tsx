@@ -39,10 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     // отозвать refresh на сервере: украденной копией токена после выхода не воспользоваться
     const refresh = tokens.refresh
-    if (refresh) void api('/auth/logout/', { method: 'POST', body: { refresh } }).catch(() => undefined)
+    const pending = [
+      refresh ? api('/auth/logout/', { method: 'POST', body: { refresh } }) : Promise.resolve(),
+      // и закрыть сеанс Grafana / Prometheus (cookie, по которой их пускает Caddy)
+      api('/observability/session/', { method: 'DELETE' }),
+    ]
     tokens.clear()
     queryClient.clear()
-    window.location.assign('/login')
+    // переход — после ответов (не дольше 2 с): иначе браузер оборвёт запросы
+    const timeout = new Promise((resolve) => setTimeout(resolve, 2000))
+    void Promise.race([Promise.allSettled(pending), timeout]).then(() => window.location.assign('/login'))
   }, [queryClient])
 
   const value = useMemo<AuthState>(() => {

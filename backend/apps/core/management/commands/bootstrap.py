@@ -59,16 +59,20 @@ PERIODIC = [
     ("Суточная витрина телеметрии", "apps.telemetry.tasks.rollup_daily", 3600),
     ("Контроль деградации модели", "apps.forecasting.tasks.check_model_degradation", 86400),
     ("Плановое переобучение модели", "apps.forecasting.tasks.weekly_retrain", 7 * 86400),
+    ("Калибровка индикаторов пожара и НСД", "apps.forecasting.tasks.calibrate_indicators", 7 * 86400),
     ("Рекомендации по ТО", "apps.workorders.tasks.generate_recommendations", 86400),
     ("Статусы заявок из help desk", "apps.workorders.tasks.sync_helpdesk", 60),
     ("Учения: старт по таймеру и завершение", "apps.training.tasks.exercise_tick", 15),
     ("Погода Open-Meteo: последние сутки и прогноз", "apps.integrations.tasks.sync_weather", 6 * 3600),
+    ("Реестр оборудования из учётной системы", "apps.integrations.tasks.sync_registry", 86400),
 ]
 # Учебный контур не обучает модели на полигоне и не ходит во внешние сервисы
 COMBAT_ONLY = {
     "apps.forecasting.tasks.check_model_degradation",
     "apps.forecasting.tasks.weekly_retrain",
+    "apps.forecasting.tasks.calibrate_indicators",
     "apps.integrations.tasks.sync_weather",
+    "apps.integrations.tasks.sync_registry",
 }
 
 
@@ -99,6 +103,12 @@ class Command(BaseCommand):
         self.stdout.write(f"feedback rules created: {seed_rules()}")
         LearningSettings.load()
         self._schedules()
+        from django.conf import settings
+        from django.core.management import call_command
+
+        # Grafana подключена только к рабочему контуру
+        if settings.CONTOUR == "combat":
+            call_command("ensure_grafana_reader", stdout=self.stdout)
         from apps.wiki.content import seed as seed_wiki
 
         self.stdout.write(f"wiki: {seed_wiki()}")
@@ -157,6 +167,8 @@ class Command(BaseCommand):
         from django.core.management import call_command
 
         call_command("seed_geo", stdout=self.stdout)
+        # камеры у входов и вдоль трассы: проверка тревоги по камерам (эмулятор VMS)
+        call_command("seed_cameras", stdout=self.stdout)
 
     def _superuser(self):
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")

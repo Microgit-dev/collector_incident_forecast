@@ -138,7 +138,8 @@ def brigade_for(node):
 
 # ---------- система учёта заявок заказчика (help desk) ----------
 
-# Статус help desk → наш статус; заявка двигается только вперёд
+# Статус help desk → наш статус; заявка двигается только вперёд. Статусы help desk заказчика
+# добавляются в .env (HELPDESK_STATUS_MAP) и дополняют статусы эмулятора
 _EXTERNAL = {
     "accepted": WorkOrder.Status.SUBMITTED,
     "assigned": WorkOrder.Status.SUBMITTED,
@@ -162,10 +163,32 @@ def _client():
     return HelpdeskClient()
 
 
+def external_status(status: str | None) -> str | None:
+    from apps.integrations.clients import conf
+
+    return {**_EXTERNAL, **conf("HELPDESK_STATUS_MAP")}.get(status or "")
+
+
+def helpdesk_enabled() -> bool:
+    from apps.integrations.clients import conf
+
+    return conf("HELPDESK_MODE") != "off"
+
+
+def _mark(ok: bool, result: dict | None = None, error: str = "") -> None:
+    from apps.integrations.registry import mark
+
+    mark("helpdesk", ok, result, error)
+
+
 def submit(order: WorkOrder, user=None) -> WorkOrder:
     """Передать утверждённую заявку в help desk: там она получает свой номер и живёт своим циклом."""
     import httpx
 
+    if not helpdesk_enabled():
+        raise WorkOrderError(
+            "Передача в систему заявок отключена (HELPDESK_MODE=off): бригада ведёт заявку в этой системе"
+        )
     payload = {
         "number": order.number,
         "title": order.title,
@@ -178,7 +201,9 @@ def submit(order: WorkOrder, user=None) -> WorkOrder:
     try:
         ticket = _client().submit(payload)
     except httpx.HTTPError as exc:
+        _mark(False, error=f"передача {order.number}: {exc}")
         raise WorkOrderError(f"Система заявок недоступна: {exc}") from exc
+    _mark(True, {"submitted": order.number, "external_id": ticket.get("id")})
     order.status = WorkOrder.Status.SUBMITTED
     _apply_external(order, ticket)
     order.save()
@@ -213,6 +238,8 @@ def sync_external() -> dict:
 
     from .models import MaintenanceRecommendation
 
+    if not helpdesk_enabled():
+        return {"checked": 0, "changed": 0, "detail": "help desk отключён"}
     # Опрашиваем, пока заявка не закрыта в help desk: «выполнена» ещё может закрыться с уточнённым отчётом
     orders = {
         o.external_id: o
@@ -224,7 +251,8 @@ def sync_external() -> dict:
         return {"checked": 0, "changed": 0}
     try:
         tickets = _client().statuses(list(orders))
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        _mark(False, error=f"статусы: {exc}")
         return {"checked": len(orders), "changed": 0, "error": "help desk недоступен"}
     changed = 0
     for external_id, ticket in tickets.items():
@@ -233,7 +261,7 @@ def sync_external() -> dict:
             continue
         before = (order.status, order.external_status, order.external_assignee)
         _apply_external(order, ticket)
-        target = _EXTERNAL.get(ticket.get("status"))
+        target = external_status(ticket.get("status"))
         if target and _ORDER.index(target) > _ORDER.index(order.status):
             order.status = target
             text = {
@@ -248,4 +276,5 @@ def sync_external() -> dict:
                 )
         order.save()
         changed += before != (order.status, order.external_status, order.external_assignee)
+    _mark(True, {"checked": len(orders), "changed": changed})
     return {"checked": len(orders), "changed": changed}
