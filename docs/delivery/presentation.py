@@ -791,22 +791,50 @@ def slide_quality(prs):
     ], size=12.5)
 
 
+def slide_map(prs):
+    s = new_slide(prs)
+    header(s, "Карта мониторинга")
+    picture(s, IMG / "monitoring_district.png", 1.2, 3.4, w=19.0)
+    card(s, 21.0, 3.2, 11.8, 8.4, "Главный экран каждой роли", [
+        "• Своя зона в цвете, смежные — пунктиром, чужие объекты — серым",
+        "• Бейджи: число карточек и их уровень, заявки в работе и просроченные",
+        "• Режимы: обстановка, прогноз, датчики, данные, заявки",
+        "• Объект: датчики по пикетам, карточки, заявки",
+    ], size=12.5)
+    card(s, 21.0, 12.2, 11.8, 5.6, "В закрытом контуре", [
+        "• Векторная карта OpenStreetMap, свой сервер тайлов",
+        "• Без тайлов — пустой фон, зоны и бейджи работают",
+    ], size=12.5)
+
+
+def slide_mobile(prs):
+    s = new_slide(prs)
+    header(s, "Мобильное приложение в браузере")
+    picture(s, IMG / "mobile_monitoring.png", 1.2, 3.4, h=14.2)
+    picture(s, IMG / "guides" / "brigade_4_complete.png", 15.3, 3.4, h=14.2)
+    card(s, 22.8, 3.2, 10.0, 8.2, "Без магазина приложений", [
+        "• Открывается по ссылке в браузере телефона",
+        "• «На главный экран» — значок и полноэкранный режим",
+        "• Тот же вход, роли и зоны, что на ПК",
+        "• Обновляется вместе с сервером",
+    ], size=12.5)
+    card(s, 22.8, 12.0, 10.0, 5.8, "На объекте", [
+        "• Бригада: заявки на карте, «в работу», «выполнена», отчёт",
+        "• Руководитель: утверждение с планшета",
+        "• От 360 px, проверено на 25 страницах",
+    ], size=12.5)
+
+
 def slide_training(prs):
     s = new_slide(prs)
-    header(s, "Учения и телефон")
-    picture(s, IMG / "guides" / "brigade_4_complete.png", 1.4, 3.4, h=14.2)
-    card(s, 9.4, 3.2, 11.6, 14.6, "Учебный контур и учения", [
+    header(s, "Учебный контур и учения")
+    picture(s, IMG / "exercise.png", 1.2, 3.4, w=19.0)
+    card(s, 21.0, 3.2, 11.8, 14.6, "Тренировка смены без риска", [
         "• Полигон из трёх объектов и симулятор датчиков: 9 сценариев",
         "• Учения: сценарий, темп, осложнение, «молчащий» участник",
         "• Разбор: отклик в норматив, решения, заявки, хронология",
         "• Учебные задания по ролям с подсказками и счётом ошибок",
         "• Вики: регламенты и памятки по ролям",
-    ], size=12.5)
-    card(s, 21.6, 3.2, 11.2, 14.6, "Работа с телефона", [
-        "• Адаптивный интерфейс от 360 px, установка на главный экран",
-        "• Бригада: свои заявки на карте, «взять в работу», «выполнена»",
-        "• Отчёт и фактическое состояние оборудования прямо на объекте",
-        "• Руководитель: утверждение и перехват с планшета",
     ], size=12.5)
 
 
@@ -895,8 +923,8 @@ def build() -> Path:
     template_slides = list(prs.slides)
     fill_mandatory(prs)
     for fn in (slide_problem, slide_cycle, slide_features, slide_roles, slide_bpmn_incident, slide_bpmn_maintenance,
-               slide_ml, slide_results, slide_episode, slide_fire, slide_maintenance, slide_constructor,
-               slide_architecture, slide_quality, slide_training, slide_tz, slide_business, slide_plans, slide_final):
+               slide_ml, slide_results, slide_map, slide_episode, slide_fire, slide_maintenance, slide_constructor,
+               slide_architecture, slide_quality, slide_mobile, slide_training, slide_tz, slide_business, slide_plans, slide_final):
         fn(prs)
     # из шаблона остаются только обязательные 7–11, служебные и образцы удаляются
     for i, slide in enumerate(template_slides, start=1):
