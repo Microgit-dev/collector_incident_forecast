@@ -647,12 +647,102 @@ export interface PlannedOrder {
 export interface MaintenancePlan {
   today: string
   horizon_days: number
-  kpis: Record<'overdue' | 'due_30' | 'unplanned_overdue' | 'recommendations' | 'bad_condition' | 'planned', number>
+  kpis: Record<
+    'overdue' | 'due_30' | 'unplanned_overdue' | 'recommendations' | 'bad_condition' | 'planned' | 'schedule_unplanned',
+    number
+  >
   due: MaintenanceDue[]
   bad_condition: MaintenanceDue[]
   recommendations: MaintenanceRec[]
   planned: PlannedOrder[]
   weeks: { week: string; orders: number }[]
+  schedule_due: ScheduleDue[]
+}
+
+// Работа утверждённого графика ТО и ТР / ППР на ближайшие месяцы
+export interface ScheduleDue {
+  id: number
+  schedule: string
+  kind: 'to_tr' | 'ppr'
+  object: string
+  type_name: string
+  quantity: number
+  unit: string
+  month: number
+  work: string
+  date: string | null
+  planned: { id: number; number: string; status: WorkOrderStatus } | null
+}
+
+export interface MaintenanceNorm {
+  id: number
+  type_name: string
+  system: string
+  unit: string
+  visits_per_year: number
+  repairs_per_year: number
+  ppr: boolean
+  source: string
+}
+
+export interface ScheduleValidation {
+  rows: number
+  periodicity_match?: number
+  repairs_match?: number
+  batches_customer?: number
+  batches_generated?: number
+  load_customer: number[]
+  load_generated: number[]
+  cv_customer: number
+  cv_generated: number
+  max_customer?: number
+  max_generated?: number
+  last_acceptance_customer?: string | null
+  last_acceptance_generated?: string | null
+}
+
+export interface MaintenanceScheduleItem {
+  id: number
+  kind: 'to_tr' | 'ppr'
+  kind_display: string
+  year: number
+  title: string
+  source: 'generated' | 'customer'
+  source_display: string
+  status: 'draft' | 'approved'
+  status_display: string
+  zone_name: string | null
+  created_by_name: string | null
+  approved_by_name: string | null
+  file_name: string
+  stats: {
+    objects?: number
+    lines?: number
+    batches?: number
+    sensors?: number
+    load?: number[]
+    repairs?: number[]
+    validation?: ScheduleValidation
+  }
+  created_at: string
+}
+
+export interface ScheduleLineItem {
+  id: number
+  order: number
+  node: number | null
+  object_label: string
+  type_name: string
+  quantity: number
+  unit: string
+  months: Record<string, string>
+  month: number | null
+  batch: number | null
+  dismantle_on: string | null
+  delivery_on: string | null
+  pickup_on: string | null
+  acceptance_on: string | null
+  note: string
 }
 
 export interface Equipment {

@@ -145,6 +145,12 @@ class Equipment(TimeStampedModel):
     condition_at = models.DateTimeField("состояние на", null=True, blank=True)
     is_active = models.BooleanField("в эксплуатации", default=True, help_text="False — списано или выведено")
     synced_at = models.DateTimeField("синхронизировано с реестром", null=True, blank=True)
+    # Вид оборудования по регламенту ТО заказчика («Газоанализаторы», «Кабельные линии АКМ»…) и система
+    # (АКМ, ДУ, АПС…): по ним строятся годовой график ТО и ТР и план-график ППР (workorders.schedules)
+    type_name = models.CharField("вид по регламенту ТО", max_length=128, blank=True, db_index=True)
+    system = models.CharField("система", max_length=32, blank=True)
+    quantity = models.FloatField("количество", default=1)
+    unit = models.CharField("ед. изм.", max_length=16, default="шт.")
 
     class Meta:
         verbose_name = "единица оборудования"

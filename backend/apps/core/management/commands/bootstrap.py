@@ -161,6 +161,31 @@ class Command(BaseCommand):
         self.stdout.write(f"channels: {import_channels(channels)}")
         if not Equipment.objects.exists():
             self.stdout.write(f"equipment: {emulate_registry()}")
+        self._maintenance()
+
+    def _maintenance(self):
+        """
+        Регламент ТО (нормы по видам оборудования), вид по регламенту у эмулированного реестра и графики
+        заказчика из каталога данных (график ТО и ТР, план-график ППР) — загружаются один раз.
+        """
+        from django.conf import settings
+
+        from apps.workorders.models import MaintenanceSchedule
+        from apps.workorders.regulation import assign_types, seed_norms
+        from apps.workorders.schedules import ScheduleFileError, import_customer, validate
+
+        self.stdout.write(f"norms created: {seed_norms()}")
+        self.stdout.write(f"equipment types: {assign_types()}")
+        for path in sorted(settings.DATA_DIR.glob("График*.xlsx")):
+            if MaintenanceSchedule.objects.filter(file_name=path.name).exists():
+                continue
+            try:
+                schedule = import_customer(path.read_bytes(), path.name, None)
+            except (ScheduleFileError, ValueError, KeyError) as exc:
+                self.stdout.write(f"schedule {path.name}: skipped ({exc})")
+                continue
+            validate(schedule)
+            self.stdout.write(f"schedule {path.name}: {schedule.lines.count()} lines")
 
     def _demo(self):
         """Демо-команды и сотрудники: включены по умолчанию для стенда, в эксплуатации DEMO_USERS=false."""

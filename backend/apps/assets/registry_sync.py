@@ -15,6 +15,8 @@
     mtbf_hours        средняя наработка на отказ, ч
     channel_ids       ид_канала_данных через запятую — каналы СМВУ этой единицы
     is_active         0/нет — списано
+    type_name         вид по регламенту ТО («Газоанализаторы», «Кабельные линии АКМ»…), system — система
+    quantity, unit    количество и единица (кабельные линии — в метрах); по умолчанию 1 шт.
 
 Записи реестра получают source=imported; ручные записи (manual) не трогаются; эмулированные
 записи (emulated) при первой успешной синхронизации удаляются — их заменяет реестр заказчика.
@@ -135,6 +137,12 @@ def apply(rows: list[dict], full: bool = True) -> dict:
                 "maintenance_interval_days": _int(row.get("maintenance_interval_days")),
                 "mtbf_hours": _int(row.get("mtbf_hours")),
                 "is_active": _bool(row.get("is_active", "1")),
+                "type_name": str(row.get("type_name") or "").strip()[:128],
+                "system": str(row.get("system") or "").strip()[:32],
+                "quantity": float(str(row["quantity"]).replace(",", "."))
+                if row.get("quantity") not in (None, "")
+                else 1,
+                "unit": str(row.get("unit") or "шт.").strip()[:16],
                 "source": "imported",
                 "synced_at": now,
             }
@@ -211,6 +219,10 @@ def template_csv() -> str:
         "mtbf_hours",
         "channel_ids",
         "is_active",
+        "type_name",
+        "system",
+        "quantity",
+        "unit",
     ]
     example = [
         "НС-0001",
@@ -225,5 +237,9 @@ def template_csv() -> str:
         "20000",
         "",
         "1",
+        "Насосы дренажные",
+        "АНС",
+        "1",
+        "шт.",
     ]
     return ";".join(header) + "\n" + ";".join(example) + "\n"

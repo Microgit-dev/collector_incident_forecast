@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import EquipmentInspection, MaintenanceRecommendation, WorkOrder
+from .models import (
+    EquipmentInspection,
+    MaintenanceNorm,
+    MaintenanceRecommendation,
+    MaintenanceSchedule,
+    ScheduleLine,
+    WorkOrder,
+)
 
 
 @admin.register(WorkOrder)
@@ -42,3 +49,33 @@ class EquipmentInspectionAdmin(admin.ModelAdmin):
     search_fields = ("equipment__name", "equipment__inventory_number")
     autocomplete_fields = ("equipment",)
     raw_id_fields = ("workorder",)
+
+
+@admin.register(MaintenanceNorm)
+class MaintenanceNormAdmin(admin.ModelAdmin):
+    list_display = ("type_name", "system", "unit", "visits_per_year", "repairs_per_year", "ppr", "source")
+    list_filter = ("system", "ppr")
+    list_editable = ("visits_per_year", "repairs_per_year", "ppr")
+    search_fields = ("type_name",)
+
+
+class ScheduleLineInline(admin.TabularInline):
+    model = ScheduleLine
+    extra = 0
+    fields = (
+        "object_label",
+        "type_name",
+        "quantity",
+        "unit",
+        "months",
+        "month",
+        "dismantle_on",
+        "acceptance_on",
+    )
+
+
+@admin.register(MaintenanceSchedule)
+class MaintenanceScheduleAdmin(admin.ModelAdmin):
+    list_display = ("title", "kind", "year", "source", "status", "created_at")
+    list_filter = ("kind", "source", "status", "year")
+    inlines = [ScheduleLineInline]

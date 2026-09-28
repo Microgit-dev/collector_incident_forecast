@@ -48,6 +48,7 @@ import {
   IconShieldCheck,
   IconSun,
   IconTimeline,
+  IconTable,
   IconTool,
   IconUser,
   IconUsersGroup,
@@ -104,6 +105,7 @@ const NAV: NavGroup[] = [
       { to: '/workorders', label: 'Заявки и ТО', icon: IconClipboardList, perm: 'workorders.view_workorder' },
       { to: '/maintenance', label: 'План ТО', icon: IconCalendarDue, perm: 'workorders.plan_maintenance' },
       { to: '/equipment', label: 'Реестр оборудования', icon: IconTool, perm: 'workorders.plan_maintenance' },
+      { to: '/schedules', label: 'Графики ТО и ППР', icon: IconTable, perm: 'workorders.plan_maintenance' },
     ],
   },
   {

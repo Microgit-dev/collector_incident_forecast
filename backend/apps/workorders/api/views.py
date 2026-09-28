@@ -1,6 +1,8 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,7 +15,15 @@ from apps.topology.mixins import ScopedQuerySetMixin
 from apps.topology.selectors import scope_queryset
 
 from .. import maintenance, services
-from ..models import EquipmentInspection, MaintenanceRecommendation, WorkOrder, WorkType
+from ..models import (
+    EquipmentInspection,
+    MaintenanceNorm,
+    MaintenanceRecommendation,
+    MaintenanceSchedule,
+    ScheduleLine,
+    WorkOrder,
+    WorkType,
+)
 
 
 class WorkOrderSerializer(serializers.ModelSerializer):
@@ -263,6 +273,10 @@ class MaintenancePlanView(APIView):
         except ValueError:
             horizon = maintenance.HORIZON_DAYS
         data = maintenance.plan(request.user, horizon)
+        from ..schedules import due_lines
+
+        data["schedule_due"] = due_lines(request.user)
+        data["kpis"]["schedule_unplanned"] = sum(1 for r in data["schedule_due"] if not r["planned"])
         if request.query_params.get("export") == "xlsx":
             from django.http import HttpResponse
 
@@ -281,13 +295,14 @@ class MaintenancePlanView(APIView):
 class ScheduleSerializer(serializers.Serializer):
     equipment = serializers.IntegerField(required=False)
     recommendation = serializers.IntegerField(required=False)
+    schedule_line = serializers.IntegerField(required=False)
     date = serializers.DateField()
     work_type = serializers.ChoiceField(choices=WorkType.choices, required=False)
     priority = serializers.ChoiceField(choices=RiskLevel.choices, required=False, default="medium")
 
     def validate(self, attrs):
-        if bool(attrs.get("equipment")) == bool(attrs.get("recommendation")):
-            raise serializers.ValidationError("Укажите оборудование или рекомендацию")
+        if sum(bool(attrs.get(k)) for k in ("equipment", "recommendation", "schedule_line")) != 1:
+            raise serializers.ValidationError("Укажите оборудование, рекомендацию или строку графика")
         return attrs
 
 
@@ -310,6 +325,16 @@ class MaintenanceScheduleView(APIView):
             order = maintenance.schedule_equipment(
                 eq, data["date"], request.user, data.get("work_type"), data["priority"]
             )
+        elif data.get("schedule_line"):
+            from ..models import ScheduleLine
+            from ..schedules import schedule_line
+
+            line = get_object_or_404(
+                scope_queryset(ScheduleLine.objects.select_related("schedule"), request.user, "node"),
+                pk=data["schedule_line"],
+                schedule__status="approved",
+            )
+            order = schedule_line(line, data["date"], request.user)
         else:
             rec = get_object_or_404(
                 scope_queryset(
@@ -320,3 +345,210 @@ class MaintenanceScheduleView(APIView):
             order = maintenance.schedule_recommendation(rec, data["date"], request.user)
         log_action(request, "maintenance.schedule", obj=order)
         return Response(WorkOrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------- регламент и графики ТО / ППР
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+class NormSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MaintenanceNorm
+        fields = ("id", "type_name", "system", "unit", "visits_per_year", "repairs_per_year", "ppr", "source")
+        read_only_fields = ("source",)
+
+
+class NormViewSet(viewsets.ModelViewSet):
+    """Регламент ТО по видам оборудования: видят все с планом ТО, правит инженер ТО и руководитель."""
+
+    queryset = MaintenanceNorm.objects.all()
+    serializer_class = NormSerializer
+    pagination_class = None
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.request.method in permissions.SAFE_METHODS:
+            return [require_perm("workorders.view_maintenancenorm")()]
+        return [require_perm("workorders.plan_maintenance")()]
+
+    def perform_update(self, serializer):
+        norm = serializer.save(source="правка инженера ТО")
+        log_action(self.request, "maintenance.norm", obj=norm)
+
+    def perform_create(self, serializer):
+        norm = serializer.save(source="правка инженера ТО")
+        log_action(self.request, "maintenance.norm", obj=norm)
+
+
+class ScheduleLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScheduleLine
+        fields = (
+            "id",
+            "order",
+            "node",
+            "object_label",
+            "type_name",
+            "quantity",
+            "unit",
+            "months",
+            "month",
+            "batch",
+            "dismantle_on",
+            "delivery_on",
+            "pickup_on",
+            "acceptance_on",
+            "note",
+        )
+
+
+class MaintenanceScheduleSerializer(serializers.ModelSerializer):
+    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    source_display = serializers.CharField(source="get_source_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.get_full_name", default=None, read_only=True)
+    approved_by_name = serializers.CharField(source="approved_by.get_full_name", default=None, read_only=True)
+    zone_name = serializers.CharField(source="zone.name", default=None, read_only=True)
+
+    class Meta:
+        model = MaintenanceSchedule
+        fields = (
+            "id",
+            "kind",
+            "kind_display",
+            "year",
+            "title",
+            "source",
+            "source_display",
+            "status",
+            "status_display",
+            "zone",
+            "zone_name",
+            "created_by_name",
+            "approved_by_name",
+            "file_name",
+            "stats",
+            "created_at",
+        )
+
+
+class MaintenanceScheduleViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Графики ТО и ТР и план-графики ППР в формах заказчика: сформировать по реестру зоны, загрузить
+    файл заказчика, выгрузить XLSX, сверить генератор с графиком заказчика, утвердить.
+    """
+
+    serializer_class = MaintenanceScheduleSerializer
+    filterset_fields = ("kind", "year", "source", "status")
+    parser_classes = [JSONParser, MultiPartParser]
+
+    def get_permissions(self):
+        return [require_perm("workorders.plan_maintenance")()]
+
+    def get_queryset(self):
+        from django.db.models import Q
+
+        from apps.topology.selectors import has_global_scope, scope_paths
+
+        qs = MaintenanceSchedule.objects.select_related("zone", "created_by", "approved_by")
+        user = self.request.user
+        if has_global_scope(user):
+            return qs
+        condition = Q(zone__isnull=True)
+        for path in scope_paths(user):
+            condition |= Q(zone__path__startswith=path)
+        return qs.filter(condition)
+
+    def retrieve(self, request, *args, **kwargs):
+        schedule = self.get_object()
+        data = self.get_serializer(schedule).data
+        data["lines"] = ScheduleLineSerializer(schedule.lines.all(), many=True).data
+        return Response(data)
+
+    @action(detail=False, methods=["post"])
+    def generate(self, request):
+        from .. import schedules
+
+        kind = request.data.get("kind")
+        if kind not in MaintenanceSchedule.Kind.values:
+            return Response({"detail": "Вид графика: to_tr или ppr"}, status=400)
+        year = int(request.data.get("year") or timezone.localdate().year)
+        schedule = schedules.generate(kind, year, request.user)
+        if not schedule.lines.exists():
+            schedule.delete()
+            return Response({"detail": "В зоне нет оборудования с видом по регламенту"}, status=409)
+        log_action(request, "maintenance.schedule_generate", obj=schedule)
+        return Response(self.get_serializer(schedule).data, status=201)
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_file(self, request):
+        from .. import schedules
+
+        upload = request.FILES.get("file")
+        if upload is None:
+            return Response({"detail": "Приложите файл графика (XLSX)"}, status=400)
+        if upload.size > 20 * 2**20:
+            return Response({"detail": "Файл больше 20 МБ"}, status=400)
+        try:
+            schedule = schedules.import_customer(upload.read(), upload.name, request.user)
+        except (schedules.ScheduleFileError, ValueError, KeyError, OSError) as exc:
+            return Response({"detail": f"Не удалось прочитать график: {exc}"}, status=400)
+        schedules.validate(schedule)
+        log_action(request, "maintenance.schedule_import", obj=schedule, payload={"file": upload.name})
+        return Response(self.get_serializer(schedule).data, status=201)
+
+    @action(detail=True, methods=["get"])
+    def xlsx(self, request, pk=None):
+        from django.http import HttpResponse
+
+        from .. import schedules
+
+        schedule = self.get_object()
+        response = HttpResponse(schedules.export_xlsx(schedule), content_type=XLSX)
+        name = "grafik_to_tr" if schedule.kind == "to_tr" else "plan_grafik_ppr"
+        response["Content-Disposition"] = f'attachment; filename="{name}_{schedule.year}_{schedule.pk}.xlsx"'
+        return response
+
+    @action(detail=True, methods=["post"])
+    def validate(self, request, pk=None):
+        from .. import schedules
+
+        return Response(schedules.validate(self.get_object()))
+
+    @action(detail=True, methods=["post"], url_path="derive-norms")
+    def derive_norms(self, request, pk=None):
+        from .. import schedules
+
+        schedule = self.get_object()
+        if schedule.kind != MaintenanceSchedule.Kind.TO_TR:
+            return Response({"detail": "Регламент выводится из графика ТО и ТР"}, status=400)
+        result = schedules.derive_norms(schedule)
+        log_action(request, "maintenance.derive_norms", obj=schedule, payload=result)
+        return Response(result)
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        if not request.user.has_perm("workorders.approve_workorder"):
+            return Response({"detail": "Утверждает руководитель"}, status=403)
+        schedule = self.get_object()
+        schedule.status, schedule.approved_by = MaintenanceSchedule.Status.APPROVED, request.user
+        schedule.save(update_fields=["status", "approved_by", "updated_at"])
+        # в году один действующий график каждого вида на зону
+        MaintenanceSchedule.objects.filter(
+            kind=schedule.kind,
+            year=schedule.year,
+            zone=schedule.zone,
+            status=MaintenanceSchedule.Status.APPROVED,
+        ).exclude(pk=schedule.pk).update(status=MaintenanceSchedule.Status.DRAFT)
+        log_action(request, "maintenance.schedule_approve", obj=schedule)
+        return Response(self.get_serializer(schedule).data)
+
+    @action(detail=True, methods=["post"])
+    def discard(self, request, pk=None):
+        schedule = self.get_object()
+        if schedule.status == MaintenanceSchedule.Status.APPROVED:
+            return Response({"detail": "Утверждённый график не удаляется"}, status=409)
+        log_action(request, "maintenance.schedule_delete", payload={"title": schedule.title})
+        schedule.delete()
+        return Response(status=204)

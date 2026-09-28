@@ -126,6 +126,15 @@ class WorkOrder(TimeStampedModel):
     # [{"status", "label", "at"}] — путь заявки в help desk, как его видит внешняя система
     external_history = models.JSONField("история во внешней системе", default=list, blank=True)
     report = models.TextField("отчёт исполнителя", blank=True)
+    # Работа по утверждённому графику ТО и ТР / ППР: строка графика считается исполненной по заявке
+    schedule_line = models.ForeignKey(
+        "ScheduleLine",
+        verbose_name="строка графика",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="workorders",
+    )
 
     class Meta:
         verbose_name = "заявка"
@@ -176,3 +185,128 @@ class EquipmentInspection(TimeStampedModel):
         verbose_name = "осмотр оборудования"
         verbose_name_plural = "осмотры оборудования"
         ordering = ("-inspected_at",)
+
+
+class MaintenanceNorm(TimeStampedModel):
+    """
+    Регламент ТО по виду оборудования: сколько раз в год ТО и сколько из них с текущим ремонтом (ТР),
+    нужен ли ежегодный ППР с поверкой в метрологической службе. Начальные значения выведены из графика
+    ТО и ТР систем АКМ и ДУ заказчика на 2026 год (workorders.regulation), правятся инженером ТО.
+    """
+
+    type_name = models.CharField("вид оборудования", max_length=128, unique=True)
+    system = models.CharField("система", max_length=32, blank=True)
+    unit = models.CharField("ед. изм.", max_length=16, default="шт.")
+    visits_per_year = models.PositiveSmallIntegerField("ТО в год", default=4)
+    repairs_per_year = models.PositiveSmallIntegerField("из них ТО+ТР", default=1)
+    ppr = models.BooleanField("ежегодный ППР и поверка", default=False)
+    source = models.CharField("источник", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "регламент ТО"
+        verbose_name_plural = "регламент ТО"
+        ordering = ("system", "type_name")
+
+    def __str__(self):
+        return f"{self.type_name}: {self.visits_per_year} ТО в год"
+
+
+class MaintenanceSchedule(TimeStampedModel):
+    """
+    График работ на год в форме заказчика: годовой график ТО и ТР (to_tr) или план-график ППР
+    аппаратуры контроля метана (ppr). Строится системой по реестру и регламенту или загружается
+    из файла заказчика; утверждённый график превращается в заявки по месяцам.
+    """
+
+    class Kind(models.TextChoices):
+        TO_TR = "to_tr", "График ТО и ТР"
+        PPR = "ppr", "План-график ППР АКМ"
+
+    class Source(models.TextChoices):
+        GENERATED = "generated", "Сформирован системой"
+        CUSTOMER = "customer", "Загружен из файла заказчика"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Черновик"
+        APPROVED = "approved", "Утверждён"
+
+    kind = models.CharField("вид", max_length=8, choices=Kind.choices)
+    year = models.PositiveSmallIntegerField("год")
+    title = models.CharField("название", max_length=255)
+    source = models.CharField("источник", max_length=16, choices=Source.choices)
+    status = models.CharField("статус", max_length=16, choices=Status.choices, default=Status.DRAFT)
+    zone = models.ForeignKey(
+        "topology.Node",
+        verbose_name="зона",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="автор",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="утвердил",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    file_name = models.CharField("файл", max_length=255, blank=True)
+    # нагрузка по месяцам, число объектов и строк, итоги сверки
+    stats = models.JSONField("сводка", default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "график работ"
+        verbose_name_plural = "графики работ"
+        ordering = ("-year", "-created_at")
+
+    def __str__(self):
+        return self.title
+
+
+class ScheduleLine(models.Model):
+    """
+    Строка графика. ТО и ТР: объект × вид оборудования, количество и отметки по месяцам
+    ({"1": "ТО", "5": "ТО+ТР"}). ППР: объект, количество датчиков метана, месяц и даты цикла
+    демонтаж → сдача в ОМ на ППР и поверку → вывоз из ОМ → сдача работ комиссии (партия — batch).
+    """
+
+    schedule = models.ForeignKey(MaintenanceSchedule, on_delete=models.CASCADE, related_name="lines")
+    order = models.PositiveIntegerField("порядок", default=0)
+    node = models.ForeignKey(
+        "topology.Node",
+        verbose_name="объект",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    object_label = models.CharField("объект (как в графике)", max_length=255)
+    type_name = models.CharField("вид оборудования", max_length=128, blank=True)
+    brand = models.CharField("марка", max_length=128, blank=True)
+    quantity = models.FloatField("количество", default=0)
+    unit = models.CharField("ед. изм.", max_length=16, default="шт.")
+    months = models.JSONField("отметки по месяцам", default=dict, blank=True)
+    month = models.PositiveSmallIntegerField("месяц ППР", null=True, blank=True)
+    batch = models.PositiveSmallIntegerField("партия ППР", null=True, blank=True)
+    dismantle_on = models.DateField("начало демонтажа", null=True, blank=True)
+    delivery_on = models.DateField("сдача в ОМ на ППР и поверку", null=True, blank=True)
+    pickup_on = models.DateField("вывоз из ОМ", null=True, blank=True)
+    acceptance_on = models.DateField("сдача работ комиссии", null=True, blank=True)
+    note = models.CharField("примечание", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "строка графика"
+        verbose_name_plural = "строки графика"
+        ordering = ("schedule", "order")
+
+    def __str__(self):
+        return f"{self.object_label}: {self.type_name}"

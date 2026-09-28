@@ -32,11 +32,14 @@ import { Link } from 'react-router-dom'
 
 import { api, download } from '../api/client'
 import { CONDITION, RISK, WO_STATUS, WORK_TYPE } from '../api/labels'
-import type { MaintenanceDue, MaintenancePlan, MaintenanceRec, RiskLevel } from '../api/types'
+import type { MaintenanceDue, MaintenancePlan, MaintenanceRec, RiskLevel, ScheduleDue } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
 
-type Target = { kind: 'equipment'; row: MaintenanceDue } | { kind: 'recommendation'; row: MaintenanceRec }
+type Target =
+  | { kind: 'equipment'; row: MaintenanceDue }
+  | { kind: 'recommendation'; row: MaintenanceRec }
+  | { kind: 'line'; row: ScheduleDue }
 
 function Kpi({ label, value, color, hint }: { label: string; value: number; color?: string; hint?: string }) {
   return (
@@ -75,7 +78,18 @@ function ScheduleModal({ target, onClose }: { target: Target | null; onClose: ()
   const client = useQueryClient()
   // предлагаемая дата — срок по регламенту или рекомендации, но не раньше завтрашнего дня
   const tomorrow = dayjs().add(1, 'day')
-  const due = target?.kind === 'equipment' ? target.row.due : target?.row.due_date
+  const due =
+    target?.kind === 'equipment'
+      ? target.row.due
+      : target?.kind === 'recommendation'
+        ? target.row.due_date
+        : target?.kind === 'line'
+          ? (target.row.date ??
+            dayjs()
+              .month(target.row.month - 1)
+              .date(15)
+              .format('YYYY-MM-DD'))
+          : null
   const suggested = target ? (due && dayjs(due).isAfter(tomorrow) ? dayjs(due) : tomorrow).format('YYYY-MM-DD') : null
   const [date, setDate] = useState<string | null>(null)
   const [work, setWork] = useState<string | null>(null)
@@ -87,7 +101,9 @@ function ScheduleModal({ target, onClose }: { target: Target | null; onClose: ()
         body:
           target?.kind === 'equipment'
             ? { equipment: target.row.id, date: date ?? suggested, work_type: work ?? target.row.work_type, priority }
-            : { recommendation: target?.row.id, date: date ?? suggested },
+            : target?.kind === 'line'
+              ? { schedule_line: target.row.id, date: date ?? suggested }
+              : { recommendation: target?.row.id, date: date ?? suggested },
       }),
     onSuccess: (o) => {
       notifications.show({
@@ -104,7 +120,11 @@ function ScheduleModal({ target, onClose }: { target: Target | null; onClose: ()
   })
   if (!target) return null
   const title =
-    target.kind === 'equipment' ? target.row.name : `${target.row.work_type_display} — ${target.row.node_name}`
+    target.kind === 'equipment'
+      ? target.row.name
+      : target.kind === 'line'
+        ? `${target.row.work}: ${target.row.type_name} — ${target.row.object}`
+        : `${target.row.work_type_display} — ${target.row.node_name}`
   return (
     <Modal opened onClose={onClose} title="Поставить в план">
       <Stack>
@@ -341,6 +361,7 @@ export function MaintenancePage() {
                 <Tabs.Tab value="condition">
                   По состоянию · {data.recommendations.length + data.bad_condition.length}
                 </Tabs.Tab>
+                <Tabs.Tab value="schedule">По графику · {data.schedule_due.length}</Tabs.Tab>
                 <Tabs.Tab value="planned">Запланировано · {data.planned.length}</Tabs.Tab>
               </Tabs.List>
 
@@ -419,6 +440,78 @@ export function MaintenancePage() {
                     onPlan={(row) => setTarget({ kind: 'equipment', row })}
                   />
                 </Stack>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="schedule" pt="md">
+                <Text size="xs" c="dimmed" mb="xs">
+                  Работы утверждённых графиков ТО и ТР и ППР на текущий и следующий месяц (раздел «Графики ТО и ППР»).
+                </Text>
+                {data.schedule_due.length ? (
+                  <Table.ScrollContainer minWidth={800}>
+                    <Table striped>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Месяц</Table.Th>
+                          <Table.Th>Работа</Table.Th>
+                          <Table.Th>Объект</Table.Th>
+                          <Table.Th>Вид оборудования</Table.Th>
+                          <Table.Th>План</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {data.schedule_due.map((r) => (
+                          <Table.Tr key={r.id}>
+                            <Table.Td>
+                              {dayjs()
+                                .month(r.month - 1)
+                                .format('MMMM')}
+                            </Table.Td>
+                            <Table.Td>
+                              <Badge
+                                size="sm"
+                                variant="light"
+                                color={r.work.includes('ТР') ? 'grape' : r.kind === 'ppr' ? 'orange' : 'teal'}
+                              >
+                                {r.work}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>{r.object}</Table.Td>
+                            <Table.Td>
+                              <Text size="sm">{r.type_name}</Text>
+                              <Text size="xs" c="dimmed">
+                                {r.quantity} {r.unit}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td>
+                              {r.planned ? (
+                                <Badge variant="light" color={WO_STATUS[r.planned.status].color} size="sm">
+                                  {r.planned.number}
+                                </Badge>
+                              ) : (
+                                canPlan && (
+                                  <Button
+                                    size="compact-xs"
+                                    leftSection={<IconCalendarPlus size={12} />}
+                                    onClick={() => setTarget({ kind: 'line', row: r })}
+                                  >
+                                    В план
+                                  </Button>
+                                )
+                              )}
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </Table.ScrollContainer>
+                ) : (
+                  <Text size="sm" c="dimmed">
+                    Утверждённых графиков с работами на ближайшие месяцы нет.{' '}
+                    <Anchor component={Link} to="/schedules" size="sm">
+                      Графики ТО и ППР →
+                    </Anchor>
+                  </Text>
+                )}
               </Tabs.Panel>
 
               <Tabs.Panel value="planned" pt="md">

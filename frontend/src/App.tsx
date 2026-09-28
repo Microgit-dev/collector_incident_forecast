@@ -26,6 +26,7 @@ import { MaintenancePage } from './pages/MaintenancePage'
 import { ModelsPage } from './pages/ModelsPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ReplayPage } from './pages/ReplayPage'
+import { SchedulesPage } from './pages/SchedulesPage'
 import { SchemePage } from './pages/SchemePage'
 
 // редактор структуры тянет картографический движок — отдельный чанк
@@ -80,6 +81,7 @@ export function App() {
         <Route path="workorders" element={<WorkOrdersPage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="equipment" element={<EquipmentPage />} />
+        <Route path="schedules" element={<SchedulesPage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="replay" element={<ReplayPage />} />
         <Route path="history" element={<HistoryPage />} />
