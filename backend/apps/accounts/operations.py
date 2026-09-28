@@ -83,10 +83,11 @@ OPERATIONS: tuple[Operation, ...] = (
     Operation(
         "sensors.contracts",
         "Управление контрактами датчиков",
-        "Контракт данных датчика: профиль формата, правила состояний, пороги, служебные коды, источники",
+        "Контракт данных датчика: шаблон формата сообщения в конструкторе, профиль, правила состояний, пороги, "
+        "служебные коды, приём от шлюза",
         (Role.ANALYST,),
-        ("normalization.change_sensorprofile",),
-        page="/data-quality",
+        ("normalization.change_sensorprofile", "ingestion.change_datasource"),
+        page="/constructor",
         admin="normalization/sensorprofile/",
     ),
     Operation(

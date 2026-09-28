@@ -4,6 +4,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -213,3 +214,143 @@ def _save(upload, directory: str) -> Path:
         for chunk in upload.chunks():
             fh.write(chunk)
     return path
+
+
+# ---------------------------------------------------------------- конструктор источников
+
+
+class TemplateSourceSerializer(serializers.ModelSerializer):
+    """Источник-шаблон конструктора: формат, поля, пример, ключ приёма по HTTP."""
+
+    ingest_url = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source="created_by.get_full_name", default=None, read_only=True)
+
+    class Meta:
+        model = DataSource
+        fields = (
+            "id",
+            "code",
+            "name",
+            "description",
+            "kind",
+            "format",
+            "config",
+            "sample",
+            "is_active",
+            "token",
+            "ingest_url",
+            "created_by_name",
+            "updated_at",
+        )
+        read_only_fields = ("token", "created_by_name", "updated_at")
+        extra_kwargs = {"kind": {"required": False}}
+
+    def get_ingest_url(self, obj) -> str:
+        return f"/api/v1/ingestion/templates/{obj.code}/events/"
+
+    def validate_format(self, value):
+        from ..templates import FORMATS
+
+        if value not in FORMATS:
+            raise serializers.ValidationError("Формат: json, csv или regex")
+        return value
+
+
+class TemplateSourceViewSet(viewsets.ModelViewSet):
+    """
+    Конструктор: шаблоны формата сообщений (adapter=template). Песочница проверяет разбор и нормализацию
+    на примере; ключ приёма выдаётся при создании и меняется действием rotate-token.
+    """
+
+    serializer_class = TemplateSourceSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        from ..constructor import TEMPLATE_ADAPTER
+
+        return (
+            DataSource.objects.filter(adapter=TEMPLATE_ADAPTER).select_related("created_by").order_by("name")
+        )
+
+    def get_permissions(self):
+
+        if self.action in ("list", "retrieve", "library", "preview"):
+            return [require_perm("ingestion.view_datasource")()]
+        return [require_perm("ingestion.change_datasource")()]
+
+    def perform_create(self, serializer):
+        from ..constructor import TEMPLATE_ADAPTER, new_token
+
+        kind = serializer.validated_data.get("kind") or DataSource.Kind.STREAM
+        source = serializer.save(
+            adapter=TEMPLATE_ADAPTER, kind=kind, token=new_token(), created_by=self.request.user
+        )
+        log_action(self.request, "constructor.create", obj=source)
+
+    def perform_update(self, serializer):
+        source = serializer.save()
+        log_action(self.request, "constructor.update", obj=source)
+
+    def perform_destroy(self, instance):
+        log_action(self.request, "constructor.delete", payload={"code": instance.code})
+        instance.delete()
+
+    @action(detail=False, methods=["get"])
+    def library(self, request):
+        from ..templates import LIBRARY
+
+        return Response(LIBRARY)
+
+    @action(detail=False, methods=["post"])
+    def preview(self, request):
+        from ..constructor import preview
+
+        fmt = request.data.get("format")
+        config = request.data.get("config") or {}
+        sample = str(request.data.get("sample") or "")
+        if len(sample) > 200_000:
+            return Response({"detail": "Пример больше 200 КБ"}, status=400)
+        if not isinstance(config, dict):
+            return Response({"detail": "config — объект JSON"}, status=400)
+        return Response(preview(fmt, config, sample, request.data.get("profile")))
+
+    @action(detail=True, methods=["post"], url_path="rotate-token")
+    def rotate_token(self, request, pk=None):
+        from ..constructor import new_token
+
+        source = self.get_object()
+        source.token = new_token()
+        source.save(update_fields=["token", "updated_at"])
+        log_action(request, "constructor.rotate_token", obj=source)
+        return Response(self.get_serializer(source).data)
+
+
+class TemplateIngestView(APIView):
+    """
+    Приём сообщений от шлюза по шаблону: POST тело сообщения (JSON, CSV или строки) с заголовком
+    «Authorization: Token <ключ источника>». События уходят в поток Kafka, как от СМВУ.
+    """
+
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def post(self, request, code: str):
+        import hmac
+
+        from ..constructor import MAX_PAYLOAD, TEMPLATE_ADAPTER, ingest
+
+        source = DataSource.objects.filter(code=code, adapter=TEMPLATE_ADAPTER, is_active=True).first()
+        header = request.headers.get("Authorization", "")
+        token = header.removeprefix("Token ").strip()
+        if source is None or not source.token or not hmac.compare_digest(token, source.token):
+            return Response({"detail": "Неизвестный источник или неверный ключ"}, status=401)
+        body = request.body
+        if len(body) > MAX_PAYLOAD:
+            return Response({"detail": "Сообщение больше 1 МБ"}, status=413)
+        try:
+            result = ingest(source, body.decode("utf-8-sig"))
+        except UnicodeDecodeError:
+            return Response({"detail": "Кодировка сообщения — UTF-8"}, status=400)
+        except Exception as exc:  # брокер недоступен — шлюз повторит отправку
+            return Response({"detail": f"Поток событий недоступен: {exc}"}, status=503)
+        return Response(result, status=202 if result["accepted"] else 400)

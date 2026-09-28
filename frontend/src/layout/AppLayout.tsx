@@ -35,6 +35,7 @@ import {
   IconChartBar,
   IconClipboardList,
   IconDatabase,
+  IconPuzzle,
   IconDatabaseImport,
   IconFlag,
   IconGauge,
@@ -120,6 +121,7 @@ const NAV: NavGroup[] = [
       { to: '/analytics', label: 'Аналитика', icon: IconChartBar, perm: 'analytics.view_reportexport' },
       { to: '/data-import', label: 'Загрузка данных', icon: IconDatabaseImport, perm: 'ingestion.add_importjob' },
       { to: '/data-quality', label: 'Качество данных', icon: IconDatabase, perm: 'ingestion.view_importjob' },
+      { to: '/constructor', label: 'Конструктор датчиков', icon: IconPuzzle, perm: 'ingestion.view_datasource' },
     ],
   },
   {

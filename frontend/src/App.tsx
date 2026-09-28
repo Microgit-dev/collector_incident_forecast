@@ -7,6 +7,7 @@ import { BASE, loginHref } from './contour'
 import { AppLayout } from './layout/AppLayout'
 import { AdministrationPage } from './pages/AdministrationPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
+import { ConstructorPage } from './pages/ConstructorPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DataHealthPage } from './pages/DataHealthPage'
 import { DataImportPage } from './pages/DataImportPage'
@@ -82,6 +83,7 @@ export function App() {
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="equipment" element={<EquipmentPage />} />
         <Route path="schedules" element={<SchedulesPage />} />
+        <Route path="constructor" element={<ConstructorPage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="replay" element={<ReplayPage />} />
         <Route path="history" element={<HistoryPage />} />

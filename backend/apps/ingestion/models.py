@@ -21,6 +21,20 @@ class DataSource(TimeStampedModel):
     adapter = models.CharField("адаптер", max_length=64)
     config = models.JSONField("настройки адаптера", default=dict, blank=True)
     is_active = models.BooleanField("активен", default=True)
+    # Конструктор (adapter="template"): формат сообщения, пример для проверки и ключ приёма по HTTP.
+    # Поля шаблона — в config (apps/ingestion/templates.py)
+    format = models.CharField("формат сообщения", max_length=16, blank=True)
+    description = models.TextField("описание", blank=True)
+    sample = models.TextField("пример сообщения", blank=True)
+    token = models.CharField("ключ приёма", max_length=64, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="автор",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
     read_only = models.BooleanField(
         "только чтение",
         default=True,

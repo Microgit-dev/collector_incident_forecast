@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from prometheus_client import Histogram, start_http_server
 
-from apps.ingestion.adapters import RawEvent
+from apps.ingestion.constructor import TemplateCache, unwrap
 from apps.ingestion.kafka import decode, make_consumer
 from apps.ingestion.pipeline import Pipeline
 
@@ -43,6 +43,7 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         self.stdout.write(f"consuming {topic} …")
+        templates = TemplateCache()
 
         try:
             while running:
@@ -53,7 +54,8 @@ class Command(BaseCommand):
                         logger.warning("kafka error: %s", msg.error())
                         continue
                     try:
-                        events.append(RawEvent.from_message(decode(msg.value())))
+                        # событие СМВУ или обёртка {"template", "payload"} — разбор по шаблону конструктора
+                        events.extend(unwrap(decode(msg.value()), templates))
                     except (ValueError, KeyError):
                         logger.warning("malformed message at offset %s", msg.offset())
                 if not events:
