@@ -36,6 +36,25 @@ DOCUMENTS = [
         "Инструкция по запуску и развёртыванию на серверах заказчика",
     ),
 ]
+# Руководства пользователя по ролям: docs/guides/<роль>.md → out/Руководства/<Руководство — роль>.docx
+GUIDES = [
+    ("dispatcher-ods.md", "Диспетчер ОДС"),
+    ("dispatcher-unit.md", "Диспетчер подразделения"),
+    ("head.md", "Руководитель подразделения"),
+    ("analyst.md", "Аналитик"),
+    ("maintenance-engineer.md", "Инженер ТО"),
+    ("brigade.md", "Ремонтная бригада"),
+    ("observer.md", "Наблюдатель"),
+    ("admin.md", "Администратор"),
+]
+DOCUMENTS += [
+    (
+        HERE.parent / "guides" / source,
+        f"Руководства/Руководство пользователя — {role}.docx",
+        f"Руководство пользователя: {role}",
+    )
+    for source, role in GUIDES
+]
 ACCENT = RGBColor(0x1C, 0x4E, 0x9A)
 INCLUDE = re.compile(r"<!--\s*include:\s*(\S+)(.*?)-->")
 
@@ -303,7 +322,7 @@ def setup_styles(doc) -> None:
 
 
 def build(source: Path, docx: Path, subtitle: str) -> Path:
-    OUT.mkdir(exist_ok=True)
+    docx.parent.mkdir(parents=True, exist_ok=True)
     doc = Document()
     section = doc.sections[0]
     section.orientation = WD_ORIENT.PORTRAIT

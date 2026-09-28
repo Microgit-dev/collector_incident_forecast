@@ -252,8 +252,11 @@ def plan_ppr(items: list[PprItem], year: int, batches_per_year: int = 16) -> lis
         1 + om_days(sum(i.quantity for i in g)) + acceptance_days(sum(i.quantity for i in g)) + len(g) - 1
         for g in groups
     ]
-    spare = max(0, len(calendar) - sum(cycles) - 10)  # запас в конце года под перенос партии
-    gap = spare // max(1, len(groups))
+    # день перерыва после каждой партии и запас 5 рабочих дней в конце года под перенос
+    spare = max(0, len(calendar) - sum(cycles) - len(groups) - 5)
+    # свободные дни — поровну в промежутки между партиями, остаток — первым промежуткам
+    intervals = max(1, len(groups) - 1)
+    gap, extra = divmod(spare, intervals)
     position = 0
     for n, (group, cycle) in enumerate(zip(groups, cycles, strict=True), start=1):
         count = sum(i.quantity for i in group)
@@ -267,7 +270,7 @@ def plan_ppr(items: list[PprItem], year: int, batches_per_year: int = 16) -> lis
             item.dismantle_on, item.delivery_on, item.pickup_on = start, delivery, pickup
             # мелкие объекты партии принимаются следующими днями
             item.acceptance_on = add_wd(acceptance, k, calendar) if k else acceptance
-        position += cycle + 1 + gap
+        position += cycle + 1 + gap + (1 if n <= extra else 0)
     return items
 
 

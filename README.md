@@ -2,9 +2,11 @@
 
 Сервис прогнозирования технических отказов датчиков и раннего выявления риска инцидентов с ролевой
 моделью и вертикалью управления: от сигнала датчика до решения диспетчера и заявки бригаде. Отказ
-датчика, загазованность и подтопление прогнозируются моделями; пожар и несанкционированный доступ
-оцениваются индикаторами по правилам (подтверждённых событий в данных нет). Системы заказчика
-(help desk, AD, реестр оборудования, журналы ОДС) на стенде эмулированы.
+датчика, загазованность и подтопление прогнозируются моделями; пожар и несанкционированный доступ —
+индикаторами по правилам с вероятностью по истории похожих случаев. Инженер ТО планирует профилактику
+по регламенту и состоянию, графики ТО и ППР строятся в формах заказчика. Новые датчики с собственным
+форматом подключаются конструктором без программиста. Для систем заказчика (help desk, AD, реестр
+оборудования, видеонаблюдение) есть боевые адаптеры; на стенде они работают с эмуляторами.
 
 Задача — «8. ДЖКХ» (АО «Москоллектор»). Дорожная карта и статусы — [ROADMAP.md](ROADMAP.md).
 
@@ -86,7 +88,10 @@ docker compose exec worker python manage.py forecast --backtest 2026-06-01T23:59
 склейка сигналов, гипотезы и приоритет — в [docs/correlation.md](docs/correlation.md).
 Метрики диспетчеров и качества прогнозов, эмуляция смен, отчёты PDF/XLSX и дашборд Grafana — в
 [docs/analytics.md](docs/analytics.md).
-Система учёта заявок (эмулятор, https://localhost/helpdesk/) и погода Open-Meteo — в [docs/integrations.md](docs/integrations.md).
+Интеграции (help desk, реестр, видеонаблюдение, AD, погода), Grafana и Prometheus — в [docs/integrations.md](docs/integrations.md).
+План ТО, регламент, графики ТО и ППР в формах заказчика и сверка с его графиками — в [docs/maintenance.md](docs/maintenance.md).
+Конструктор источников и датчиков и расширяемость — в [docs/constructor.md](docs/constructor.md).
+Руководства пользователя по ролям — в [docs/guides/](docs/guides/README.md).
 
 Демо-поток СМВУ: реальный журнал проигрывается в Kafka с ускорением.
 
@@ -126,8 +131,9 @@ docker compose --profile training up -d --build
 ```
 Источники (адаптеры)        Ядро                                       Клиенты
 CSV/XLSX, СМВУ→Kafka  ──▶  ingestion → normalization → telemetry  ──▶  React SPA (WebSocket)
-mock help desk, погода      forecasting → incidents → workorders        Django admin, Grafana
-LDAP                        accounts/topology (RBAC + зоны) · audit      REST API
+шаблоны конструктора        forecasting → incidents → workorders        Django admin, Grafana
+help desk, реестр, VMS,     accounts/topology (RBAC + зоны) · audit      REST API
+AD, погода                  integrations (адаптеры с режимами mock / боевой)
 ```
 
 | Компонент | Технология |
