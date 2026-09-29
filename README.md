@@ -107,9 +107,7 @@ docker compose --profile demo up -d replay
 
 Режим просмотра истории (показания объекта и канала за любой период с 2019 года) — в [docs/history.md](docs/history.md).
 
-```bash
-docker compose --profile training up -d --build
-```
+Учебный контур и симулятор поднимаются вместе с платформой (`docker compose up -d --build`).
 
 ## Развёртывание у заказчика
 

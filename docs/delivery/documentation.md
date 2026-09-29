@@ -223,9 +223,9 @@
 | `prometheus`, `grafana`, экспортёры | Мониторинг системы и бизнес-показателей |
 | `backup` | Ежедневные резервные копии БД с ротацией |
 | `replay` (профиль `demo`) | Воспроизведение журнала СМВУ как живого потока |
-| `migrate-training`, `backend-training`, `worker-training`, `consumer-training` (профиль `training`) | Учебный контур: тот же образ, своя база `collector_training`, тема Kafka, Redis-индекс; вместо справочников заказчика — полигон |
-| `mock-helpdesk-training` (профиль `training`) | Эмулятор системы учёта заявок учебного контура |
-| `simulator` (профиль `training`) | Симулятор датчиков СМВУ: консоль и веб, сеть `field`, видит только Kafka |
+| `migrate-training`, `backend-training`, `worker-training`, `consumer-training` (вместе с платформой) | Учебный контур: тот же образ, своя база `collector_training`, тема Kafka, Redis-индекс; вместо справочников заказчика — полигон |
+| `mock-helpdesk-training` (вместе с платформой) | Эмулятор системы учёта заявок учебного контура |
+| `simulator` (вместе с платформой) | Симулятор датчиков СМВУ: консоль и веб, сеть `field`, видит только Kafka |
 
 <!-- include: ../architecture.md strip-title -->
 
@@ -387,8 +387,7 @@
 ```bash
 git clone <репозиторий> && cd collector_incident_forecast
 cp .env.example .env              # пароли, порты, DEMO_USERS, HELPDESK_STAGE_MINUTES
-docker compose up -d --build      # первая сборка 5–10 минут
-docker compose --profile training up -d --build   # учебный контур и симулятор (по желанию)
+docker compose up -d --build      # первая сборка 5–10 минут, вместе с учебным контуром и симулятором
 ```
 
 При запуске одноразовый контейнер `migrate`:
@@ -408,8 +407,8 @@ docker compose --profile training up -d --build   # учебный контур 
 | https://localhost/grafana/ | Мониторинг и бизнес-показатели |
 | https://localhost/helpdesk/ | Эмулятор системы учёта заявок |
 | http://localhost:8081 | Kafka UI |
-| https://localhost/training/ | Учебный контур (профиль `training`), вход общий |
-| https://localhost/simulator/ | Симулятор датчиков (профиль `training`): руководителю учений из меню учебного контура; напрямую — http://localhost:8095 с этой машины |
+| https://localhost/training/ | Учебный контур (вместе с платформой), вход общий |
+| https://localhost/simulator/ | Симулятор датчиков (вместе с платформой): руководителю учений из меню учебного контура; напрямую — http://localhost:8095 с этой машины |
 
 Так запускается демо-стенд. Установка на серверы заказчика — своё имя сервера и сертификат, AD,
 поток СМВУ, закрытый контур, обновление — описана в главе «Развёртывание на серверах заказчика» и
@@ -653,9 +652,7 @@ docker compose exec backend python manage.py demo_scenario sensor    # отка�
 
 ## 4. Учебный контур: пожар на полигоне
 
-```bash
-docker compose --profile training up -d --build
-```
+Учебный контур поднимается вместе с платформой.
 
 1. https://localhost/training/ (или переключатель «Учебный контур» в шапке), вход `disp.petrov`. «Учебные задания» → «Пожар: от сигнала до решения».
 2. Урок приводит объект Мю полигона в исходное состояние и просит симулятор запустить сценарий

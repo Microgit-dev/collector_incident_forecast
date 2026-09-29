@@ -1,7 +1,7 @@
 # Полный стенд одной командой:  docker compose up -d --build
 # Демо-поток СМВУ:              docker compose --profile demo up -d replay
 # ИИ-выделение зданий по снимку: docker compose --profile ai up -d --build segmenter
-# Учебный контур и симулятор:   docker compose --profile training up -d --build
+# Учебный контур и симулятор — часть платформы, поднимаются вместе с ней
 #                               (https://localhost/training/ · симулятор https://localhost/simulator/)
 # Интерфейс: https://localhost  · API: /api/docs/ · Админка: /admin/ · Grafana: /grafana/
 
@@ -29,11 +29,11 @@ x-backend: &backend
 # Учебный контур — подсистема платформы на том же адресе (/training/): тот же образ, своя база, тема Kafka,
 # Redis-индекс и help desk; вместо справочников заказчика смонтирован полигон. Данные с боевым контуром
 # не пересекаются, а вход и учётные записи общие: токен выдаёт основная система, учётки, роли и команды
-# читаются из её базы (IDENTITY_DATABASE_URL, apps/accounts/identity.py).
+# читаются из её базы (IDENTITY_DATABASE_URL, apps/accounts/identity.py). Поднимается вместе с платформой
+# (без профиля): учения по ТЗ — её часть, а образ симулятора так собирается при каждом обновлении.
 x-training: &training
   image: collector-forecast/backend:local
   pull_policy: never
-  profiles: ["training"]
   env_file: .env
   environment: &training-env
     CONTOUR: training
@@ -257,7 +257,6 @@ services:
   mock-helpdesk-training:
     image: collector-forecast/mock-helpdesk:local
     pull_policy: never
-    profiles: ["training"]
     environment:
       STAGE_MINUTES: ${HELPDESK_STAGE_MINUTES:-2,5,20,10}
     volumes:
@@ -269,7 +268,6 @@ services:
   simulator:
     build: ./simulator
     image: collector-forecast/simulator:local
-    profiles: ["training"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: ${SIMULATOR_TOPIC:-smvu.training-events}

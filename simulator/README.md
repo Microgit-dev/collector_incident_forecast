@@ -57,8 +57,10 @@
 
 ## Запуск
 
+Симулятор и учебный контур поднимаются вместе с платформой:
+
 ```bash
-docker compose --profile training up -d --build
+docker compose up -d --build
 ```
 
 После запуска:
