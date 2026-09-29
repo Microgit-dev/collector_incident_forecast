@@ -2,6 +2,10 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Правила оповещений: страница «Alerts» в Prometheus и панель «Оповещения» в Grafana
+rule_files:
+  - /etc/prometheus/alerts.yml
+
 scrape_configs:
   - job_name: backend
     metrics_path: /metrics
@@ -11,6 +15,13 @@ scrape_configs:
   - job_name: consumer
     static_configs:
       - targets: ["consumer:9101"]
+        labels: {contour: combat}
+
+  # Учебный контур (профиль training): поток симулятора. Контур не поднят — цель просто «down»
+  - job_name: consumer-training
+    static_configs:
+      - targets: ["consumer-training:9102"]
+        labels: {contour: training}
 
   - job_name: celery
     static_configs:

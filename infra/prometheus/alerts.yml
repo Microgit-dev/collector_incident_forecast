@@ -1,0 +1,60 @@
+# Оповещения о работе платформы (не об авариях на объектах — те ведёт сама система).
+# Видны на странице «Alerts» Prometheus и на панели «Оповещения» дашборда «Состояние системы».
+groups:
+  - name: platform
+    rules:
+      - alert: ServiceDown
+        # учебный контур поднимается по необходимости — его недоступность не тревога
+        expr: up{contour!="training"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Сервис {{ $labels.job }} недоступен"
+          description: "Prometheus не получает метрики {{ $labels.instance }} больше 2 минут."
+
+      - alert: StreamLagOverLimit
+        expr: histogram_quantile(0.95, sum by (le) (rate(ingestion_event_lag_seconds_bucket{contour="combat"}[10m]))) > 300
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Задержка обработки потока выше 300 с (ТЗ)"
+          description: "95-й процентиль задержки от события до записи — {{ $value | humanizeDuration }}."
+
+      - alert: StreamUnknownChannels
+        expr: sum(rate(ingestion_events_total{result="unknown_channel"}[15m])) > 0.1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "В потоке каналы, которых нет в справочнике"
+          description: "События без канала в справочнике не попадают в телеметрию — обновить справочник каналов."
+
+      - alert: ApiErrors
+        expr: sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m])) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "API отвечает ошибками 5xx"
+          description: "{{ $value | humanize }} ошибок в секунду за 5 минут — смотреть docker compose logs backend."
+
+      - alert: ApiSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(django_http_requests_latency_seconds_by_view_method_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "API отвечает медленно"
+          description: "95-й процентиль времени ответа — {{ $value | humanizeDuration }}."
+
+      - alert: CeleryTasksFailing
+        expr: sum(increase(celery_task_failed_total[15m])) > 3
+        labels: {severity: warning}
+        annotations:
+          summary: "Фоновые задачи завершаются с ошибкой"
+          description: "{{ $value | humanize }} ошибок задач Celery за 15 минут — смотреть docker compose logs worker."
+
+      - alert: PostgresConnectionsHigh
+        expr: sum(pg_stat_database_numbackends) > 160
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Много подключений к PostgreSQL"
+          description: "{{ $value }} подключений из 200 (max_connections)."

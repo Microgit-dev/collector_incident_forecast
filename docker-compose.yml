@@ -323,6 +323,7 @@ services:
       - --web.external-url=/prometheus/
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - promdata:/prometheus
     restart: unless-stopped
 
@@ -334,6 +335,8 @@ services:
       GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_DEFAULT_LANGUAGE: ru-RU
+      # главная страница Grafana — бизнес-панели, а не пустое приветствие
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/analytics/business.json
       # Вход через учётную запись системы: Caddy передаёт X-WEBAUTH-* после проверки роли,
       # отдельных паролей и формы входа нет. Роль в Grafana (Admin / Viewer) обновляется каждую минуту
       GF_AUTH_PROXY_ENABLED: "true"

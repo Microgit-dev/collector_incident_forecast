@@ -2,7 +2,7 @@
   "uid": "collector-system",
   "title": "Collector Forecast — состояние системы",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "time": {
     "from": "now-6h",
     "to": "now"
@@ -165,8 +165,9 @@
       "id": 4
     },
     {
-      "type": "timeseries",
-      "title": "Приём событий СМВУ, событий/с",
+      "id": 11,
+      "type": "stat",
+      "title": "Сервисы: доступны ли метрики",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -174,6 +175,238 @@
       "gridPos": {
         "x": 0,
         "y": 5,
+        "w": 14,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (job) (up)",
+          "legendFormat": "{{job}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "нет",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "работает",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "backend"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "API"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "consumer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Поток (рабочий)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "consumer-training"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Поток (учебный)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "celery"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Celery"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "postgres"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PostgreSQL"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "redis"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Redis"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "caddy"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Веб-сервер"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prometheus"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Prometheus"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Оповещения (правила Prometheus)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 5,
+        "w": 10,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "alertstate": true,
+              "instance": true
+            },
+            "renameByName": {
+              "alertname": "оповещение",
+              "severity": "важность",
+              "job": "сервис",
+              "contour": "контур"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Активных оповещений нет"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Приём событий СМВУ по контурам, событий/с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -196,8 +429,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (result) (rate(ingestion_events_total[5m]))",
-          "legendFormat": "{{result}}"
+          "expr": "sum by (contour, result) (rate(ingestion_events_total[5m]))",
+          "legendFormat": "{{contour}}: {{result}}"
         }
       ],
       "id": 5
@@ -211,7 +444,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 5,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -234,7 +467,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(ingestion_event_lag_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(ingestion_event_lag_seconds_bucket{contour=\"combat\"}[5m])))",
           "legendFormat": "p50"
         },
         {
@@ -243,7 +476,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(ingestion_event_lag_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ingestion_event_lag_seconds_bucket{contour=\"combat\"}[5m])))",
           "legendFormat": "p95"
         }
       ],
@@ -258,7 +491,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 13,
+        "y": 21,
         "w": 12,
         "h": 8
       },
@@ -296,7 +529,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 13,
+        "y": 21,
         "w": 12,
         "h": 8
       },
@@ -334,7 +567,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 29,
         "w": 12,
         "h": 8
       },
@@ -381,7 +614,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 21,
+        "y": 29,
         "w": 12,
         "h": 8
       },
