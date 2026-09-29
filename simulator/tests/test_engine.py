@@ -247,3 +247,27 @@ def test_ppr_checks_detectors_one_by_one(sim):
     assert smoke.count("Обнаружен дым") >= 5
     # каждая проверка сразу сбрасывается: после дыма — норма того же извещателя
     assert all(engine.channels[d.id].mode == "normal" for d in engine.catalog.find(MU, "Датчик дыма", 204, 6))
+
+
+def test_presets_run_every_part_on_polygon(sim):
+    from fieldsim.presets import PRESETS
+
+    engine, _, clock = sim
+    assert engine.sites() == [900100, 900200, 900300]
+    for code, preset in PRESETS.items():
+        plan = engine.start_preset(code, speed=30)
+        assert len(plan) == len(preset.parts)
+    advance(engine, clock, 120)
+    runs = list(engine.runs.values())
+    assert len(runs) == sum(len(p.parts) for p in PRESETS.values())
+    assert all(r.status != "stopped" for r in runs), [r.log for r in runs if r.status == "stopped"]
+
+
+def test_preset_parts_share_the_picket_and_stop_all_cancels_pending(sim):
+    engine, _, clock = sim
+    plan = engine.start_preset("night_intrusion", speed=1)
+    assert plan[0]["object"] == plan[1]["object"] and plan[0]["picket"] == plan[1]["picket"]
+    advance(engine, clock, 5)
+    assert engine.stop_presets() == 1
+    advance(engine, clock, 600, step=10)
+    assert [r.scenario for r in engine.runs.values()] == ["intrusion"]  # пожар так и не начался

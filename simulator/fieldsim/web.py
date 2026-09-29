@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .engine import Engine
+from .presets import PRESETS
 from .scenarios import SCENARIOS
 from .vocab import MODES
 
@@ -101,6 +102,16 @@ def make_handler(engine: Engine, contour: str):
                             }
                             for s in SCENARIOS.values()
                         ],
+                        "presets": [
+                            {
+                                "code": p.code,
+                                "title": p.title,
+                                "description": p.description,
+                                "expected": p.expected,
+                                "minutes": round(max(x.at_s for x in p.parts) / 60),
+                            }
+                            for p in PRESETS.values()
+                        ],
                     }
                 )
             if url.path == "/api/state":
@@ -123,6 +134,11 @@ def make_handler(engine: Engine, contour: str):
                         float(body.get("speed") or 1),
                     )
                     return self._json({"id": run.id, "steps": [s.title for s in run.steps]}, HTTPStatus.CREATED)
+                if url.path == "/api/preset":
+                    plan = engine.start_preset(body["preset"], float(body.get("speed") or 1))
+                    return self._json({"plan": plan}, HTTPStatus.CREATED)
+                if url.path == "/api/preset/stop":
+                    return self._json({"stopped": engine.stop_presets()})
                 if url.path.startswith("/api/scenario/") and url.path.endswith("/stop"):
                     engine.stop_run(int(url.path.split("/")[3]))
                     return self._json({"ok": True})

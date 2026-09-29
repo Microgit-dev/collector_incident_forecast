@@ -82,6 +82,8 @@ class Engine:
         self.source = source
         self.rng = random.Random(seed)
         self.lock = threading.RLock()
+        # поколение готовых сценариев: «Остановить все» отменяет и части, которые ещё не начались
+        self._preset_epoch = 0
         self.channels: dict[int, ChannelState] = {}
         self.guard: dict[int, bool] = {}
         self.runs: dict[int, Run] = {}
@@ -300,7 +302,9 @@ class Engine:
 
     # ---------- сценарии ----------
 
-    def start_scenario(self, name: str, object_id: int, picket: float | None = None, speed: float = 1.0) -> Run:
+    def start_scenario(
+        self, name: str, object_id: int, picket: float | None = None, speed: float = 1.0, title: str | None = None
+    ) -> Run:
         from .scenarios import SCENARIOS
 
         if name not in SCENARIOS:
@@ -314,7 +318,7 @@ class Engine:
             run = Run(
                 id=next(self._run_ids),
                 scenario=name,
-                title=spec.title,
+                title=title or spec.title,
                 object_id=int(object_id),
                 speed=speed,
                 started=self.wall(),
@@ -328,6 +332,68 @@ class Engine:
             if not steps:
                 run.status = "done"
             return run
+
+    def sites(self) -> list[int]:
+        """Площадки для готовых сценариев: объекты верхнего уровня с датчиками (на полигоне — Мю, Кси, Тау)."""
+        cat = self.catalog
+        roots = sorted(o.id for o in cat.objects.values() if o.parent not in cat.objects)
+        children = [c for r in roots for c in sorted(cat.objects[r].children) if cat.devices_under(c)]
+        return children or [r for r in roots if cat.devices_under(r)]
+
+    def start_preset(self, code: str, speed: float = 1.0) -> list[dict]:
+        """Готовый сценарий: части запускаются по расписанию; части на одном объекте — у одного пикета."""
+        from .presets import PRESETS
+        from .scenarios import SCENARIOS
+
+        if code not in PRESETS:
+            raise ValueError(f"нет готового сценария {code}; есть: {', '.join(PRESETS)}")
+        sites = self.sites()
+        if not sites:
+            raise ValueError("в справочнике нет объектов с датчиками")
+        preset, speed = PRESETS[code], max(float(speed), 0.1)
+        pickets: dict[int, float | None] = {}
+        plan = []
+        for part in preset.parts:
+            object_id = sites[part.site % len(sites)]
+            if object_id not in pickets:
+                span = self.catalog.picket_range(object_id)
+                pickets[object_id] = round(self.rng.uniform(*span)) if span else None
+            picket = part.picket if part.picket is not None else pickets[object_id]
+            title = f"{preset.title} · {SCENARIOS[part.scenario].title}"
+            self.schedule(
+                part.at_s / speed,
+                self._preset_part(part.scenario, object_id, picket, speed, title, self._preset_epoch),
+            )
+            plan.append(
+                {
+                    "at_s": part.at_s,
+                    "scenario": SCENARIOS[part.scenario].title,
+                    "object": self.catalog.objects[object_id].name,
+                    "picket": picket,
+                }
+            )
+        return plan
+
+    def stop_presets(self) -> int:
+        """Остановить все сценарии, в том числе ещё не начавшиеся части готовых."""
+        with self.lock:
+            self._preset_epoch += 1
+            return self.stop_runs()
+
+    def _preset_part(
+        self, scenario: str, object_id: int, picket, speed: float, title: str, epoch: int
+    ) -> Callable[[], None]:
+        def launch():
+            if epoch != self._preset_epoch:
+                return
+            try:
+                self.start_scenario(scenario, object_id, picket, speed, title)
+            except ValueError as exc:  # на объекте нет нужных датчиков — отметить и идти дальше
+                run = Run(next(self._run_ids), scenario, title, object_id, speed, self.wall(), [], status="stopped")
+                run.log.append(f"{self.wall():%H:%M:%S} не запущен: {exc}")
+                self.runs[run.id] = run
+
+        return launch
 
     def _step_runner(self, run: Run, index: int) -> Callable[[], None]:
         def execute():

@@ -118,6 +118,18 @@ details summary { cursor: pointer; }
 
   <aside class="right">
     <div class="panel">
+      <h2>Готовые сценарии</h2>
+      <div class="field"><label for="preset">Несколько событий на объектах полигона</label><select id="preset"></select></div>
+      <div class="small muted" id="presetHint" style="margin-bottom:8px"></div>
+      <div class="field"><label for="presetSpeed">Ускорение</label>
+        <select id="presetSpeed"><option value="1">×1 — реальное время</option><option value="5">×5</option><option value="10" selected>×10</option><option value="30">×30</option></select>
+      </div>
+      <div class="toolbar">
+        <button class="btn primary" id="startPreset">Запустить</button>
+        <button class="btn danger" id="stopAll" title="Остановить все сценарии, в том числе ещё не начавшиеся части">Остановить все</button>
+      </div>
+    </div>
+    <div class="panel">
       <h2>Сценарий</h2>
       <div class="field"><label for="scenario">Что происходит</label><select id="scenario"></select></div>
       <div class="small muted" id="scenarioHint" style="margin-bottom:8px"></div>
@@ -246,6 +258,13 @@ function select(id) {
   refresh();
 }
 
+function presetHint() {
+  const p = meta.presets.find((x) => x.code === $('preset').value);
+  $('presetHint').innerHTML = p
+    ? `${esc(p.description)}. Последнее событие — через ${p.minutes} мин (×1).<br><b>Ожидается:</b> ${esc(p.expected)}`
+    : '';
+}
+
 function scenarioHint() {
   const s = meta.scenarios.find((x) => x.code === $('scenario').value);
   $('scenarioHint').textContent = s ? s.description : '';
@@ -278,6 +297,18 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (t.id === 'restore') return act({ op: 'restore', object: selected });
+  if (t.id === 'startPreset') {
+    try {
+      const res = await api('/api/preset', { preset: $('preset').value, speed: Number($('presetSpeed').value) });
+      toast(`Запущено: ${res.plan.map((x) => `${x.scenario} — ${x.object}`).join('; ')}`);
+      refresh();
+    } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.id === 'stopAll') {
+    try { const res = await api('/api/preset/stop', {}); toast(`Остановлено сценариев: ${res.stopped}`); refresh(); } catch (err) { toast(err.message); }
+    return;
+  }
   if (t.id === 'start') {
     try {
       const run = await api('/api/scenario', { scenario: $('scenario').value, object: selected, picket: $('picket').value.replace(',', '.') || null, speed: Number($('speed').value) });
@@ -293,12 +324,15 @@ document.addEventListener('keydown', (e) => {
 $('filter').addEventListener('input', () => state && renderChannels());
 $('hidePolls').addEventListener('change', () => state && renderState());
 $('scenario').addEventListener('change', scenarioHint);
+$('preset').addEventListener('change', presetHint);
 
 (async () => {
   meta = await api('/api/meta');
   $('contour').textContent = meta.contour;
   $('scenario').innerHTML = meta.scenarios.map((s) => `<option value="${s.code}">${esc(s.title)}</option>`).join('');
   scenarioHint();
+  $('preset').innerHTML = meta.presets.map((p) => `<option value="${p.code}">${esc(p.title)}</option>`).join('');
+  presetHint();
   renderTree();
   const first = meta.tree[0]?.children?.[0] ?? meta.tree[0];
   if (first) select(first.id);
