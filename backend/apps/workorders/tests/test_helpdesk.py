@@ -94,3 +94,19 @@ def test_unavailable_helpdesk_keeps_order_approved(approved, monkeypatch):
         services.transition(order, WorkOrder.Status.SUBMITTED, user)
     order.refresh_from_db()
     assert order.status == "approved" and order.external_id == ""
+
+
+def test_without_helpdesk_brigade_takes_approved_order_directly(approved, monkeypatch):
+    order, user = approved
+    monkeypatch.setattr(services, "helpdesk_enabled", lambda: False)
+    assert services.allowed(order) == {WorkOrder.Status.IN_PROGRESS, WorkOrder.Status.CANCELLED}
+    services.transition(order, WorkOrder.Status.IN_PROGRESS, user)
+    order.refresh_from_db()
+    assert order.status == "in_progress"
+    assert IncidentEvent.objects.filter(incident=order.incident, text__contains="бригада приступила").exists()
+
+
+def test_with_helpdesk_approved_order_goes_through_it(approved, helpdesk):
+    order, user = approved
+    with pytest.raises(services.WorkOrderError, match="недопустим"):
+        services.transition(order, WorkOrder.Status.IN_PROGRESS, user)

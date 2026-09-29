@@ -67,6 +67,7 @@ interface WorkOrder {
   external_history: { status: string; label: string; at: string }[]
   external_synced_at: string | null
   report: string
+  direct: boolean
 }
 
 // Следующий шаг жизненного цикла и право, которое для него нужно
@@ -76,6 +77,8 @@ const NEXT: Partial<Record<WorkOrderStatus, { status: WorkOrderStatus; label: st
   submitted: { status: 'in_progress', label: 'Взять в работу', perm: 'workorders.execute_workorder' },
   in_progress: { status: 'done', label: 'Выполнена', perm: 'workorders.execute_workorder' },
 }
+// без системы заявок заказчика утверждённую заявку бригада берёт в работу сразу
+const TAKE = { status: 'in_progress' as WorkOrderStatus, label: 'Взять в работу', perm: 'workorders.execute_workorder' }
 const REC_STATUS = {
   new: { label: 'Новая', color: 'blue' },
   accepted: { label: 'Принята', color: 'teal' },
@@ -341,7 +344,7 @@ function Orders() {
             </Table.Thead>
             <Table.Tbody>
               {orders.data?.results.map((o) => {
-                const next = NEXT[o.status]
+                const next = o.status === 'approved' && o.direct ? TAKE : NEXT[o.status]
                 return (
                   <Table.Tr key={o.id}>
                     <Table.Td>

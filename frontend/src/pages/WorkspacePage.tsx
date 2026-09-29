@@ -40,6 +40,8 @@ const TECH_NEXT: Partial<Record<WorkOrderStatus, { status: WorkOrderStatus; labe
   submitted: { status: 'in_progress', label: 'Взять в работу' },
   in_progress: { status: 'done', label: 'Выполнена' },
 }
+// без системы заявок заказчика утверждённую заявку бригада берёт сразу
+const TAKE = { status: 'in_progress' as WorkOrderStatus, label: 'Взять в работу' }
 
 function Kpi({ kpi }: { kpi: WorkspaceKpi }) {
   const body = (
@@ -359,7 +361,7 @@ function TechnicianPanel({ data }: { data: Workspace }) {
       {orders.length ? (
         <Stack gap={0}>
           {orders.map((o) => {
-            const next = TECH_NEXT[o.status]
+            const next = o.status === 'approved' && o.direct ? TAKE : TECH_NEXT[o.status]
             return (
               <OrderLine
                 key={o.id}

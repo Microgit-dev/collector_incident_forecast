@@ -17,6 +17,7 @@ from apps.accounts.roles import ROLES, Role
 from apps.forecasting.models import ChannelHealth, ChannelRisk, FeedbackLabel
 from apps.incidents.models import Incident
 from apps.topology.selectors import scope_queryset
+from apps.workorders import services as wo_services
 from apps.workorders.models import WorkOrder
 
 # Порядок выбора рабочего места по умолчанию: самая «оперативная» роль пользователя
@@ -92,6 +93,7 @@ def _order_row(o: WorkOrder, now) -> dict:
         "node": o.node.name,
         "created_by": o.created_by.get_full_name() if o.created_by else None,
         "external_status": o.external_status,
+        "direct": wo_services.direct(),
     }
 
 

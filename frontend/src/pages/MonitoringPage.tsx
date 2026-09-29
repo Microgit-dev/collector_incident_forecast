@@ -51,6 +51,8 @@ const TECH_NEXT: Partial<Record<WorkOrderStatus, { status: WorkOrderStatus; labe
   submitted: { status: 'in_progress', label: 'Взять в работу' },
   in_progress: { status: 'done', label: 'Выполнена' },
 }
+// без системы заявок заказчика утверждённую заявку бригада берёт сразу
+const TAKE = { status: 'in_progress' as WorkOrderStatus, label: 'Взять в работу' }
 
 function Dot({ color }: { color: string }) {
   return <Box w={10} h={10} style={{ borderRadius: 5, background: color, flexShrink: 0 }} />
@@ -307,7 +309,7 @@ function ObjectPanel({ id, detail, loading, onBack }: { id: number; detail?: Mon
             <Section title={`Заявки · ${detail.orders.length}`}>
               {detail.orders.length ? (
                 detail.orders.map((o) => {
-                  const next = o.mine ? TECH_NEXT[o.status] : undefined
+                  const next = o.mine ? (o.status === 'approved' && o.direct ? TAKE : TECH_NEXT[o.status]) : undefined
                   return (
                     <Stack key={o.id} gap={4} pb={6} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                       <Text size="sm" lineClamp={2}>

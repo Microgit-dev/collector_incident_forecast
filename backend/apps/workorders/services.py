@@ -101,14 +101,28 @@ _TRANSITIONS = {
 }
 
 
+def direct() -> bool:
+    """Заявки ведутся без системы учёта заказчика (HELPDESK_MODE=off): бригада берёт утверждённую сразу."""
+    return not helpdesk_enabled()
+
+
+def allowed(order: WorkOrder) -> set[str]:
+    steps = set(_TRANSITIONS.get(order.status, set()))
+    if order.status == WorkOrder.Status.APPROVED and direct():
+        steps = (steps - {WorkOrder.Status.SUBMITTED}) | {WorkOrder.Status.IN_PROGRESS}
+    return steps
+
+
 def transition(order: WorkOrder, new_status: str, user=None) -> WorkOrder:
-    if new_status not in _TRANSITIONS.get(order.status, set()):
+    if new_status not in allowed(order):
         raise WorkOrderError(
             f"Переход {order.get_status_display()} → {WorkOrder.Status(new_status).label} недопустим"
         )
     if new_status == WorkOrder.Status.SUBMITTED:
         return submit(order, user)
     order.status = new_status
+    if new_status == WorkOrder.Status.IN_PROGRESS:
+        _incident_event(order, user, f"Заявка {order.number}: бригада приступила")
     if new_status == WorkOrder.Status.APPROVED:
         order.approved_by = user
         if order.assignee_id is None:

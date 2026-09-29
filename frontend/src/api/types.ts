@@ -601,6 +601,8 @@ export interface WorkspaceOrder {
   node: string
   created_by: string | null
   external_status: string
+  /** без системы заявок заказчика: утверждённую заявку бригада берёт в работу сразу */
+  direct: boolean
 }
 
 export interface Workspace {
@@ -1301,6 +1303,7 @@ export interface MonitoringObjectDetail {
     overdue: boolean
     assignee: string | null
     mine: boolean
+    direct: boolean
   }[]
   modes?: MonitoringMode[]
   floors?: Floor[]

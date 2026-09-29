@@ -26,6 +26,7 @@ from apps.topology.floors import floor_dict, floors_of
 from apps.topology.models import Node, NodeKind
 from apps.topology.selectors import ObjectIndex, has_global_scope, in_scope, scope_paths, zone_of
 from apps.workorders.models import WorkOrder
+from apps.workorders.services import direct as direct_orders
 
 from .workspace import roles_of
 
@@ -405,6 +406,7 @@ def object_detail(user, obj: Node) -> dict:
     orders = []
     if "orders" in modes:
         now = timezone.now()
+        direct = direct_orders()
         orders = [
             {
                 "id": o.pk,
@@ -417,6 +419,7 @@ def object_detail(user, obj: Node) -> dict:
                 "overdue": bool(o.due_at and o.due_at < now),
                 "assignee": (o.assignee.get_full_name() or o.assignee.username) if o.assignee else None,
                 "mine": o.assignee_id == user.pk,
+                "direct": direct,
             }
             for o in _orders_qs(user)
             .filter(node__path__startswith=obj.path)

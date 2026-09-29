@@ -30,6 +30,11 @@ class WorkOrderSerializer(serializers.ModelSerializer):
     node_name = serializers.CharField(source="node.name", read_only=True)
     assignee_name = serializers.CharField(source="assignee.get_full_name", default=None, read_only=True)
     equipment_name = serializers.CharField(source="equipment.name", default=None, read_only=True)
+    # без системы заявок заказчика утверждённую заявку бригада берёт в работу сразу
+    direct = serializers.SerializerMethodField()
+
+    def get_direct(self, obj) -> bool:
+        return services.direct()
 
     class Meta:
         model = WorkOrder
@@ -37,6 +42,7 @@ class WorkOrderSerializer(serializers.ModelSerializer):
             "id",
             "number",
             "status",
+            "direct",
             "node",
             "node_name",
             "incident",
