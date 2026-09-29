@@ -38,6 +38,24 @@ HISTORY_DAYS = 100  # глубина истории для признаков п
 CHUNK = 1500  # каналов за проход при сборке выборки — ограничивает пиковую память
 NEG_RATE = 0.05
 VALID_FROM, TEST_FROM = date(2025, 1, 1), date(2026, 1, 1)
+# Меньше событий в обучающем или проверочном годе — модель и пороги уровней не из чего получить
+MIN_EVENTS = {"train": 20, "valid": 5}
+
+
+class NotEnoughData(Exception):
+    """Истории в базе мало для обучения: понятная причина вместо внутренней ошибки LightGBM."""
+
+
+def _not_enough(counts: dict, events: dict) -> NotEnoughData:
+    return NotEnoughData(
+        "Недостаточно истории для обучения: "
+        f"примеров до 2025 — {counts['train']}, за 2025 — {counts['valid']}, за 2026 — {counts['test']}; "
+        f"событий до 2025 — {events['train']}, за 2025 — {events['valid']}. "
+        "Нужны журналы СМВУ за несколько лет (раздел «Загрузка данных»). До загрузки прогноз строит "
+        "поставляемая модель, обученная на журналах заказчика."
+    )
+
+
 TARGET_PRECISION, TARGET_RECALL = 0.7, 0.5
 
 
@@ -96,6 +114,8 @@ def build_dataset(
     # Конец выборки — последние полные сутки: одиночные сутки после них (тестовый прогон) дали бы
     # месяцы «пустых» дней без событий и завысили бы метрики
     last = data.last_complete_day() or data.last_daily_day()
+    if last is None:
+        raise _not_enough({"train": 0, "valid": 0, "test": 0}, {"train": 0, "valid": 0})
     name = f"dataset_{spec.task}_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}_{labels_fingerprint(labels)}"
     cache = settings.ARTIFACTS_DIR / "models" / f"{name}.parquet"
     stats_file = cache.with_suffix(".json")
@@ -167,6 +187,8 @@ def _collect(
             )
         )
     progress(1, "Выборка собрана")
+    if not parts:
+        raise _not_enough({"train": 0, "valid": 0, "test": 0}, {"train": 0, "valid": 0})
     return pl.concat(parts), stats, per_label
 
 
@@ -312,6 +334,9 @@ def train(
         "valid": dataset.filter(pl.col("day").is_between(VALID_FROM, TEST_FROM, closed="left")),
         "test": dataset.filter(pl.col("day") >= TEST_FROM),
     }
+    events = {k: int(v["y"].sum()) for k, v in parts.items()}
+    if any(events[k] < n for k, n in MIN_EVENTS.items()) or parts["test"].is_empty():
+        raise _not_enough({k: len(v) for k, v in parts.items()}, events)
     xy = {
         k: (to_matrix(v, sensor_types, columns), v["y"].to_numpy(), v["weight"].to_numpy())
         for k, v in parts.items()

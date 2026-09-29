@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from datetime import timedelta
@@ -83,6 +84,10 @@ def execute(run: TrainingRun, echo=None) -> MLModel:
         run.progress, run.stage = 100, f"Готово: {reason}"
         run.log = f"test: {model.metrics['test']}"
         return model
+    except channel_model.NotEnoughData as exc:
+        logger.warning("training skipped: %s", exc)
+        run.status, run.stage, run.log = TrainingRun.Status.FAILED, "Недостаточно данных", str(exc)
+        raise
     except Exception as exc:
         logger.exception("training failed")
         run.status, run.stage, run.log = TrainingRun.Status.FAILED, "Ошибка", repr(exc)
@@ -208,5 +213,9 @@ def scheduled_retrain() -> int | None:
         task=ForecastTask.SENSOR_FAILURE,
         params={"horizon_hours": settings.horizon_hours, "trigger": "schedule"},
     )
-    execute(run)
+    from .channel_model import NotEnoughData
+
+    # истории мало: причина записана в запуск, активная модель остаётся прежней
+    with contextlib.suppress(NotEnoughData):
+        execute(run)
     return run.pk

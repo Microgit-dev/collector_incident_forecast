@@ -10,6 +10,9 @@
 Права: accounts.view_grafana — бизнес-панели (аналитик), accounts.view_system_monitoring — системные
 панели Grafana и Prometheus (администратор). Проверка выполняется на каждом запросе с кешем
 на CHECK_CACHE секунд: снятая роль или заблокированная учётка теряют доступ почти сразу.
+
+Тем же сеансом открывается веб-интерфейс симулятора датчиков (/simulator/): право training.add_exercise —
+руководитель учений.
 """
 
 from __future__ import annotations
@@ -33,17 +36,19 @@ MAX_AGE = 8 * 3600
 CHECK_CACHE = 30
 GRAFANA_PERM = "accounts.view_grafana"
 SYSTEM_PERM = "accounts.view_system_monitoring"
-SERVICES = {"grafana", "prometheus"}
+SIMULATOR_PERM = "training.add_exercise"
+SERVICES = {"grafana", "prometheus", "simulator"}
 
 
 def access_of(user) -> dict:
-    """Какие панели доступны пользователю: grafana — с какой ролью, prometheus — да/нет."""
+    """Какие панели доступны пользователю: grafana — с какой ролью, prometheus и simulator — да/нет."""
     system = user.has_perm(SYSTEM_PERM)
     grafana = system or user.has_perm(GRAFANA_PERM)
     return {
         "grafana": grafana,
         "grafana_role": "Admin" if system else "Viewer",
         "prometheus": system,
+        "simulator": user.has_perm(SIMULATOR_PERM),
     }
 
 
@@ -53,6 +58,7 @@ def _links(access: dict) -> dict:
         "business": "/grafana/d/collector-business" if access["grafana"] else None,
         "system": "/grafana/d/collector-system" if access["prometheus"] else None,
         "prometheus": "/prometheus/" if access["prometheus"] else None,
+        "simulator": "/simulator/" if access["simulator"] else None,
     }
 
 
@@ -66,7 +72,7 @@ class SessionView(APIView):
 
     def post(self, request):
         access = access_of(request.user)
-        if not access["grafana"]:
+        if not (access["grafana"] or access["simulator"]):
             return Response({"detail": "Панели мониторинга недоступны вашей роли"}, status=403)
         response = Response(_links(access))
         response.set_cookie(

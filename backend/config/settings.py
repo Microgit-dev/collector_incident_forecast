@@ -168,12 +168,12 @@ ARTIFACTS_DIR = Path(env("ARTIFACTS_DIR", default=str(BASE_DIR.parent / "artifac
 # и help desk. Один и тот же образ; контур меняет только окружение, поэтому учебный не может задеть боевой.
 CONTOUR = env("CONTOUR", default="combat")
 # Учебный контур — подсистема основной: тот же адрес с префиксом /training/, общий вход и учётные записи
-# (прежние COMBAT_URL / TRAINING_URL с отдельным портом 8443 больше не читаются)
+# (прежние COMBAT_URL / TRAINING_URL с отдельным портом 8443 и SIMULATOR_URL больше не читаются:
+# симулятор открывается через /simulator/, apps/accounts/observability.py)
 TRAINING_PREFIX = env("TRAINING_PREFIX", default="/training")
 CONTOUR_URLS = {
     "combat": "/",
     "training": f"{TRAINING_PREFIX}/",
-    "simulator": env("SIMULATOR_URL", default="http://localhost:8095"),
 }
 # Кто ведёт учётные записи и выдаёт токены (apps/accounts/authentication.py)
 IDENTITY_CONTOUR = "combat"
@@ -319,10 +319,7 @@ MAP_SATELLITE_TILES = env(
     "MAP_SATELLITE_TILES",
     default="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 )
-MAP_SATELLITE_ATTRIBUTION = env(
-    "MAP_SATELLITE_ATTRIBUTION", default="© Esri, Maxar, Earthstar Geographics"
-)
+MAP_SATELLITE_ATTRIBUTION = env("MAP_SATELLITE_ATTRIBUTION", default="© Esri, Maxar, Earthstar Geographics")
 # Сервис ИИ-выделения зданий по снимку (infra/segmenter, профиль compose «ai»). Пусто или недоступен —
 # контур берётся из OpenStreetMap.
 SEGMENTER_URL = env("SEGMENTER_URL", default="")
-

@@ -245,6 +245,8 @@ export function StructurePage() {
   const [pointFor, setPointFor] = useState<number | 'new' | null>(null)
   const [satellite, setSatelliteOn] = useState(false)
   const [shownFloor, setShownFloor] = useState<number | null>(null)
+  // прозрачность плана, пока ползунок двигают (сохраняется в этаж, когда его отпускают)
+  const [opacityDraft, setOpacityDraft] = useState<{ id: number; value: number } | null>(null)
   const map = useRef<MapHandle | null>(null)
   const editor = useRef<PolygonEditor | null>(null)
   const [editorReady, setEditorReady] = useState(0)
@@ -267,8 +269,16 @@ export function StructurePage() {
       : undefined
   const floorUrl = usePlanUrl(floor?.corners ? floor.plan : null)
   const plan = useMemo(
-    () => (floor && floor.corners ? { floor: floor.id, url: floorUrl, corners: floor.corners, opacity: floor.opacity } : null),
-    [floor, floorUrl],
+    () =>
+      floor && floor.corners
+        ? {
+            floor: floor.id,
+            url: floorUrl,
+            corners: floor.corners,
+            opacity: opacityDraft?.id === floor.id ? opacityDraft.value : floor.opacity,
+          }
+        : null,
+    [floor, floorUrl, opacityDraft],
   )
 
   // черновик контура из редактора
@@ -376,7 +386,7 @@ export function StructurePage() {
         <Group gap={6}>
           <Text size="xs" fw={500}>
             {tool === 'draw' && 'Щёлкайте по карте — вершины контура; двойной щелчок или «Готово» замыкает'}
-            {tool === 'edit' && 'Тяните вершины, щелчок по точке на ребре — новая вершина'}
+            {tool === 'edit' && 'Тяните вершины; щелчок по точке на ребре — новая вершина, двойной щелчок по вершине — удалить'}
             {tool === 'pick' && (detecting ? 'Ищу здание…' : 'Щёлкните по зданию — контур выделится сам')}
             {tool === 'segment' && (detecting ? 'ИИ выделяет здание по снимку (5–30 с)…' : 'Щёлкните по крыше здания на снимке — ИИ обведёт контур')}
             {tool === 'point' && 'Щёлкните место датчика на карте'}
@@ -548,6 +558,7 @@ export function StructurePage() {
                     config={data.map}
                     shown={floor?.id ?? null}
                     setShown={setShownFloor}
+                    onOpacity={(id, value) => setOpacityDraft({ id, value })}
                     changed={() => {
                       void client.invalidateQueries({ queryKey: ['floors', objectId] })
                       refresh()

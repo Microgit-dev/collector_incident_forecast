@@ -58,7 +58,7 @@ export interface OperationsMatrix {
 
 export interface Contour {
   code: 'combat' | 'training'
-  urls: { combat: string; training: string; simulator: string }
+  urls: { combat: string; training: string }
 }
 
 export type TeamKind = 'management' | 'ods' | 'unit' | 'brigade' | 'analytics' | 'support'

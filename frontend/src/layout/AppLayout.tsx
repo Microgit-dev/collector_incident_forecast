@@ -324,8 +324,7 @@ export function AppLayout() {
         <Stack gap={2} pt={4} style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
           {training && instructor && (
             <NavLink
-              href={user?.contour.urls.simulator}
-              target="_blank"
+              onClick={() => openObservability('simulator')}
               label="Симулятор датчиков"
               leftSection={<IconRoute size={18} stroke={1.6} />}
             />

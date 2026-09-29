@@ -14,6 +14,7 @@ import {
   Group,
   Menu,
   NumberInput,
+  Slider,
   Stack,
   Text,
   TextInput,
@@ -38,6 +39,7 @@ export function FloorsPanel({
   config,
   shown,
   setShown,
+  onOpacity,
   changed,
 }: {
   object: StructureObject
@@ -46,6 +48,8 @@ export function FloorsPanel({
   /** этаж, чей план показан на карте редактора */
   shown: number | null
   setShown: (id: number | null) => void
+  /** прозрачность плана на карте, пока ползунок двигают */
+  onOpacity: (id: number, value: number) => void
   changed: () => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -189,6 +193,25 @@ export function FloorsPanel({
               </Menu>
             </Group>
           </Group>
+          {shown === f.id && f.corners && (
+            <Group gap="xs" mt={6} wrap="nowrap">
+              <Text size="xs" c="dimmed">
+                Прозрачность
+              </Text>
+              <Slider
+                size="xs"
+                style={{ flex: 1 }}
+                min={0.1}
+                max={1}
+                step={0.05}
+                defaultValue={f.opacity}
+                label={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) => onOpacity(f.id, v)}
+                onChangeEnd={(v) => patch.mutate({ id: f.id, body: { opacity: v } })}
+                aria-label="Прозрачность плана"
+              />
+            </Group>
+          )}
         </Card>
       ))}
       {floors && !list.length && !adding && (

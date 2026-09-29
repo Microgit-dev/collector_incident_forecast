@@ -2,7 +2,7 @@
 # Демо-поток СМВУ:              docker compose --profile demo up -d replay
 # ИИ-выделение зданий по снимку: docker compose --profile ai up -d --build segmenter
 # Учебный контур и симулятор:   docker compose --profile training up -d --build
-#                               (https://localhost/training/ · симулятор http://localhost:8095)
+#                               (https://localhost/training/ · симулятор https://localhost/simulator/)
 # Интерфейс: https://localhost  · API: /api/docs/ · Админка: /admin/ · Grafana: /grafana/
 
 # Образ собирает только сервис migrate; остальные backend-сервисы переиспользуют его
@@ -264,7 +264,8 @@ services:
       - helpdeskdata-training:/data
     restart: unless-stopped
 
-  # Симулятор датчиков: полевой контур, видит только Kafka; веб-интерфейс — только с этой машины
+  # Симулятор датчиков: полевой контур, видит только Kafka; веб-интерфейс — через платформу (/simulator/,
+  # руководителю учений) или напрямую с этой машины
   simulator:
     build: ./simulator
     image: collector-forecast/simulator:local
@@ -304,6 +305,8 @@ services:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./infra/caddy/certs:/certs:ro
       - caddydata:/data
+    # field — только чтобы проксировать веб-интерфейс симулятора
+    networks: [default, field]
     depends_on:
       backend:
         condition: service_healthy

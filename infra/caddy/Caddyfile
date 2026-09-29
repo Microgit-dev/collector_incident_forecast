@@ -17,8 +17,9 @@
 		# MAP_TILES_ORIGIN — сервер подложки карты мониторинга (стиль, тайлы, шрифты подписей); для своего
 		# сервера тайлов меняется вместе с MAP_STYLE_LIGHT/DARK в .env. MAP_SATELLITE_ORIGIN — спутниковая
 		# подложка редактора объектов и планов этажей (MAP_SATELLITE_TILES)
+		# connect-src blob: — планы этажей: MapLibre читает картинку плана из blob-URL через fetch
 		header {
-			Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MAP_TILES_ORIGIN:https://tiles.versatiles.org} {$MAP_SATELLITE_ORIGIN:https://server.arcgisonline.com}; font-src 'self' data:; connect-src 'self' {$MAP_TILES_ORIGIN:https://tiles.versatiles.org} {$MAP_SATELLITE_ORIGIN:https://server.arcgisonline.com}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MAP_TILES_ORIGIN:https://tiles.versatiles.org} {$MAP_SATELLITE_ORIGIN:https://server.arcgisonline.com}; font-src 'self' data:; connect-src 'self' blob: {$MAP_TILES_ORIGIN:https://tiles.versatiles.org} {$MAP_SATELLITE_ORIGIN:https://server.arcgisonline.com}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 			X-Frame-Options DENY
 		}
 	}
@@ -73,6 +74,18 @@
 	}
 
 	import observability
+
+	# Веб-интерфейс симулятора датчиков (профиль training): руководителю учений, вход тем же сеансом,
+	# что и панели наблюдаемости. Префикс снимается — у симулятора свои пути /api/*
+	redir /simulator /simulator/
+	handle_path /simulator/* {
+		route {
+			forward_auth backend:8000 {
+				uri /api/v1/observability/auth/?service=simulator
+			}
+			reverse_proxy simulator:8095
+		}
+	}
 
 	# Эмулятор help desk заказчика (страница заявок «с их стороны»)
 	handle_path /helpdesk* {

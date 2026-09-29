@@ -150,7 +150,8 @@ function toast(text) {
 }
 
 async function api(path, body) {
-  const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  // Путь относительный: страница открывается и напрямую (:8095), и через платформу (/simulator/)
+  const res = await fetch(path.replace(/^\//, ''), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || res.statusText);
   return data;

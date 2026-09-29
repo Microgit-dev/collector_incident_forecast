@@ -1,6 +1,7 @@
 /**
  * Редактор контура на карте без сторонних плагинов: рисование по щелчкам, перетаскивание вершин
- * (мышь и палец), вставка точки щелчком по середине ребра, удаление выбранной вершины.
+ * (мышь и палец), вставка точки щелчком по середине ребра, удаление выбранной вершины или двойным
+ * щелчком по ней (лишние точки контура, предложенного по снимку).
  * Используется для границ зон и контуров объектов, в том числе для правки предложенного
  * автовыделением здания перед сохранением.
  */
@@ -62,6 +63,7 @@ export class PolygonEditor {
     map.on('mousedown', 'ed-verts', this.startDrag)
     map.on('touchstart', 'ed-verts', this.startDrag)
     map.on('click', 'ed-mids', this.insert)
+    map.on('dblclick', 'ed-verts', this.removeVertex)
     map.on('mouseenter', 'ed-verts', this.pointer)
     map.on('mouseleave', 'ed-verts', this.unpointer)
     map.on('mouseenter', 'ed-mids', this.pointer)
@@ -75,6 +77,7 @@ export class PolygonEditor {
     map.off('mousedown', 'ed-verts', this.startDrag)
     map.off('touchstart', 'ed-verts', this.startDrag)
     map.off('click', 'ed-mids', this.insert)
+    map.off('dblclick', 'ed-verts', this.removeVertex)
   }
 
   /** Кому сообщать об изменении контура (черновик в форме). */
@@ -177,6 +180,14 @@ export class PolygonEditor {
     this.selected = i + 1
     this.render()
     this.emit()
+  }
+
+  // двойной щелчок по вершине — удалить её (карта при этом не приближается); меньше трёх точек не остаётся
+  private removeVertex = (e: MapLayerMouseEvent) => {
+    if (this.mode !== 'edit') return
+    e.preventDefault()
+    this.selected = Number(e.features?.[0]?.properties?.i)
+    this.deleteSelected()
   }
 
   private startDrag = (e: MapLayerMouseEvent | MapLayerTouchEvent) => {

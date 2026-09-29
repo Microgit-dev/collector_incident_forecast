@@ -1,0 +1,318 @@
+{
+ "task": "sensor_failure",
+ "version": "2026.09.24-1825-h24",
+ "algorithm": "lightgbm",
+ "horizon_hours": 24,
+ "features": [
+  "faults_1",
+  "faults_7",
+  "faults_30",
+  "faults_90",
+  "fault_days_30",
+  "fault_days_90",
+  "days_since_fault",
+  "power_1",
+  "power_7",
+  "power_30",
+  "unknown_7",
+  "unknown_30",
+  "invalid_7",
+  "invalid_30",
+  "alarms_7",
+  "alarms_30",
+  "warnings_7",
+  "readings_1",
+  "readings_mean_7",
+  "readings_mean_30",
+  "readings_ratio",
+  "silent_days_7",
+  "days_since_msg",
+  "num_avg_1",
+  "num_delta_7",
+  "num_std_7",
+  "num_range_1",
+  "node_faults_1",
+  "node_faults_7",
+  "node_power_1",
+  "node_power_7",
+  "last_state",
+  "sensor_type"
+ ],
+ "params": {
+  "seed": 42,
+  "metric": "average_precision",
+  "rounds": 77,
+  "trigger": "manual",
+  "verbose": -1,
+  "lambda_l2": 1.0,
+  "objective": "binary",
+  "num_leaves": 31,
+  "num_threads": 4,
+  "bagging_freq": 1,
+  "use_feedback": true,
+  "learning_rate": 0.03,
+  "bagging_fraction": 0.8,
+  "feature_fraction": 0.8,
+  "min_data_in_leaf": 1000
+ },
+ "metrics": {
+  "rows": {
+   "test": 113891,
+   "train": 785898,
+   "valid": 204187
+  },
+  "task": "sensor_failure",
+  "test": {
+   "f1": 0.126,
+   "onsets": 12946,
+   "pr_auc": 0.112,
+   "recall": 0.091,
+   "roc_auc": 0.901,
+   "base_rate": 0.00637,
+   "precision": 0.206,
+   "alerts_per_day": 31.6,
+   "lead_time_hours": {
+    "p25": 8.3,
+    "p75": 15.4,
+    "median": 12.1
+   }
+  },
+  "event": "неисправность канала",
+  "valid": {
+   "f1": 0.063,
+   "onsets": 16259,
+   "pr_auc": 0.136,
+   "recall": 0.034,
+   "roc_auc": 0.926,
+   "base_rate": 0.00432,
+   "precision": 0.393,
+   "alerts_per_day": 3.9,
+   "lead_time_hours": {
+    "p25": 7.6,
+    "p75": 17.6,
+    "median": 10.7
+   }
+  },
+  "levels": {
+   "high": 0.3647,
+   "medium": 0.0694,
+   "critical": 0.7088
+  },
+  "target": {
+   "recall": 0.5,
+   "precision": 0.7,
+   "precision_reached_on_valid": true
+  },
+  "channels": 11409,
+  "feedback": {
+   "labels": 895,
+   "effects": {
+    "exclude": {
+     "rows": 0,
+     "flipped": 0,
+     "positives_removed": 0
+    },
+    "negative": {
+     "rows": 362,
+     "flipped": 362,
+     "positives_removed": 0
+    },
+    "positive": {
+     "rows": 50,
+     "flipped": 0,
+     "positives_removed": 0
+    }
+   },
+   "enabled": true,
+   "ablation": {
+    "test": {
+     "with_feedback": 0.1119,
+     "without_feedback": 0.1129
+    },
+    "valid": {
+     "with_feedback": 0.1365,
+     "without_feedback": 0.1397
+    }
+   },
+   "labels_matched": 474
+  },
+  "threshold": 0.3647,
+  "comparison": {
+   "verdict": "активирована вручную",
+   "valid_pr_auc": 0.1365,
+   "champion_valid_pr_auc": 0.1432
+  },
+  "levels_test": {
+   "high": {
+    "f1": 0.126,
+    "onsets": 12946,
+    "pr_auc": 0.112,
+    "recall": 0.091,
+    "roc_auc": 0.901,
+    "base_rate": 0.00637,
+    "precision": 0.206,
+    "alerts_per_day": 31.6,
+    "lead_time_hours": {
+     "p25": 8.3,
+     "p75": 15.4,
+     "median": 12.1
+    }
+   },
+   "medium": {
+    "f1": 0.187,
+    "onsets": 12946,
+    "pr_auc": 0.112,
+    "recall": 0.396,
+    "roc_auc": 0.901,
+    "base_rate": 0.00637,
+    "precision": 0.123,
+    "alerts_per_day": 232.4,
+    "lead_time_hours": {
+     "p25": 9.1,
+     "p75": 15.9,
+     "median": 12.2
+    }
+   },
+   "critical": {
+    "f1": 0.032,
+    "onsets": 12946,
+    "pr_auc": 0.112,
+    "recall": 0.017,
+    "roc_auc": 0.901,
+    "base_rate": 0.00637,
+    "precision": 0.246,
+    "alerts_per_day": 5.0,
+    "lead_time_hours": {
+     "p25": 1.5,
+     "p75": 13.7,
+     "median": 8.9
+    }
+   }
+  },
+  "baseline_test": {
+   "rule": "неисправность за последние 7 суток",
+   "recall": 0.446,
+   "precision": 0.105
+  },
+  "horizon_hours": 24,
+  "train_seconds": 45,
+  "best_iteration": 77,
+  "level_precision": {
+   "high": 0.4,
+   "medium": 0.15,
+   "critical": 0.7
+  },
+  "negative_sampling": 0.05,
+  "feature_importance": {
+   "faults_7": 45767.46775054932,
+   "alarms_30": 32683.73159790039,
+   "faults_90": 246414.47438049316,
+   "unknown_30": 33999.74565887451,
+   "sensor_type": 396962.1144332886,
+   "node_power_7": 22531.386428833008,
+   "fault_days_30": 26191.21576690674,
+   "fault_days_90": 1112950.467803955,
+   "node_faults_1": 175110.94889068604,
+   "node_faults_7": 135642.33754730225,
+   "silent_days_7": 23068.285163879395,
+   "days_since_msg": 73021.16463470459,
+   "readings_ratio": 23465.703338623047,
+   "days_since_fault": 1029935.3299789429,
+   "readings_mean_30": 79068.24220275879
+  },
+  "by_sensor_type_test": {
+   "ИБП": {
+    "onsets": 43,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "КД АВ": {
+    "onsets": 52,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "КД Дверь": {
+    "onsets": 102,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "Датчик дыма": {
+    "onsets": 3044,
+    "recall": 0.063,
+    "precision": 0.11
+   },
+   "Переключатель": {
+    "onsets": 275,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "Газовый датчик": {
+    "onsets": 184,
+    "recall": 0.005,
+    "precision": 1.0
+   },
+   "Состояние фазы": {
+    "onsets": 1802,
+    "recall": 0.004,
+    "precision": 1.0
+   },
+   "Состояние УИР-Р": {
+    "onsets": 229,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "Датчик движения": {
+    "onsets": 67,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "Тепловой датчик": {
+    "onsets": 23,
+    "recall": 0.0,
+    "precision": 0.0
+   },
+   "Состояние насоса": {
+    "onsets": 2808,
+    "recall": 0.192,
+    "precision": 0.161
+   },
+   "Состояние охраны": {
+    "onsets": 234,
+    "recall": 0.141,
+    "precision": 0.171
+   },
+   "Ручной извещатель": {
+    "onsets": 409,
+    "recall": 0.005,
+    "precision": 1.0
+   },
+   "Датчик температуры": {
+    "onsets": 527,
+    "recall": 0.028,
+    "precision": 1.0
+   },
+   "Состояние вентилятора": {
+    "onsets": 3134,
+    "recall": 0.123,
+    "precision": 1.0
+   }
+  }
+ },
+ "train_period": {
+  "test": [
+   "2026-01-01",
+   "2026-06-29"
+  ],
+  "train": [
+   "2019-01-01",
+   "2024-12-31"
+  ],
+  "valid": [
+   "2025-01-01",
+   "2025-12-31"
+  ],
+  "excluded": "2021 — переход на новую систему мониторинга"
+ },
+ "notes": "Событие: неисправность канала в ближайшие 24 ч, уточнённые разметкой диспетчеров (895 меток). Выборка — каналы в норме на конец суток. Валидация по времени: обучение до 2025, подбор порогов на 2025, тест на 2026.",
+ "file": "sensor_failure_2026.09.24-1825-h24.txt"
+}

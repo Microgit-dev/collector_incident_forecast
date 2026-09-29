@@ -105,6 +105,9 @@ class Command(BaseCommand):
 
         self.stdout.write(f"feedback rules created: {seed_rules()}")
         LearningSettings.load()
+        from apps.forecasting import pretrained
+
+        self.stdout.write(f"pretrained models: {pretrained.install() or 'active models present'}")
         self._schedules()
         from django.conf import settings
         from django.core.management import call_command

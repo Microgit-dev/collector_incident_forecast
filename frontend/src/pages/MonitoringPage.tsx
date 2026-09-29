@@ -12,6 +12,7 @@ import {
   Paper,
   ScrollArea,
   SegmentedControl,
+  Slider,
   Stack,
   Tabs,
   Text,
@@ -398,6 +399,8 @@ export function MonitoringPage() {
   const [satellite, setSatellite] = useState(false)
   // этаж выбранного объекта: план на карте и его датчики; 'all' — все датчики, план контрольного этажа
   const [floorSel, setFloorSel] = useState<{ object: number; floor: number | 'all' } | null>(null)
+  // непрозрачность плана на карте у этого пользователя; null — как задано при привязке
+  const [planOpacity, setPlanOpacity] = useState<number | null>(null)
   const map = useQuery({
     queryKey: ['monitoring'],
     queryFn: () => api<MapData>('/analytics/monitoring/'),
@@ -415,7 +418,7 @@ export function MonitoringPage() {
   const floor = chosen === 'all' ? floors.find((f) => f.is_base) : floors.find((f) => f.id === chosen)
   const floorUrl = usePlanUrl(floor?.plan)
   const plan = floor
-    ? { floor: chosen === 'all' ? null : floor.id, url: floorUrl, corners: floor.corners, opacity: floor.opacity }
+    ? { floor: chosen === 'all' ? null : floor.id, url: floorUrl, corners: floor.corners, opacity: planOpacity ?? floor.opacity }
     : null
   const current: MonitoringMode | null = data ? (mode && data.modes.includes(mode) ? mode : data.mode) : null
   const manage = can('topology.add_node') || can('topology.manage_zones') || can('accounts.assign_staff')
@@ -530,6 +533,22 @@ export function MonitoringPage() {
                     { value: 'all', label: 'Все' },
                   ]}
                 />
+                <Tooltip label="Прозрачность плана" position="left" withArrow>
+                  <Slider
+                    size="xs"
+                    w={52}
+                    mx="auto"
+                    mt={8}
+                    mb={4}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    label={null}
+                    value={planOpacity ?? floor?.opacity ?? 0.85}
+                    onChange={setPlanOpacity}
+                    aria-label="Прозрачность плана"
+                  />
+                </Tooltip>
               </Paper>
             )}
             <Paper shadow="sm" radius="md" p={6} withBorder pos="absolute" bottom={30} left={8} style={{ zIndex: 2 }}>

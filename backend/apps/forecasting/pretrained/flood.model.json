@@ -1,0 +1,220 @@
+{
+ "task": "flood",
+ "version": "2026.09.24-2004-h24",
+ "algorithm": "lightgbm",
+ "horizon_hours": 24,
+ "features": [
+  "faults_1",
+  "faults_7",
+  "faults_30",
+  "faults_90",
+  "fault_days_30",
+  "fault_days_90",
+  "days_since_fault",
+  "power_1",
+  "power_7",
+  "power_30",
+  "unknown_7",
+  "unknown_30",
+  "invalid_7",
+  "invalid_30",
+  "alarms_7",
+  "alarms_30",
+  "warnings_7",
+  "readings_1",
+  "readings_mean_7",
+  "readings_mean_30",
+  "readings_ratio",
+  "silent_days_7",
+  "days_since_msg",
+  "num_avg_1",
+  "num_delta_7",
+  "num_std_7",
+  "num_range_1",
+  "node_faults_1",
+  "node_faults_7",
+  "node_power_1",
+  "node_power_7",
+  "num_max_1",
+  "num_max_7",
+  "num_max_trend",
+  "high_days_30",
+  "exceed_days_90",
+  "days_since_exceed",
+  "events_1",
+  "events_mean_7",
+  "events_ratio",
+  "alarm_days_30",
+  "days_since_alarm",
+  "wx_precip_1",
+  "wx_precip_3",
+  "wx_precip_next",
+  "wx_thaw_3",
+  "wx_melt_3",
+  "wx_snow_depth",
+  "last_state",
+  "sensor_type"
+ ],
+ "params": {
+  "seed": 42,
+  "metric": "average_precision",
+  "rounds": 106,
+  "trigger": "manual",
+  "verbose": -1,
+  "lambda_l2": 1.0,
+  "objective": "binary",
+  "num_leaves": 31,
+  "num_threads": 4,
+  "bagging_freq": 1,
+  "use_feedback": false,
+  "learning_rate": 0.03,
+  "bagging_fraction": 0.8,
+  "feature_fraction": 0.8,
+  "min_data_in_leaf": 200
+ },
+ "metrics": {
+  "rows": {
+   "test": 7276,
+   "train": 67123,
+   "valid": 15569
+  },
+  "task": "flood",
+  "test": {
+   "f1": 0.228,
+   "onsets": 1241,
+   "pr_auc": 0.185,
+   "recall": 0.454,
+   "roc_auc": 0.825,
+   "base_rate": 0.0395,
+   "precision": 0.152,
+   "alerts_per_day": 20.6
+  },
+  "event": "тревога затопления (насосы АНС, датчики затопления)",
+  "valid": {
+   "f1": 0.453,
+   "onsets": 2572,
+   "pr_auc": 0.536,
+   "recall": 0.523,
+   "roc_auc": 0.876,
+   "base_rate": 0.03807,
+   "precision": 0.4,
+   "alerts_per_day": 9.2
+  },
+  "levels": {
+   "high": 0.1158,
+   "medium": 0.0403,
+   "critical": 0.2774
+  },
+  "target": {
+   "recall": 0.5,
+   "precision": 0.7,
+   "precision_reached_on_valid": true
+  },
+  "channels": 205,
+  "feedback": {
+   "labels": 0,
+   "effects": {},
+   "enabled": false,
+   "ablation": null,
+   "labels_matched": 0
+  },
+  "threshold": 0.1158,
+  "comparison": {
+   "verdict": "активирована: PR-AUC 0.5365 против 0.5339",
+   "valid_pr_auc": 0.5365,
+   "champion_valid_pr_auc": 0.5339
+  },
+  "levels_test": {
+   "high": {
+    "f1": 0.228,
+    "onsets": 1241,
+    "pr_auc": 0.185,
+    "recall": 0.454,
+    "roc_auc": 0.825,
+    "base_rate": 0.0395,
+    "precision": 0.152,
+    "alerts_per_day": 20.6
+   },
+   "medium": {
+    "f1": 0.193,
+    "onsets": 1241,
+    "pr_auc": 0.185,
+    "recall": 0.732,
+    "roc_auc": 0.825,
+    "base_rate": 0.0395,
+    "precision": 0.111,
+    "alerts_per_day": 45.4
+   },
+   "critical": {
+    "f1": 0.211,
+    "onsets": 1241,
+    "pr_auc": 0.185,
+    "recall": 0.268,
+    "roc_auc": 0.825,
+    "base_rate": 0.0395,
+    "precision": 0.174,
+    "alerts_per_day": 10.6
+   }
+  },
+  "baseline_test": {
+   "rule": "тревога за последние 7 суток",
+   "recall": 0.535,
+   "precision": 0.132
+  },
+  "horizon_hours": 24,
+  "train_seconds": 2,
+  "best_iteration": 106,
+  "level_precision": {
+   "high": 0.4,
+   "medium": 0.15,
+   "critical": 0.7
+  },
+  "negative_sampling": 0.2,
+  "feature_importance": {
+   "alarms_7": 151978.59918022156,
+   "alarms_30": 11414.435680389404,
+   "faults_90": 16701.613719940186,
+   "wx_thaw_3": 14686.974142074585,
+   "unknown_30": 10406.504285812378,
+   "node_power_1": 12846.235580444336,
+   "node_power_7": 17436.462285995483,
+   "alarm_days_30": 159297.45171546936,
+   "fault_days_90": 13203.924348831177,
+   "node_faults_7": 10070.304874420166,
+   "silent_days_7": 33069.599309921265,
+   "wx_snow_depth": 8260.74877357483,
+   "days_since_alarm": 70642.81488800049,
+   "days_since_fault": 7552.310880661011,
+   "readings_mean_30": 6579.9957847595215
+  },
+  "by_sensor_type_test": {
+   "Состояние насоса": {
+    "onsets": 1183,
+    "recall": 0.477,
+    "precision": 0.153
+   },
+   "Датчик затопления": {
+    "onsets": 58,
+    "recall": 0.0,
+    "precision": 0.0
+   }
+  }
+ },
+ "train_period": {
+  "test": [
+   "2026-01-01",
+   "2026-06-29"
+  ],
+  "train": [
+   "2019-01-01",
+   "2024-12-31"
+  ],
+  "valid": [
+   "2025-01-01",
+   "2025-12-31"
+  ],
+  "excluded": "2021 — переход на новую систему мониторинга"
+ },
+ "notes": "Событие: тревога затопления (насосы АНС, датчики затопления) в ближайшие 24 ч. Выборка — каналы в норме на конец суток. Валидация по времени: обучение до 2025, подбор порогов на 2025, тест на 2026.",
+ "file": "flood_2026.09.24-2004-h24.txt"
+}

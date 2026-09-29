@@ -72,3 +72,10 @@ def test_logout_deletes_cookie(make_user):
     response = client.delete(SESSION)
     assert response.status_code == 204
     assert response.cookies[COOKIE].value == ""
+
+
+def test_head_opens_simulator_analyst_does_not(make_user):
+    cookie = _session(make_user("head", "head"))
+    assert _auth(cookie, "simulator").status_code == 200
+    analyst = _session(make_user("analyst", "analyst"))
+    assert _auth(analyst, "simulator").status_code == 403

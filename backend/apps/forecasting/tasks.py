@@ -66,8 +66,13 @@ def check_model_degradation() -> dict:
 
 @shared_task(acks_late=True)
 def train_model(run_id: int) -> dict:
+    from .channel_model import NotEnoughData
     from .training import execute
 
     run = TrainingRun.objects.get(pk=run_id)
-    model = execute(run)
+    try:
+        model = execute(run)
+    except NotEnoughData:
+        # причина уже записана в запуск и видна в интерфейсе; повторять задание бессмысленно
+        return {"run": run_id, "model": None, "status": "not_enough_data"}
     return {"run": run_id, "model": model.pk, "status": model.status}

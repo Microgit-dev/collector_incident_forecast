@@ -1,6 +1,7 @@
 /**
  * Grafana и Prometheus открываются в новой вкладке под учётной записью системы: бэкенд ставит cookie
  * сеанса, по которой Caddy пускает к панелям после проверки роли (apps/accounts/observability.py).
+ * Тем же сеансом руководитель учений открывает веб-интерфейс симулятора датчиков.
  */
 import { notifications } from '@mantine/notifications'
 
@@ -9,7 +10,7 @@ import { api } from './client'
 export const GRAFANA_PERM = 'accounts.view_grafana'
 export const SYSTEM_PERM = 'accounts.view_system_monitoring'
 
-type Target = 'grafana' | 'business' | 'system' | 'prometheus'
+type Target = 'grafana' | 'business' | 'system' | 'prometheus' | 'simulator'
 
 export async function openObservability(target: Target): Promise<void> {
   // Вкладку открываем сразу, по клику: после await браузер счёл бы её всплывающим окном
