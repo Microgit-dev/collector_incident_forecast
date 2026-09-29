@@ -11,6 +11,7 @@ class IncidentType(models.TextChoices):
     GAS = "gas", "Загазованность"
     FLOOD = "flood", "Подтопление"
     INTRUSION = "intrusion", "Несанкционированный доступ"
+    TEMPERATURE = "temperature", "Аномальная температура"
     POWER = "power", "Потеря питания"
     EQUIPMENT = "equipment", "Отказ оборудования"
     COMMUNICATION = "communication", "Потеря связи"

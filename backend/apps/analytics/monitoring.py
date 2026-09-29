@@ -15,11 +15,14 @@ from collections import Counter, defaultdict
 from django.core.paginator import Paginator
 from django.utils import timezone
 
+from apps.assets import placement
 from apps.assets.models import Channel
 from apps.forecasting.models import ChannelHealth, ChannelRisk
-from apps.incidents.models import Incident
+from apps.incidents.models import Incident, IncidentType
+from apps.incidents.route import intrusion_route
 from apps.telemetry.models import ChannelState
 from apps.topology import geo
+from apps.topology.floors import floor_dict, floors_of
 from apps.topology.models import Node, NodeKind
 from apps.topology.selectors import ObjectIndex, has_global_scope, in_scope, scope_paths, zone_of
 from apps.workorders.models import WorkOrder
@@ -356,18 +359,11 @@ def object_detail(user, obj: Node) -> dict:
             "channel_id", "risk_level"
         ):
             risk[cid] = _max_level(risk.get(cid), level)
-    pickets = [float(c.picket) for c in channels if c.picket is not None]
-    lo, hi = (min(pickets), max(pickets)) if pickets else (0.0, 1.0)
-    systems = sorted({c.sensor_type.system_type if c.sensor_type else "" for c in channels})
+    placed_at = placement.positions(obj.geometry, channels)
     sensors = []
     for c in channels:
         system = c.sensor_type.system_type if c.sensor_type else ""
-        if c.location:
-            position, placed = c.location, True
-        else:
-            t = (float(c.picket) - lo) / (hi - lo or 1) if c.picket is not None else 0.5
-            lane = (systems.index(system) / max(len(systems) - 1, 1)) * 2 - 1 if len(systems) > 1 else 0
-            position, placed = geo.along(obj.geometry, t, lane * 0.8), False
+        position, placed = placed_at[c.pk]
         score, silent = health.get(c.pk, (None, False))
         sensors.append(
             {
@@ -383,6 +379,7 @@ def object_detail(user, obj: Node) -> dict:
                 "risk_level": risk.get(c.pk),
                 "position": position,
                 "placed": placed,
+                "floor": c.floor_id,
             }
         )
     incidents = []
@@ -427,6 +424,15 @@ def object_detail(user, obj: Node) -> dict:
             .order_by("due_at")[:30]
         ]
     counts = Counter(s["state"] for s in sensors)
+    # маршруты нарушителя по открытым карточкам НСД объекта — линией на карте
+    routes = []
+    if "situation" in modes:
+        for incident in Incident.objects.filter(
+            node__path__startswith=obj.path, status__in=OPEN, type=IncidentType.INTRUSION
+        ).select_related("node")[:5]:
+            route = intrusion_route(incident)
+            if route and route["line"]:
+                routes.append({"incident": incident.pk, "line": route["line"], "steps": route["steps"]})
     return {
         **base,
         "criticality": obj.criticality,
@@ -434,6 +440,8 @@ def object_detail(user, obj: Node) -> dict:
             Node.objects.filter(path__startswith=obj.path, depth__gt=obj.depth).values("id", "name", "kind")
         ),
         "sensors": sensors,
+        "floors": [floor_dict(f) for f in floors_of(obj)],
+        "routes": routes,
         "states": dict(counts),
         "incidents": incidents,
         "orders": orders,

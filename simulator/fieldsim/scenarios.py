@@ -97,19 +97,67 @@ def flood(engine: Engine, object_id: int, picket: float | None, speed: float = 1
 
 
 def intrusion(engine: Engine, object_id: int, picket: float | None, speed: float = 1.0) -> list[Step]:
+    """
+    Нарушитель вскрывает люк у пикета и идёт вдоль коллектора: двери и датчики движения срабатывают
+    по порядку пикетов в сторону дальнего конца объекта — платформа строит по ним маршрут.
+    """
     cat = engine.catalog
     pk = _picket(engine, object_id, picket)
     hatch = cat.find(object_id, "КД Люк", pk, 1)
-    motion = cat.find(object_id, "Датчик движения", pk, 2)
     door = cat.find(object_id, "КД Дверь", pk, 1)
     _need(hatch + door, "охранные контакты")
-    steps = [_step(0, "Объект поставлен на охрану", lambda: engine.set_guard(object_id, True))]
     entry = hatch[0] if hatch else door[0]
+    start = entry.picket if entry.picket is not None else pk
+    span = cat.picket_range(object_id)
+    # идёт к дальнему концу объекта от места входа
+    forward = span is None or start is None or (span[1] - start) >= (start - span[0])
+    path = [
+        d
+        for d in cat.devices_under(object_id)
+        if d.sensor_type in ("Датчик движения", "КД Дверь", "КД АВ")
+        and d is not entry
+        and d.picket is not None
+        and start is not None
+        and ((d.picket >= start) if forward else (d.picket <= start))
+    ]
+    path.sort(key=lambda d: abs(d.picket - start))
+    steps = [_step(0, "Объект поставлен на охрану", lambda: engine.set_guard(object_id, True))]
     steps.append(_step(30, f"Вскрыт: {entry.name}", lambda: engine.set_mode(entry.id, ALARM)))
-    for m in motion:
-        steps.append(_step(40, f"Движение: {m.name}", lambda m=m: engine.set_mode(m.id, ALARM)))
-    if door and door[0] is not entry:
-        steps.append(_step(40, f"Открыта дверь: {door[0].name}", lambda: engine.set_mode(door[0].id, ALARM)))
+    for d in path[:6]:
+        verb = "Движение" if d.sensor_type == "Датчик движения" else "Открыто"
+        steps.append(_step(40, f"{verb}: {d.name}", lambda d=d: engine.set_mode(d.id, ALARM)))
+    return steps
+
+
+def temperature(engine: Engine, object_id: int, picket: float | None, speed: float = 1.0) -> list[Step]:
+    """Аномальная температура без дыма: прорыв теплосети или перегрев кабелей у пикета."""
+    cat = engine.catalog
+    pk = _picket(engine, object_id, picket)
+    temps = _need(cat.find(object_id, "Датчик температуры", pk, 2), "датчики температуры")
+    main = temps[0]
+    steps = [_step(0, f"Температура растёт до 58 °C: {main.name}", lambda: engine.ramp(main.id, 58, 300 / speed))]
+    if len(temps) > 1:
+        other = temps[1]
+        steps.append(_step(180, f"У соседнего до 45 °C: {other.name}", lambda: engine.ramp(other.id, 45, 240 / speed)))
+    return steps
+
+
+def ppr(engine: Engine, object_id: int, picket: float | None, speed: float = 1.0) -> list[Step]:
+    """
+    ППР (планово-предупредительные работы): бригада в рабочее время по очереди проверяет пожарные
+    извещатели вдоль коллектора — пять и больше сработок за 10 минут, каждая сразу сбрасывается.
+    Учит отличать проверку извещателей от пожара.
+    """
+    cat = engine.catalog
+    pk = _picket(engine, object_id, picket)
+    smoke = _need(cat.find(object_id, "Датчик дыма", pk, 6), "датчики дыма")
+    smoke.sort(key=lambda d: d.picket if d.picket is not None else 0)
+    steps = [_step(0, "Охрана снята: бригада на ППР", lambda: engine.set_guard(object_id, False))]
+    for i, d in enumerate(smoke):
+        steps.append(
+            _step(0 if i == 0 else 60, f"Проверка извещателя: {d.name}", lambda d=d: engine.set_mode(d.id, ALARM))
+        )
+        steps.append(_step(20, f"Сброс: {d.name}", lambda d=d: engine.set_mode(d.id, NORMAL)))
     return steps
 
 
@@ -194,7 +242,24 @@ SCENARIOS: dict[str, Scenario] = {
         Scenario(
             "flood", "Подтопление", "Насосы АНС включаются, датчик затопления, насос затоплен, пропало питание", flood
         ),
-        Scenario("intrusion", "Проникновение", "Объект на охране, вскрыт люк, движение, открыта дверь", intrusion),
+        Scenario(
+            "intrusion",
+            "Проникновение",
+            "Объект на охране, вскрыт люк, нарушитель идёт вдоль коллектора: двери и движение по пикетам",
+            intrusion,
+        ),
+        Scenario(
+            "temperature",
+            "Аномальная температура",
+            "Без дыма: у пикета до 58 °C, у соседнего до 45 °C (теплосеть, кабели)",
+            temperature,
+        ),
+        Scenario(
+            "ppr",
+            "ППР: проверка извещателей",
+            "Бригада по очереди проверяет 5–6 дымовых извещателей, каждый сразу сбрасывается",
+            ppr,
+        ),
         Scenario(
             "authorized",
             "Работы по наряду",

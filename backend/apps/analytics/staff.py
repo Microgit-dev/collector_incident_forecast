@@ -32,7 +32,7 @@ from .efficiency import _share, _stats, incidents_in
 MSK = ZoneInfo("Europe/Moscow")
 REPEAT_WINDOW = timedelta(hours=6)
 CLOSING = (DecisionOutcome.FALSE_ALARM,)
-PHYSICAL = ("fire", "gas", "flood", "intrusion")
+PHYSICAL = ("fire", "gas", "flood", "intrusion", "temperature")
 
 
 def _minutes(a: datetime | None, b: datetime | None) -> float | None:

@@ -313,3 +313,16 @@ MAP_STYLE_DARK = env(
     "MAP_STYLE_DARK", default="https://tiles.versatiles.org/assets/styles/muted-dark/style.json"
 )
 OVERPASS_URL = env("OVERPASS_URL", default="https://overpass-api.de/api/interpreter")
+# Спутниковая подложка (растровые XYZ-тайлы) для привязки планов этажей и выделения зданий по снимку.
+# Пусто — переключатель «Спутник» скрыт. Источник тайлов меняется вместе с MAP_SATELLITE_ORIGIN в Caddy (CSP).
+MAP_SATELLITE_TILES = env(
+    "MAP_SATELLITE_TILES",
+    default="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+)
+MAP_SATELLITE_ATTRIBUTION = env(
+    "MAP_SATELLITE_ATTRIBUTION", default="© Esri, Maxar, Earthstar Geographics"
+)
+# Сервис ИИ-выделения зданий по снимку (infra/segmenter, профиль compose «ai»). Пусто или недоступен —
+# контур берётся из OpenStreetMap.
+SEGMENTER_URL = env("SEGMENTER_URL", default="")
+

@@ -204,3 +204,14 @@ def test_likely_false_alarm_ranks_below_confirmed():
     likely_real, _ = priority(PriorityInput(**base, real_threat=0.8))
     likely_false, _ = priority(PriorityInput(**base, real_threat=0.2))
     assert likely_false < likely_real
+
+
+def test_ppr_burst_in_work_hours_is_planned_check_not_fire():
+    """Заказчик: 5+ пожарных извещателей объекта за 10 минут в рабочее время — ППР."""
+    day = datetime(2026, 6, 30, 11, 0, tzinfo=UTC)
+    burst = [Signal(channel_id=i, state="alarm", ts=day + timedelta(seconds=60 * i)) for i in range(1, 7)]
+    ranked = hypotheses("fire", burst, Context(local_time=day))
+    assert ranked[0].code == "works" and ranked[0].title.startswith("ППР")
+    # та же серия ночью — пожар, а не проверка
+    night = [Signal(channel_id=s.channel_id, state="alarm", ts=NIGHT + (s.ts - day)) for s in burst]
+    assert hypotheses("fire", night, Context(local_time=NIGHT))[0].code == "fire"

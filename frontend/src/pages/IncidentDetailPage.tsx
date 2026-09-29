@@ -30,6 +30,7 @@ import type { DecisionCause, DecisionOutcome, DecisionReason, IncidentDetail } f
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge, StatusBadge } from '../components/badges'
 import { CameraPanel } from '../components/CameraPanel'
+import { RouteCard } from '../components/RouteCard'
 import { ActionsCard, EpisodeCard, HypothesesCard } from '../components/EpisodePanels'
 
 function DecisionModal({ incident, opened, onClose }: { incident: IncidentDetail; opened: boolean; onClose: () => void }) {
@@ -252,6 +253,7 @@ export function IncidentDetailPage() {
         <Grid.Col span={{ base: 12, md: 7 }}>
           <Stack>
             <EpisodeCard incident={incident} />
+            {incident.route && <RouteCard route={incident.route} />}
             <HypothesesCard incident={incident} />
             <ActionsCard incident={incident} canEdit={open && !blocked && can('incidents.change_incident')} />
             <Card withBorder radius="md">

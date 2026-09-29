@@ -28,6 +28,16 @@ class GeoError(Exception):
     pass
 
 
+def map_config() -> dict:
+    """Подложки карт интерфейса: векторная светлая и тёмная, спутниковая (растровые тайлы)."""
+    return {
+        "light": settings.MAP_STYLE_LIGHT,
+        "dark": settings.MAP_STYLE_DARK,
+        "satellite": settings.MAP_SATELLITE_TILES,
+        "satellite_attribution": settings.MAP_SATELLITE_ATTRIBUTION,
+    }
+
+
 # ---------- проекция и простые меры ----------
 
 

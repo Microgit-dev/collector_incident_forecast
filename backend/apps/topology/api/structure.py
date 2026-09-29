@@ -1,6 +1,8 @@
 from django.conf import settings
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,8 +11,8 @@ from apps.analytics.workspace import roles_of
 from apps.assets.models import Channel, SensorType
 from apps.audit.services import log_action
 
-from .. import geo, structure
-from ..models import Node, NodeKind
+from .. import floors, geo, segment, structure
+from ..models import Floor, Node, NodeKind
 from ..selectors import has_global_scope, in_scope, objects_under, zone_of
 
 
@@ -43,6 +45,7 @@ def _object(o: Node) -> dict:
         "center": geo.centroid(o.geometry),
         "channels": o.channels.count()
         + Channel.objects.filter(node__path__startswith=o.path).exclude(node=o).count(),
+        "floors": o.floors.count(),
     }
 
 
@@ -114,7 +117,7 @@ class StructureView(APIView):
                 if can["staff"]
                 else [],
                 "overpass": bool(settings.OVERPASS_URL),
-                "map": {"light": settings.MAP_STYLE_LIGHT, "dark": settings.MAP_STYLE_DARK},
+                "map": geo.map_config(),
             }
         )
 
@@ -202,6 +205,7 @@ class ObjectDetailView(APIView):
                     "node_name": c.node.name,
                     "picket": float(c.picket) if c.picket is not None else None,
                     "location": c.location,
+                    "floor": c.floor_id,
                     "manual": not c.in_catalog,
                 }
                 for c in rows.order_by("node__path", "name")[:3000]
@@ -221,6 +225,7 @@ class SensorsView(APIView):
                 sensor_type_id=request.data.get("sensor_type"),
                 picket=request.data.get("picket"),
                 location=request.data.get("location"),
+                floor_id=request.data.get("floor"),
             )
         except (structure.StructureError, ValueError) as exc:
             return _err(exc)
@@ -241,11 +246,19 @@ class SensorDetailView(APIView):
                 channel,
                 node_id=request.data.get("node"),
                 location=request.data.get("location") if "location" in request.data else None,
+                floor_id=request.data.get("floor") if "floor" in request.data else ...,
             )
         except structure.StructureError as exc:
             return _err(exc)
         log_action(request, "structure.sensor.update", obj=channel, payload={"fields": sorted(request.data)})
-        return Response({"id": channel.pk, "node": channel.node_id, "location": channel.location})
+        return Response(
+            {
+                "id": channel.pk,
+                "node": channel.node_id,
+                "location": channel.location,
+                "floor": channel.floor_id,
+            }
+        )
 
 
 class DetectBuildingView(APIView):
@@ -266,6 +279,119 @@ class DetectBuildingView(APIView):
             return Response(geo.detect_building(lon, lat))
         except geo.GeoError as exc:
             return _err(exc, 404 if "не найдено" in str(exc) else 503)
+
+
+class SegmentBuildingView(APIView):
+    """
+    Выделение здания по спутниковому снимку (ИИ, сервис infra/segmenter), без него — по OpenStreetMap.
+    hint — контур из векторной подложки под щелчком: по нему строится рамка-подсказка для ИИ.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if not request.user.has_perm("topology.add_node") and not request.user.has_perm(
+            "topology.change_node"
+        ):
+            return Response({"detail": "Недостаточно прав"}, status=403)
+        try:
+            lon, lat = float(request.data["lon"]), float(request.data["lat"])
+        except (KeyError, TypeError, ValueError):
+            return Response({"detail": "Нужны lon и lat"}, status=400)
+        hint = request.data.get("hint")
+        try:
+            hint = geo.validate_polygon(hint) if hint else None
+            result = segment.segment_building(lon, lat, hint)
+        except geo.GeoError as exc:
+            return _err(exc, 404 if "не найдено" in str(exc) else 503)
+        log_action(request, "structure.object.segment", payload={"source": result["source"]})
+        return Response(result)
+
+
+def _floor_object(request, pk: int) -> Node:
+    obj = get_object_or_404(Node, pk=pk, kind=NodeKind.COMPLEX)
+    if not in_scope(request.user, obj):
+        raise floors.FloorError("Объект вне вашей зоны ответственности")
+    return obj
+
+
+class FloorsView(APIView):
+    """Этажи объекта с планами помещений: список и новый этаж (план — файлом в поле plan)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request, pk: int):
+        try:
+            obj = _floor_object(request, pk)
+        except floors.FloorError as exc:
+            return _err(exc, 404)
+        return Response([floors.floor_dict(f) for f in floors.floors_of(obj)])
+
+    def post(self, request, pk: int):
+        try:
+            obj = _floor_object(request, pk)
+            floor = floors.create_floor(
+                request.user,
+                obj,
+                level=request.data.get("level"),
+                name=request.data.get("name", ""),
+                plan=request.FILES.get("plan"),
+            )
+        except floors.FloorError as exc:
+            return _err(exc)
+        log_action(request, "structure.floor.create", obj=obj, payload={"level": floor.level})
+        return Response(floors.floor_dict(floor), status=201)
+
+
+class FloorDetailView(APIView):
+    """Правка этажа: название, номер, контрольные точки (пересчёт привязки), контрольный этаж, новый план."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def patch(self, request, pk: int):
+        floor = get_object_or_404(Floor.objects.select_related("node"), pk=pk)
+        data = request.data
+        if hasattr(data, "dict"):  # multipart: только простые поля, флаг — строкой
+            data = {k: v for k, v in data.dict().items() if k != "plan"}
+            if "is_base" in data:
+                data["is_base"] = str(data["is_base"]).lower() in ("1", "true", "yes")
+        try:
+            floor = floors.update_floor(request.user, floor, data, plan=request.FILES.get("plan"))
+        except (floors.FloorError, ValueError, TypeError) as exc:
+            return _err(exc)
+        log_action(
+            request,
+            "structure.floor.update",
+            obj=floor.node,
+            payload={"floor": floor.pk, "fields": sorted(data)},
+        )
+        return Response(floors.floor_dict(floor))
+
+    def delete(self, request, pk: int):
+        floor = get_object_or_404(Floor.objects.select_related("node"), pk=pk)
+        node = floor.node
+        try:
+            floors.delete_floor(request.user, floor)
+        except floors.FloorError as exc:
+            return _err(exc)
+        log_action(request, "structure.floor.delete", obj=node, payload={"floor": pk})
+        return Response(status=204)
+
+
+class FloorPlanView(APIView):
+    """Файл плана этажа — тем, кто видит объект (своя зона ответственности)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk: int):
+        floor = get_object_or_404(Floor.objects.select_related("node"), pk=pk)
+        if not in_scope(request.user, floor.node) or not floor.plan:
+            return Response({"detail": "План недоступен"}, status=404)
+        response = FileResponse(floor.plan.open("rb"))
+        response["Cache-Control"] = "private, max-age=86400"
+        return response
 
 
 class StaffActionView(APIView):

@@ -21,6 +21,7 @@ export const INCIDENT_TYPE: Record<IncidentType, string> = {
   gas: 'Загазованность',
   flood: 'Подтопление',
   intrusion: 'Несанкционированный доступ',
+  temperature: 'Аномальная температура',
   power: 'Потеря питания',
   equipment: 'Отказ оборудования',
   communication: 'Потеря связи',

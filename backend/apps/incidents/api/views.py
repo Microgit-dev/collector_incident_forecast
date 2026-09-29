@@ -19,6 +19,7 @@ from ..models import (
     Incident,
     IncidentEvent,
 )
+from ..route import intrusion_route
 
 
 class AlertSerializer(serializers.ModelSerializer):
@@ -124,6 +125,7 @@ class IncidentSerializer(serializers.ModelSerializer):
 
 class IncidentDetailSerializer(IncidentSerializer):
     alerts = serializers.SerializerMethodField()
+    route = serializers.SerializerMethodField()
     decisions = DecisionSerializer(many=True, read_only=True)
     events = IncidentEventSerializer(many=True, read_only=True)
 
@@ -134,10 +136,15 @@ class IncidentDetailSerializer(IncidentSerializer):
             "actions",
             "priority_factors",
             "alerts",
+            "route",
             "decisions",
             "events",
         )
         read_only_fields = fields
+
+    def get_route(self, obj):
+        # маршрут нарушителя по сработкам охраны — только у карточек НСД
+        return intrusion_route(obj)
 
     def get_alerts(self, obj):
         # В каскаде бывают сотни сигналов: карточке достаточно последних, счётчик — в signals_count

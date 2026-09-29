@@ -6,6 +6,7 @@ export type IncidentType =
   | 'gas'
   | 'flood'
   | 'intrusion'
+  | 'temperature'
   | 'power'
   | 'equipment'
   | 'communication'
@@ -210,6 +211,36 @@ export interface IncidentDetail extends Incident {
   hypotheses: Hypothesis[]
   actions: ActionStep[]
   priority_factors: Record<string, number>
+  /** маршрут нарушителя по сработкам охраны — только у карточек НСД */
+  route: IntrusionRoute | null
+}
+
+export interface RouteStep {
+  n: number
+  channel: number
+  name: string
+  at: string
+  until: string
+  count: number
+  position: LonLat | null
+  placed: boolean
+  picket: number | null
+  floor: number | null
+  floor_title: string | null
+}
+
+export interface IntrusionRoute {
+  object: number
+  object_name: string
+  geometry: Polygon | null
+  line: { type: 'LineString'; coordinates: LonLat[] } | null
+  steps: RouteStep[]
+  distance_m: number
+  duration_s: number
+  last: { name: string; at: string; floor_title: string | null }
+  heading: string
+  floors: Floor[]
+  map: MapConfig
 }
 
 export interface FloodStats {
@@ -1181,7 +1212,42 @@ export interface MonitoringMap {
   incidents: { object: number; count: number; level: RiskLevel | null }[]
   orders: { object: number; count: number; approvals: number; overdue: number }[]
   summary: Record<string, number>
-  map: { light: string; dark: string }
+  map: MapConfig
+}
+
+/** Подложки карт: векторные светлая и тёмная, спутниковые растровые тайлы (пусто — без спутника). */
+export interface MapConfig {
+  light: string
+  dark: string
+  satellite?: string
+  satellite_attribution?: string
+}
+
+/** Контрольная точка плана: пиксель плана ↔ точка на местности. */
+export interface ControlPoint {
+  px: number
+  py: number
+  lon: number
+  lat: number
+  on: boolean
+}
+
+/** Этаж объекта с планом помещений; corners — углы плана nw, ne, se, sw на местности. */
+export interface Floor {
+  id: number
+  node: number
+  level: number
+  name: string
+  title: string
+  is_base: boolean
+  plan: string | null
+  width: number | null
+  height: number | null
+  points: ControlPoint[]
+  corners: LonLat[] | null
+  rmse_m: number | null
+  opacity: number
+  sensors: number
 }
 
 export interface MonitoringSensor {
@@ -1197,6 +1263,7 @@ export interface MonitoringSensor {
   risk_level: RiskLevel | null
   position: LonLat | null
   placed: boolean
+  floor: number | null
 }
 
 export interface MonitoringObjectDetail {
@@ -1236,6 +1303,8 @@ export interface MonitoringObjectDetail {
     mine: boolean
   }[]
   modes?: MonitoringMode[]
+  floors?: Floor[]
+  routes?: { incident: number; line: { type: 'LineString'; coordinates: LonLat[] }; steps: RouteStep[] }[]
 }
 
 export interface MonitoringOthers {
@@ -1265,6 +1334,7 @@ export interface StructureObject {
   source: string
   center: LonLat | null
   channels: number
+  floors: number
 }
 
 export interface StructurePerson {
@@ -1298,7 +1368,7 @@ export interface Structure {
   staff: StructurePerson[]
   secondments: StructureSecondment[]
   overpass: boolean
-  map: { light: string; dark: string }
+  map: MapConfig
 }
 
 export interface DetectedBuilding {
@@ -1310,6 +1380,10 @@ export interface DetectedBuilding {
   area_m2: number
   center: LonLat
   exact: boolean
+  /** выделение по снимку: оценка ИИ, варианты контура, почему взят запасной путь */
+  score?: number | null
+  candidates?: { geometry: Polygon; score: number | null }[]
+  note?: string
 }
 
 export interface StructureSensor {
@@ -1321,5 +1395,6 @@ export interface StructureSensor {
   node_name: string
   picket: number | null
   location: LonLat | null
+  floor: number | null
   manual: boolean
 }

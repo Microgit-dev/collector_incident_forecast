@@ -1,9 +1,10 @@
 import { useComputedColorScheme } from '@mantine/core'
 import { useEffect, useRef, useState } from 'react'
 
-import type { MonitoringMap as MapData, MonitoringMode, MonitoringObjectDetail, Polygon } from '../api/types'
+import type { LonLat, MonitoringMap as MapData, MonitoringMode, MonitoringObjectDetail, Polygon } from '../api/types'
 import { createMap, maplibregl, type MapHandle } from './engine'
 import { centroidOf } from './geometry'
+import { setSatellite, showPlan } from './plans'
 import { APPROVAL, BAD, LEVEL_COLOR, ORDER, SENSOR_COLOR, objectColor } from './status'
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
@@ -27,7 +28,13 @@ interface Props {
   onSelect: (id: number | null) => void
   /** куда перелететь: объект из списка */
   focus?: { id: number; at: number } | null
+  /** спутниковая подложка вместо векторной */
+  satellite?: boolean
+  /** план выбранного этажа выбранного объекта; floor — чьи датчики показывать (null — все) */
+  plan?: { floor: number | null; url: string | null; corners: LonLat[] | null; opacity: number } | null
 }
+
+const ROUTE = '#c2255c'
 
 function collections(data: MapData, mode: MonitoringMode) {
   const zones: FC = {
@@ -87,6 +94,8 @@ function addLayers(h: MapHandle) {
   map.addSource('objects', { type: 'geojson', data: EMPTY })
   map.addSource('points', { type: 'geojson', data: EMPTY })
   map.addSource('sensors', { type: 'geojson', data: EMPTY })
+  map.addSource('route', { type: 'geojson', data: EMPTY })
+  map.addSource('route-steps', { type: 'geojson', data: EMPTY })
   // зоны: своя — заливка и толстый контур, смежные — пунктир, остальные — тонкий серый пунктир
   map.addLayer({
     id: 'zones-fill',
@@ -169,6 +178,47 @@ function addLayers(h: MapHandle) {
       'circle-stroke-width': 1,
     },
   })
+  // маршрут нарушителя по сработкам охраны: линия со стрелками направления и номера шагов
+  map.addLayer({
+    id: 'route-line',
+    type: 'line',
+    source: 'route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': ROUTE, 'line-width': 3.5, 'line-dasharray': [2, 1] },
+  })
+  map.addLayer({
+    id: 'route-arrows',
+    type: 'symbol',
+    source: 'route',
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 60,
+      'text-field': '›',
+      'text-font': ['noto_sans_bold'],
+      'text-size': 22,
+      'text-keep-upright': false,
+      'text-allow-overlap': true,
+    },
+    paint: { 'text-color': ROUTE, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+  })
+  map.addLayer({
+    id: 'route-steps',
+    type: 'circle',
+    source: 'route-steps',
+    paint: {
+      'circle-radius': ['case', ['get', 'last'], 10, 8],
+      'circle-color': ['case', ['get', 'last'], ROUTE, '#ffffff'],
+      'circle-stroke-color': ROUTE,
+      'circle-stroke-width': 2,
+    },
+  })
+  map.addLayer({
+    id: 'route-labels',
+    type: 'symbol',
+    source: 'route-steps',
+    layout: { 'text-field': ['get', 'n'], 'text-font': ['noto_sans_bold'], 'text-size': 11, 'text-allow-overlap': true },
+    paint: { 'text-color': ['case', ['get', 'last'], '#ffffff', ROUTE] },
+  })
   // подписи — только своих объектов и только вблизи, чтобы карта не была перегружена
   map.addLayer({
     id: 'labels',
@@ -227,7 +277,7 @@ function diamond(text: string, color: string, onClick: () => void): HTMLElement 
 }
 
 /** Интерактивная карта мониторинга: зоны, объекты, маркеры карточек и заявок, датчики выбранного объекта. */
-export function MonitoringMap({ data, mode, selected, detail, onSelect, focus }: Props) {
+export function MonitoringMap({ data, mode, selected, detail, onSelect, focus, satellite = false, plan = null }: Props) {
   const dark = useComputedColorScheme('light') === 'dark'
   const box = useRef<HTMLDivElement>(null)
   const [handle, setHandle] = useState<MapHandle | null>(null)
@@ -314,7 +364,8 @@ export function MonitoringMap({ data, mode, selected, detail, onSelect, focus }:
     const sensors: FC = {
       type: 'FeatureCollection',
       features: (detail?.id === selected ? (detail.sensors ?? []) : [])
-        .filter((s) => s.position)
+        // на выбранном этаже — его датчики и датчики без этажа (они на контуре)
+        .filter((s) => s.position && (plan?.floor == null || s.floor == null || s.floor === plan.floor))
         .map((s) => ({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: s.position! },
@@ -322,7 +373,36 @@ export function MonitoringMap({ data, mode, selected, detail, onSelect, focus }:
         })),
     }
     ;(map.getSource('sensors') as maplibregl.GeoJSONSource).setData(sensors)
-  }, [handle, selected, detail])
+    const routes = detail?.id === selected ? (detail.routes ?? []) : []
+    ;(map.getSource('route') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: routes.map((r) => ({ type: 'Feature', geometry: r.line, properties: { incident: r.incident } })),
+    })
+    ;(map.getSource('route-steps') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: routes.flatMap((r) =>
+        r.steps
+          .filter((s) => s.position)
+          .map((s) => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point', coordinates: s.position! },
+            properties: { n: String(s.n), last: s.n === r.steps.length, name: s.name },
+          })),
+      ),
+    })
+  }, [handle, selected, detail, plan?.floor])
+
+  // спутник — под зонами; план этажа — над объектами, под датчиками и маршрутом
+  useEffect(() => {
+    if (handle) setSatellite(handle.map, data.map, satellite, ['zones-fill'])
+  }, [handle, data.map, satellite])
+  // план — по отдельным полям: объект plan пересоздаётся на каждом рендере страницы
+  const planUrl = plan?.url ?? null
+  const planCorners = plan?.corners ?? null
+  const planOpacity = plan?.opacity ?? 0.85
+  useEffect(() => {
+    if (handle) showPlan(handle.map, 'floor', planUrl, planCorners, planOpacity, ['route-line', 'sensors-ok', 'sensors'])
+  }, [handle, planUrl, planCorners, planOpacity])
 
   // перелёт к объекту из списка
   useEffect(() => {

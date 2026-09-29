@@ -139,11 +139,16 @@ export interface Page<T> {
  * Загрузка файла с прогрессом передачи (fetch его не отдаёт) — для многогигабайтных журналов.
  * Перед отправкой обновляем access-токен, чтобы долгая загрузка не упёрлась в его истечение.
  */
-export async function upload<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+export async function upload<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (fraction: number) => void,
+  method: 'POST' | 'PATCH' = 'POST',
+): Promise<T> {
   await refreshAccess()
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', buildUrl(path))
+    xhr.open(method, buildUrl(path))
     if (tokens.access) xhr.setRequestHeader('Authorization', `Bearer ${tokens.access}`)
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total)

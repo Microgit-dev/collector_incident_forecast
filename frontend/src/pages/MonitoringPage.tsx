@@ -21,7 +21,7 @@ import {
 } from '@mantine/core'
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconArrowLeft, IconInfoCircle, IconList, IconSearch, IconSettings } from '@tabler/icons-react'
+import { IconArrowLeft, IconInfoCircle, IconList, IconSatellite, IconSearch, IconSettings } from '@tabler/icons-react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
@@ -40,6 +40,7 @@ import type {
 import { useAuth } from '../auth/AuthContext'
 import { RiskBadge } from '../components/badges'
 import { useCompleteOrder } from '../components/CompleteOrder'
+import { usePlanUrl } from '../map/plans'
 import { LEGEND, MODE_HINT, MODE_LABEL, SENSOR_COLOR, objectColor, objectWeight } from '../map/status'
 
 // движок карты тяжёлый — грузится только на этой странице
@@ -394,6 +395,9 @@ export function MonitoringPage() {
   const [focus, setFocus] = useState<{ id: number; at: number } | null>(null)
   const [tab, setTab] = useState<string | null>('mine')
   const [sheet, setSheet] = useState(false)
+  const [satellite, setSatellite] = useState(false)
+  // этаж выбранного объекта: план на карте и его датчики; 'all' — все датчики, план контрольного этажа
+  const [floorSel, setFloorSel] = useState<{ object: number; floor: number | 'all' } | null>(null)
   const map = useQuery({
     queryKey: ['monitoring'],
     queryFn: () => api<MapData>('/analytics/monitoring/'),
@@ -406,6 +410,13 @@ export function MonitoringPage() {
     refetchInterval: 30_000,
   })
   const data = map.data
+  const floors = detail.data?.id === selected ? (detail.data?.floors ?? []).filter((f) => f.corners) : []
+  const chosen = floorSel?.object === selected ? floorSel.floor : 'all'
+  const floor = chosen === 'all' ? floors.find((f) => f.is_base) : floors.find((f) => f.id === chosen)
+  const floorUrl = usePlanUrl(floor?.plan)
+  const plan = floor
+    ? { floor: chosen === 'all' ? null : floor.id, url: floorUrl, corners: floor.corners, opacity: floor.opacity }
+    : null
   const current: MonitoringMode | null = data ? (mode && data.modes.includes(mode) ? mode : data.mode) : null
   const manage = can('topology.add_node') || can('topology.manage_zones') || can('accounts.assign_staff')
 
@@ -454,7 +465,16 @@ export function MonitoringPage() {
       <Paper withBorder radius="md" pos="relative" style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
         {data && current ? (
           <Suspense fallback={<Loader m="md" />}>
-            <MonitoringMap data={data} mode={current} selected={selected} detail={detail.data} onSelect={pick} focus={focus} />
+            <MonitoringMap
+              data={data}
+              mode={current}
+              selected={selected}
+              detail={detail.data}
+              onSelect={pick}
+              focus={focus}
+              satellite={satellite}
+              plan={plan}
+            />
           </Suspense>
         ) : (
           <Loader m="md" />
@@ -479,6 +499,39 @@ export function MonitoringPage() {
                 {!phone && <Summary data={data} />}
               </Stack>
             </Paper>
+            {data.map.satellite && (
+              <Tooltip label={satellite ? 'Векторная карта' : 'Спутниковый снимок'} position="left">
+                <ActionIcon
+                  pos="absolute"
+                  top={90}
+                  right={10}
+                  size="lg"
+                  variant={satellite ? 'filled' : 'default'}
+                  style={{ zIndex: 2 }}
+                  onClick={() => setSatellite((v) => !v)}
+                  aria-label="Спутниковый снимок"
+                >
+                  <IconSatellite size={18} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {selected != null && floors.length > 0 && (
+              <Paper shadow="sm" radius="md" p={4} withBorder pos="absolute" top={132} right={8} style={{ zIndex: 2 }}>
+                <Text size="xs" ta="center" c="dimmed" mb={2}>
+                  Этаж
+                </Text>
+                <SegmentedControl
+                  size="xs"
+                  orientation="vertical"
+                  value={String(chosen)}
+                  onChange={(v) => setFloorSel({ object: selected, floor: v === 'all' ? 'all' : Number(v) })}
+                  data={[
+                    ...[...floors].reverse().map((f) => ({ value: String(f.id), label: f.level === 0 ? 'Ц' : String(f.level) })),
+                    { value: 'all', label: 'Все' },
+                  ]}
+                />
+              </Paper>
+            )}
             <Paper shadow="sm" radius="md" p={6} withBorder pos="absolute" bottom={30} left={8} style={{ zIndex: 2 }}>
               <Group gap={8}>
                 {LEGEND[current].map((l) => (

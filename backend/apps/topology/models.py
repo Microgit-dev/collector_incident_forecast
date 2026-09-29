@@ -54,3 +54,43 @@ class Node(MP_Node):
     @property
     def is_object(self) -> bool:
         return self.kind == NodeKind.COMPLEX
+
+
+class Floor(models.Model):
+    """
+    Этаж объекта с планом помещений, привязанным к местности по контрольным точкам (topology/georef.py).
+
+    Контрольный этаж (is_base) привязывается к спутниковому снимку и контуру здания; остальные этажи —
+    к плану контрольного: так план второго этажа ложится ровно на первый, даже если на снимке
+    видна только крыша. Датчики объекта ставятся на этаж (Channel.floor) точкой на его плане.
+    """
+
+    node = models.ForeignKey(Node, verbose_name="объект", on_delete=models.CASCADE, related_name="floors")
+    level = models.SmallIntegerField("этаж", help_text="0 — цокольный, отрицательные — подземные")
+    name = models.CharField("название", max_length=64, blank=True)
+    is_base = models.BooleanField("контрольный этаж", default=False)
+    plan = models.FileField("план помещений", upload_to="plans/%Y/%m/", blank=True)
+    plan_width = models.PositiveIntegerField("ширина плана, px", null=True, blank=True)
+    plan_height = models.PositiveIntegerField("высота плана, px", null=True, blank=True)
+    # [{"px", "py", "lon", "lat", "on"}] — пары «пиксель плана ↔ точка на местности»
+    points = models.JSONField("контрольные точки", default=list, blank=True)
+    # углы плана nw, ne, se, sw в WGS84 по подгонке; пусто — план ещё не привязан
+    corners = models.JSONField("углы плана на местности", null=True, blank=True)
+    rmse_m = models.FloatField("невязка привязки, м", null=True, blank=True)
+    opacity = models.FloatField("прозрачность плана", default=0.85)
+    updated_at = models.DateTimeField("изменено", auto_now=True)
+
+    class Meta:
+        verbose_name = "этаж"
+        verbose_name_plural = "этажи"
+        ordering = ("node", "level")
+        constraints = [models.UniqueConstraint(fields=["node", "level"], name="floor_unique_level")]
+
+    def __str__(self):
+        return f"{self.node.name}: {self.title}"
+
+    @property
+    def title(self) -> str:
+        if self.name:
+            return self.name
+        return "Цокольный этаж" if self.level == 0 else f"{self.level} этаж"

@@ -53,6 +53,7 @@ BY_HYPOTHESIS = {
     "fire": ("real_event", "brigade_dispatched", "brigade-fire"),
     "flood": ("real_event", "brigade_dispatched", "brigade-flood"),
     "intrusion": ("real_event", "brigade_dispatched", "brigade-intrusion"),
+    "temperature": ("real_event", "check_requested", "check-patrol"),
     "gas": ("real_event", "check_requested", "check-patrol"),
 }
 

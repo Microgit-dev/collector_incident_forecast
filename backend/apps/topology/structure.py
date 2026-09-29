@@ -26,7 +26,7 @@ from apps.assets.models import Channel, SensorType
 from apps.notifications.services import notify
 
 from . import geo
-from .models import Node, NodeKind
+from .models import Floor, Node, NodeKind
 from .selectors import has_global_scope, in_scope, zone_of
 
 # Каналы, заведённые вручную, получают ид из отдельного диапазона: так их не спутать с каналами СМВУ
@@ -195,8 +195,20 @@ def next_channel_id() -> int:
     return (top or MANUAL_CHANNEL_BASE) + 1
 
 
+def _floor_for(node: Node, floor_id) -> Floor | None:
+    """Этаж объекта, которому принадлежит узел датчика (сам объект или его часть)."""
+    if floor_id in (None, ""):
+        return None
+    floor = Floor.objects.select_related("node").filter(pk=floor_id).first()
+    if floor is None or not node.path.startswith(floor.node.path):
+        raise StructureError("Этаж не относится к объекту датчика")
+    return floor
+
+
 @transaction.atomic
-def create_sensor(user, *, node_id, name: str, sensor_type_id=None, picket=None, location=None) -> Channel:
+def create_sensor(
+    user, *, node_id, name: str, sensor_type_id=None, picket=None, location=None, floor_id=None
+) -> Channel:
     node = Node.objects.filter(pk=node_id).first()
     if node is None:
         raise StructureError("Выберите объект или зону")
@@ -213,6 +225,7 @@ def create_sensor(user, *, node_id, name: str, sensor_type_id=None, picket=None,
         tag=sensor_type.system_type if sensor_type else "",
         picket=picket if picket not in ("", None) else None,
         location=point,
+        floor=_floor_for(node, floor_id),
         in_catalog=False,
     )
 
@@ -230,8 +243,8 @@ def _point(location) -> list[float] | None:
 
 
 @transaction.atomic
-def attach_sensor(user, channel: Channel, *, node_id=None, location=None) -> Channel:
-    """Прикрепить датчик к другому объекту или зоне и/или поставить его точку на карте."""
+def attach_sensor(user, channel: Channel, *, node_id=None, location=None, floor_id=...) -> Channel:
+    """Прикрепить датчик к другому объекту или зоне, поставить его точку на карте и этаж."""
     _check(user, "assets.change_channel", channel.node)
     if node_id:
         target = Node.objects.filter(pk=node_id).first()
@@ -241,7 +254,11 @@ def attach_sensor(user, channel: Channel, *, node_id=None, location=None) -> Cha
         channel.node = target
     if location is not None:
         channel.location = _point(location)
-    channel.save(update_fields=["node", "location", "updated_at"])
+    if floor_id is not ...:
+        channel.floor = _floor_for(channel.node, floor_id)
+    elif node_id and channel.floor_id and not channel.node.path.startswith(channel.floor.node.path):
+        channel.floor = None  # перенесли на другой объект — этаж прежнего к нему не относится
+    channel.save(update_fields=["node", "location", "floor", "updated_at"])
     return channel
 
 

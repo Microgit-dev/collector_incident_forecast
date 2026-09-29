@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
   UnstyledButton,
   useComputedColorScheme,
 } from '@mantine/core'
@@ -32,6 +33,8 @@ import {
   IconPencil,
   IconPlus,
   IconPolygon,
+  IconSatellite,
+  IconSparkles,
   IconTrash,
   IconUserShare,
   IconX,
@@ -44,6 +47,7 @@ import { ApiError, api } from '../api/client'
 import { ROLE } from '../api/labels'
 import type {
   DetectedBuilding,
+  Floor,
   LonLat,
   Polygon,
   Structure,
@@ -53,10 +57,12 @@ import type {
   StructureZone,
 } from '../api/types'
 import { createMap, maplibregl, type MapHandle } from '../map/engine'
-import { areaM2, bounds, centroidOf, contains, simplify } from '../map/geometry'
+import { areaM2, bounds, centroidOf, contains, simplify, simplifyDP } from '../map/geometry'
 import { PolygonEditor } from '../map/PolygonEditor'
+import { setSatellite, showPlan, usePlanUrl } from '../map/plans'
+import { FloorsPanel } from '../components/FloorsPanel'
 
-type Tool = 'none' | 'draw' | 'edit' | 'pick' | 'point'
+type Tool = 'none' | 'draw' | 'edit' | 'pick' | 'segment' | 'point'
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
 
 function Dot({ color }: { color: string }) {
@@ -70,6 +76,8 @@ function StructureMap({
   selectedZone,
   sensors,
   point,
+  satellite,
+  plan,
   onReady,
   onClick,
 }: {
@@ -78,6 +86,9 @@ function StructureMap({
   selectedZone: number | null
   sensors: StructureSensor[]
   point: LonLat | null
+  satellite: boolean
+  /** показанный план этажа: датчики этого этажа — ярче остальных */
+  plan: { floor: number; url: string | null; corners: LonLat[] | null; opacity: number } | null
   onReady: (h: MapHandle, editor: PolygonEditor) => void
   onClick: (at: LonLat, objectId: number | null, building: Polygon | null) => void
 }) {
@@ -103,7 +114,12 @@ function StructureMap({
         id: 'sensors',
         type: 'circle',
         source: 'sensors',
-        paint: { 'circle-radius': 5, 'circle-color': '#12b886', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 },
+        paint: {
+          'circle-radius': ['case', ['get', 'dim'], 3.5, 5],
+          'circle-color': ['case', ['get', 'dim'], '#adb5bd', '#12b886'],
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1,
+        },
       })
       m.addLayer({
         id: 'point',
@@ -182,13 +198,25 @@ function StructureMap({
       type: 'FeatureCollection',
       features: sensors
         .filter((s) => s.location)
-        .map((s) => ({ type: 'Feature', properties: { id: s.id }, geometry: { type: 'Point', coordinates: s.location! } })),
+        .map((s) => ({
+          type: 'Feature',
+          properties: { id: s.id, dim: Boolean(plan && s.floor !== plan.floor) },
+          geometry: { type: 'Point', coordinates: s.location! },
+        })),
     })
     ;(handle.map.getSource('point') as maplibregl.GeoJSONSource).setData({
       type: 'FeatureCollection',
       features: point ? [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: point } }] : [],
     })
-  }, [handle, sensors, point])
+  }, [handle, sensors, point, plan])
+
+  // спутник — под зонами и объектами; план этажа — над заливкой объектов, под датчиками и правкой контура
+  useEffect(() => {
+    if (handle) setSatellite(handle.map, data.map, satellite, ['zones-fill'])
+  }, [handle, data.map, satellite])
+  useEffect(() => {
+    if (handle) showPlan(handle.map, 'floor', plan?.url ?? null, plan?.corners ?? null, plan?.opacity ?? 0.85, ['sensors', 'ed-fill'])
+  }, [handle, plan])
 
   return <div ref={box} style={{ position: 'absolute', inset: 0 }} />
 }
@@ -215,6 +243,8 @@ export function StructurePage() {
   const [detecting, setDetecting] = useState(false)
   const [point, setPoint] = useState<LonLat | null>(null)
   const [pointFor, setPointFor] = useState<number | 'new' | null>(null)
+  const [satellite, setSatelliteOn] = useState(false)
+  const [shownFloor, setShownFloor] = useState<number | null>(null)
   const map = useRef<MapHandle | null>(null)
   const editor = useRef<PolygonEditor | null>(null)
   const [editorReady, setEditorReady] = useState(0)
@@ -223,8 +253,23 @@ export function StructurePage() {
   const sensors = useQuery({
     queryKey: ['structure-sensors', objectId],
     queryFn: () => api<StructureSensor[]>(`/topology/objects/${objectId}/`),
-    enabled: objectId != null && tab === 'sensors',
+    enabled: objectId != null && (tab === 'sensors' || tab === 'floors'),
   })
+  const floors = useQuery({
+    queryKey: ['floors', objectId],
+    queryFn: () => api<Floor[]>(`/topology/objects/${objectId}/floors/`),
+    enabled: objectId != null && (tab === 'floors' || tab === 'sensors'),
+  })
+  // план на карте: выбранный этаж, иначе контрольный этаж объекта
+  const floor =
+    tab === 'floors' || tab === 'sensors'
+      ? (floors.data?.find((f) => f.id === shownFloor) ?? (shownFloor === null ? floors.data?.find((f) => f.is_base) : undefined))
+      : undefined
+  const floorUrl = usePlanUrl(floor?.corners ? floor.plan : null)
+  const plan = useMemo(
+    () => (floor && floor.corners ? { floor: floor.id, url: floorUrl, corners: floor.corners, opacity: floor.opacity } : null),
+    [floor, floorUrl],
+  )
 
   // черновик контура из редактора
   useEffect(() => {
@@ -273,6 +318,27 @@ export function StructurePage() {
         .catch(() => undefined)
       return
     }
+    if (tool === 'segment') {
+      // ИИ по снимку; контур здания из подложки под щелчком — подсказка, где искать
+      setDetecting(true)
+      try {
+        const b = await api<DetectedBuilding>('/topology/segment-building/', {
+          method: 'POST',
+          body: { lon: at[0], lat: at[1], hint: building && areaM2(building) >= 20 ? simplify(building) : null },
+        })
+        const g = simplifyDP(b.geometry)
+        setCandidate({ ...b, geometry: g })
+        editor.current?.edit(g)
+        setDraft(g)
+        setTool('edit')
+        if (b.note) notifications.show({ color: 'orange', message: b.note })
+      } catch (e) {
+        notifications.show({ color: 'orange', message: e instanceof ApiError ? e.message : 'Не удалось выделить здание' })
+      } finally {
+        setDetecting(false)
+      }
+      return
+    }
     if (tool === 'pick') {
       setDetecting(true)
       try {
@@ -292,7 +358,10 @@ export function StructurePage() {
       setPoint(at)
       return
     }
-    if (tool === 'none' && hitObject != null && tab !== 'zones') setObjectId(hitObject)
+    if (tool === 'none' && hitObject != null && tab !== 'zones') {
+      if (hitObject !== objectId) setShownFloor(null)
+      setObjectId(hitObject)
+    }
   }
 
   if (q.isError) {
@@ -309,6 +378,7 @@ export function StructurePage() {
             {tool === 'draw' && 'Щёлкайте по карте — вершины контура; двойной щелчок или «Готово» замыкает'}
             {tool === 'edit' && 'Тяните вершины, щелчок по точке на ребре — новая вершина'}
             {tool === 'pick' && (detecting ? 'Ищу здание…' : 'Щёлкните по зданию — контур выделится сам')}
+            {tool === 'segment' && (detecting ? 'ИИ выделяет здание по снимку (5–30 с)…' : 'Щёлкните по крыше здания на снимке — ИИ обведёт контур')}
             {tool === 'point' && 'Щёлкните место датчика на карте'}
           </Text>
           {tool === 'draw' && (
@@ -358,8 +428,26 @@ export function StructurePage() {
               setEditorReady((n) => n + 1)
             }}
             onClick={onMapClick}
+            satellite={satellite}
+            plan={plan}
           />
           {toolbar}
+          {data.map.satellite && (
+            <Tooltip label={satellite ? 'Векторная карта' : 'Спутниковый снимок'} position="left">
+              <ActionIcon
+                pos="absolute"
+                bottom={36}
+                right={10}
+                size="lg"
+                variant={satellite ? 'filled' : 'default'}
+                style={{ zIndex: 2 }}
+                onClick={() => setSatelliteOn((v) => !v)}
+                aria-label="Спутниковый снимок"
+              >
+                <IconSatellite size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
         </Paper>
         <Paper withBorder radius="md" p="sm" w={phone ? undefined : 420} style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <Tabs
@@ -373,6 +461,7 @@ export function StructurePage() {
             <Tabs.List grow>
               {data.can.zones && <Tabs.Tab value="zones">Зоны</Tabs.Tab>}
               {data.can.objects && <Tabs.Tab value="objects">Объекты</Tabs.Tab>}
+              {data.can.objects && <Tabs.Tab value="floors">Этажи</Tabs.Tab>}
               {data.can.sensors && <Tabs.Tab value="sensors">Датчики</Tabs.Tab>}
               {data.can.staff && <Tabs.Tab value="staff">Сотрудники</Tabs.Tab>}
             </Tabs.List>
@@ -423,6 +512,18 @@ export function StructurePage() {
                     setDraft(null)
                     setTool('pick')
                   }}
+                  startSegment={() => {
+                    editor.current?.clear()
+                    setCandidate(null)
+                    setDraft(null)
+                    setSatelliteOn(true)
+                    setTool('segment')
+                  }}
+                  pickCandidate={(g) => {
+                    editor.current?.edit(g)
+                    setDraft(g)
+                    setTool('edit')
+                  }}
                   startDraw={() => {
                     editor.current?.startDraw()
                     setCandidate(null)
@@ -438,6 +539,39 @@ export function StructurePage() {
                     refresh()
                   }}
                 />
+              </Tabs.Panel>
+              <Tabs.Panel value="floors">
+                {objectId != null && data.objects.find((o) => o.id === objectId) ? (
+                  <FloorsPanel
+                    object={data.objects.find((o) => o.id === objectId)!}
+                    floors={floors.data}
+                    config={data.map}
+                    shown={floor?.id ?? null}
+                    setShown={setShownFloor}
+                    changed={() => {
+                      void client.invalidateQueries({ queryKey: ['floors', objectId] })
+                      refresh()
+                    }}
+                  />
+                ) : (
+                  <Stack gap="xs">
+                    <Select
+                      label="Объект"
+                      searchable
+                      data={data.objects.map((o) => ({ value: String(o.id), label: o.name }))}
+                      value={null}
+                      onChange={(v) => {
+                        if (!v) return
+                        setObjectId(Number(v))
+                        fly(data.objects.find((o) => o.id === Number(v))?.geometry)
+                      }}
+                      placeholder="выберите объект или щёлкните его на карте"
+                    />
+                    <Text size="xs" c="dimmed">
+                      У объекта — этажи с планами помещений. Планы накладываются на снимок по контрольным точкам.
+                    </Text>
+                  </Stack>
+                )}
               </Tabs.Panel>
               <Tabs.Panel value="sensors">
                 <SensorsTab
@@ -456,6 +590,9 @@ export function StructurePage() {
                     setPoint(null)
                     setTool('point')
                   }}
+                  floors={floors.data ?? []}
+                  floor={floor?.id ?? null}
+                  setFloor={setShownFloor}
                   done={() => {
                     resetTool()
                     void client.invalidateQueries({ queryKey: ['structure-sensors'] })
@@ -636,6 +773,8 @@ function ObjectsTab({
   zoneAt,
   zoneOptions,
   startPick,
+  startSegment,
+  pickCandidate,
   startDraw,
   startEdit,
   done,
@@ -649,6 +788,8 @@ function ObjectsTab({
   zoneAt: (at: LonLat) => StructureZone | undefined
   zoneOptions: { value: string; label: string }[]
   startPick: () => void
+  startSegment: () => void
+  pickCandidate: (g: Polygon) => void
   startDraw: () => void
   startEdit: (p: Polygon | null) => void
   done: () => void
@@ -702,10 +843,15 @@ function ObjectsTab({
           <Card withBorder padding="sm">
             <Stack gap={6}>
               <Text size="sm">
-                Щёлкните по зданию на карте — контур выделится автоматически по данным OpenStreetMap. Его можно поправить
-                перед сохранением.
+                Щёлкните по зданию на карте — контур выделится автоматически: по спутниковому снимку (ИИ) или по данным
+                OpenStreetMap. Его можно поправить перед сохранением.
               </Text>
               <Group gap="xs">
+                {data.map.satellite && (
+                  <Button size="xs" leftSection={<IconSparkles size={14} />} onClick={startSegment} variant={tool === 'segment' ? 'filled' : 'light'} color="grape">
+                    По снимку (ИИ)
+                  </Button>
+                )}
                 <Button size="xs" leftSection={<IconBuilding size={14} />} onClick={startPick} variant={tool === 'pick' ? 'filled' : 'light'} disabled={!data.overpass}>
                   Выделить здание
                 </Button>
@@ -722,11 +868,26 @@ function ObjectsTab({
           </Card>
         )}
         {candidate && (
-          <Alert color={candidate.exact ? 'teal' : 'yellow'} p="xs" title={candidate.exact ? 'Здание выделено' : 'Ближайшее здание'}>
+          <Alert
+            color={candidate.exact ? 'teal' : 'yellow'}
+            p="xs"
+            title={candidate.source === 'sam' ? 'Здание выделено по снимку (ИИ)' : candidate.exact ? 'Здание выделено' : 'Ближайшее здание'}
+          >
             <Text size="xs">
               {[candidate.name, candidate.address].filter(Boolean).join(', ') || 'без адреса'} · {candidate.area_m2} м²
-              {candidate.levels ? ` · этажей ${candidate.levels}` : ''} · {candidate.source}
+              {candidate.levels ? ` · этажей ${candidate.levels}` : ''} ·{' '}
+              {candidate.source === 'sam' ? `уверенность ${Math.round((candidate.score ?? 0) * 100)} %` : candidate.source}
             </Text>
+            {candidate.source === 'sam' && (candidate.candidates?.length ?? 0) > 1 && (
+              <Group gap={4} mt={4}>
+                <Text size="xs">Варианты:</Text>
+                {candidate.candidates!.map((c, i) => (
+                  <Button key={i} size="compact-xs" variant="default" onClick={() => pickCandidate(simplifyDP(c.geometry))}>
+                    {i + 1} · {Math.round((c.score ?? 0) * 100)} %
+                  </Button>
+                ))}
+              </Group>
+            )}
             <Text size="xs" c="dimmed">
               Поправьте контур на карте, если нужно, и сохраните.
             </Text>
@@ -740,6 +901,11 @@ function ObjectsTab({
             <Button size="xs" variant="light" leftSection={<IconPencil size={14} />} onClick={() => startEdit(obj!.geometry)} disabled={!obj!.geometry}>
               Изменить контур
             </Button>
+            {data.map.satellite && (
+              <Button size="xs" variant="default" color="grape" leftSection={<IconSparkles size={14} />} onClick={startSegment}>
+                По снимку (ИИ)
+              </Button>
+            )}
             <Button size="xs" variant="default" leftSection={<IconBuilding size={14} />} onClick={startPick} disabled={!data.overpass}>
               Выделить заново
             </Button>
@@ -747,7 +913,7 @@ function ObjectsTab({
         )}
         {!creating && (
           <Text size="xs" c="dimmed">
-            Каналов: {obj!.channels} · контур: {obj!.source || 'не задан'}
+            Каналов: {obj!.channels} · этажей: {obj!.floors} · контур: {obj!.source === 'sam' ? 'по снимку (ИИ)' : obj!.source || 'не задан'}
           </Text>
         )}
         <Group justify="flex-end" gap="xs">
@@ -815,6 +981,9 @@ function SensorsTab({
   point,
   pointFor,
   askPoint,
+  floors,
+  floor,
+  setFloor,
   done,
 }: {
   data: Structure
@@ -825,8 +994,13 @@ function SensorsTab({
   point: LonLat | null
   pointFor: number | 'new' | null
   askPoint: (target: number | 'new') => void
+  floors: Floor[]
+  /** этаж, чей план на карте: на него ставятся новые датчики */
+  floor: number | null
+  setFloor: (id: number | null) => void
   done: () => void
 }) {
+  const floorOptions = floors.map((f) => ({ value: String(f.id), label: f.title + (f.corners ? '' : ' (план не привязан)') }))
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [type, setType] = useState<string | null>(null)
@@ -855,7 +1029,14 @@ function SensorsTab({
     mutationFn: () =>
       api<{ external_id: number; name: string }>('/topology/sensors/', {
         method: 'POST',
-        body: { node: Number(target ?? objectId), name, sensor_type: type ? Number(type) : null, picket: picket === '' ? null : picket, location: pointFor === 'new' ? point : null },
+        body: {
+          node: Number(target ?? objectId),
+          name,
+          sensor_type: type ? Number(type) : null,
+          picket: picket === '' ? null : picket,
+          location: pointFor === 'new' ? point : null,
+          floor: floor ?? null,
+        },
       }),
     onSuccess: (s) => {
       notifications.show({ color: 'teal', message: `Датчик «${s.name}» создан, ид канала ${s.external_id} — задайте его в СМВУ` })
@@ -884,6 +1065,16 @@ function SensorsTab({
         onChange={(v) => setObjectId(v ? Number(v) : null)}
         placeholder="выберите объект или щёлкните его на карте"
       />
+      {floors.length > 0 && (
+        <Select
+          label="Этаж"
+          description="План этажа — на карте; на него ставятся точки датчиков"
+          data={floorOptions}
+          value={floor ? String(floor) : null}
+          onChange={(v) => setFloor(v ? Number(v) : null)}
+          placeholder="контрольный этаж"
+        />
+      )}
       {/* новые каналы заводит аналитик; руководитель размещает существующие */}
       {data.can.add_sensors && objectId != null && !creating && (
         <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => { setCreating(true); setTarget(String(objectId)) }}>
@@ -917,8 +1108,12 @@ function SensorsTab({
         <Alert p="xs" color="blue">
           <Group justify="space-between" gap="xs">
             <Text size="xs">{point ? 'Точка выбрана' : 'Щёлкните место датчика на карте'}</Text>
-            <Button size="compact-xs" disabled={!point} onClick={() => patch.mutate({ id: pointFor, body: { location: point } })}>
-              Сохранить точку
+            <Button
+              size="compact-xs"
+              disabled={!point}
+              onClick={() => patch.mutate({ id: pointFor, body: { location: point, ...(floor ? { floor } : {}) } })}
+            >
+              Сохранить точку{floor ? ' на этаже' : ''}
             </Button>
           </Group>
         </Alert>
@@ -947,6 +1142,7 @@ function SensorsTab({
                   <Text size="xs" c="dimmed" truncate>
                     {s.type || 'тип не задан'} · {s.node_name} · ид {s.external_id}
                     {s.location ? ' · на карте' : ''}
+                    {s.floor ? ` · ${floors.find((f) => f.id === s.floor)?.title ?? 'этаж'}` : ''}
                   </Text>
                 </Box>
                 <ActionIcon size="sm" variant="subtle" onClick={() => askPoint(s.id)} aria-label="Точка на карте">

@@ -35,13 +35,15 @@ _DOMAIN_TO_TYPE = {
     IncidentDomain.INTRUSION: IncidentType.INTRUSION,
     IncidentDomain.POWER: IncidentType.POWER,
     IncidentDomain.PROCESS: IncidentType.EQUIPMENT,
-    IncidentDomain.CLIMATE: IncidentType.FIRE,
+    # аномальная температура — своя группа аварий у заказчика, а не пожар
+    IncidentDomain.CLIMATE: IncidentType.TEMPERATURE,
 }
 _ALARM_SEVERITY = {
     IncidentType.FIRE: RiskLevel.CRITICAL,
     IncidentType.GAS: RiskLevel.CRITICAL,
     IncidentType.FLOOD: RiskLevel.HIGH,
     IncidentType.INTRUSION: RiskLevel.HIGH,
+    IncidentType.TEMPERATURE: RiskLevel.HIGH,
     IncidentType.POWER: RiskLevel.MEDIUM,
     IncidentType.EQUIPMENT: RiskLevel.MEDIUM,
 }

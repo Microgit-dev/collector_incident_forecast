@@ -211,3 +211,39 @@ def test_restore_command_stops_the_scenario(sim):
     advance(engine, clock, 300, step=5)
     assert run.status == "stopped"
     assert all(engine.channels[d.id].mode == "normal" for d in engine.catalog.devices_under(MU))
+
+
+def _alarms(engine, sink):
+    names = {d.id: d.name for d in engine.catalog.devices_under(MU)}
+    return [names.get(m["channel_external_id"]) for m in sink.messages if m["raw_alarm"] is True]
+
+
+def test_intruder_walks_along_pickets(sim):
+    engine, sink, clock = sim
+    run = engine.start_scenario("intrusion", MU, 200, speed=30)
+    advance(engine, clock, 60)
+    assert run.status == "done"
+    walk = [n for n in _alarms(engine, sink) if n and ("ОД" in n or "КД" in n)]
+    assert walk[0] == "КД люк ПК200"
+    pickets = [picket_of(n) for n in walk]
+    assert pickets == sorted(pickets) and len(walk) >= 5  # идёт от люка вглубь коллектора
+
+
+def test_temperature_without_smoke(sim):
+    engine, sink, clock = sim
+    engine.start_scenario("temperature", MU, 216, speed=30)
+    advance(engine, clock, 60)
+    alarms = _alarms(engine, sink)
+    assert "Температура выше 40ºC" in [m["raw_value"] for m in sink.messages]
+    assert all("ДД" not in (n or "") for n in alarms)
+
+
+def test_ppr_checks_detectors_one_by_one(sim):
+    engine, sink, clock = sim
+    run = engine.start_scenario("ppr", MU, 204, speed=30)
+    advance(engine, clock, 60)
+    assert run.status == "done"
+    smoke = [m["raw_value"] for m in sink.messages if m["raw_value"] in ("Обнаружен дым", "Норма")]
+    assert smoke.count("Обнаружен дым") >= 5
+    # каждая проверка сразу сбрасывается: после дыма — норма того же извещателя
+    assert all(engine.channels[d.id].mode == "normal" for d in engine.catalog.find(MU, "Датчик дыма", 204, 6))

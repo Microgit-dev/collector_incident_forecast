@@ -1,0 +1,9 @@
+# torch и torchvision ставятся отдельно колёсами для CPU (см. Dockerfile)
+fastapi>=0.115
+uvicorn[standard]>=0.34
+segment-anything==1.0
+opencv-python-headless>=4.10
+numpy>=1.26
+pillow>=10.4
+requests>=2.32
+pydantic>=2.8

@@ -1,5 +1,6 @@
 # Полный стенд одной командой:  docker compose up -d --build
 # Демо-поток СМВУ:              docker compose --profile demo up -d replay
+# ИИ-выделение зданий по снимку: docker compose --profile ai up -d --build segmenter
 # Учебный контур и симулятор:   docker compose --profile training up -d --build
 #                               (https://localhost/training/ · симулятор http://localhost:8095)
 # Интерфейс: https://localhost  · API: /api/docs/ · Админка: /admin/ · Grafana: /grafana/
@@ -14,6 +15,8 @@ x-backend: &backend
     ARTIFACTS_DIR: /artifacts
     # Меньше потоков — меньше пиковая память пакетного импорта при почти той же скорости
     POLARS_MAX_THREADS: "4"
+    # Сервис ИИ-выделения зданий (профиль ai); не запущен — контур берётся из OpenStreetMap
+    SEGMENTER_URL: ${SEGMENTER_URL:-http://segmenter:8000}
   volumes:
     - ./data:/data:ro
     - ./artifacts:/artifacts
@@ -152,6 +155,7 @@ services:
       DATA_DIR: /data
       ARTIFACTS_DIR: /artifacts
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+      SEGMENTER_URL: ${SEGMENTER_URL:-http://segmenter:8000}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
       interval: 10s
@@ -200,6 +204,18 @@ services:
   mock-vms:
     build: ./infra/mock-vms
     image: collector-forecast/mock-vms:local
+    restart: unless-stopped
+
+  # ИИ-выделение зданий по спутниковому снимку для редактора объектов (профиль ai): Segment Anything
+  # на CPU, образ ~2 ГБ, память ~1,5 ГБ, ответ 5–15 с. Наружу не публикуется — к нему ходит бэкенд.
+  segmenter:
+    build: ./infra/segmenter
+    image: collector-forecast/segmenter:local
+    profiles: ["ai"]
+    environment:
+      SATELLITE_TILES: ${MAP_SATELLITE_TILES:-https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}}
+    volumes:
+      - segmentercache:/data
     restart: unless-stopped
 
   # ---------- учебный контур (профиль training) ----------
@@ -282,6 +298,7 @@ services:
       TRAINING_ADDRESS: ${TRAINING_ADDRESS:-localhost:8443, 127.0.0.1:8443}
       TLS: ${TLS:-internal}
       MAP_TILES_ORIGIN: ${MAP_TILES_ORIGIN:-https://tiles.versatiles.org}
+      MAP_SATELLITE_ORIGIN: ${MAP_SATELLITE_ORIGIN:-https://server.arcgisonline.com}
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -418,3 +435,4 @@ volumes:
   grafanadata:
   caddydata:
   media:
+  segmentercache:

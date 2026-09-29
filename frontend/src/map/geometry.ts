@@ -63,3 +63,44 @@ export function simplify(polygon: Polygon, meters = 0.8): Polygon {
   if (pts.length < 3) return polygon
   return { type: 'Polygon', coordinates: [[...pts, pts[0]]] }
 }
+
+/**
+ * Упрощение Дугласа — Пекера: контур ИИ по снимку идёт «лесенкой» пикселей (сотня вершин), а для
+ * правки нужны углы здания. Вершины ближе `meters` к упрощённой линии убираются.
+ */
+export function simplifyDP(polygon: Polygon, meters = 1.2): Polygon {
+  const ring = polygon.coordinates[0].slice(0, -1)
+  if (ring.length < 5) return polygon
+  const lat0 = (ring[0][1] * Math.PI) / 180
+  const k = 6371000
+  const xy = ring.map((p) => [((p[0] * Math.PI) / 180) * k * Math.cos(lat0), ((p[1] * Math.PI) / 180) * k])
+  // замкнутое кольцо режется на две ломаные по самой дальней от первой вершины точке
+  let far = 0
+  for (let i = 1; i < xy.length; i++)
+    if (Math.hypot(xy[i][0] - xy[0][0], xy[i][1] - xy[0][1]) > Math.hypot(xy[far][0] - xy[0][0], xy[far][1] - xy[0][1])) far = i
+  const keep = new Set<number>([0, far])
+  const dp = (a: number, b: number) => {
+    let worst = -1
+    let dmax = meters
+    const [ax, ay] = xy[a]
+    const [bx, by] = xy[b % xy.length]
+    const len = Math.hypot(bx - ax, by - ay) || 1
+    for (let i = a + 1; i < b; i++) {
+      const [px, py] = xy[i % xy.length]
+      const d = Math.abs((bx - ax) * (ay - py) - (ax - px) * (by - ay)) / len
+      if (d > dmax) {
+        dmax = d
+        worst = i
+      }
+    }
+    if (worst < 0) return
+    keep.add(worst % xy.length)
+    dp(a, worst)
+    dp(worst, b)
+  }
+  dp(0, far)
+  dp(far, xy.length)
+  const pts = [...keep].sort((x, y) => x - y).map((i) => ring[i])
+  if (pts.length < 3) return polygon
+  return { type: 'Polygon', coordinates: [[...pts, pts[0]]] }
+}

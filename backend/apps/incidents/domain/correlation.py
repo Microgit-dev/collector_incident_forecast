@@ -6,7 +6,7 @@
 с паузой не больше 30 минут даёт около 2,1 тыс. эпизодов — в 43 раза меньше карточек.
 
 Два контура:
-    физический — угроза объекту: пожар, газ, вода, проникновение;
+    физический — авария, угроза жизни: пожар, газ, вода, проникновение, аномальная температура;
     технический — угроза способности видеть объект: датчик, связь, питание, оборудование.
 Физические угрозы разных типов не склеиваются: пожар и проникновение — разные карточки
 с разными действиями. Технические склеиваются: при пропадании питания шкафа «неисправны»
@@ -21,10 +21,12 @@ from datetime import datetime
 
 PHYSICAL = "physical"
 TECHNICAL = "technical"
-PHYSICAL_TYPES = {"fire", "gas", "flood", "intrusion"}
+PHYSICAL_TYPES = {"fire", "gas", "flood", "intrusion", "temperature"}
 
 WORK_HOURS = range(8, 18)
 BURST_SECONDS = 60  # каналы, ушедшие в сбой за минуту, — признак общей причины
+PPR_DETECTORS = 5  # столько пожарных извещателей за PPR_WINDOW_S в рабочее время — это ППР
+PPR_WINDOW_S = 600
 
 
 def contour(incident_type: str) -> str:
@@ -227,6 +229,7 @@ def _physical(incident_type: str, signals: list[Signal], ctx: Context) -> list[H
         "gas": ("gas", "Реальная загазованность"),
         "flood": ("flood", "Поступление воды (подтопление)"),
         "intrusion": ("intrusion", "Несанкционированное проникновение"),
+        "temperature": ("temperature", "Аномальная температура: перегрев или переохлаждение участка"),
     }[incident_type]
     ev = []
     weight = 0.35
@@ -241,6 +244,10 @@ def _physical(incident_type: str, signals: list[Signal], ctx: Context) -> list[H
         if peak is not None:
             ev.append(f"Концентрация до {peak:g} % метана")
             weight += 0.4 if peak >= 1.0 else 0.1
+    if incident_type == "temperature":
+        values = [s.numeric for s in signals if s.numeric is not None]
+        if values:
+            ev.append(f"Температура от {min(values):g} до {max(values):g} °C")
     if healthy and len(healthy) == len(signals):
         ev.append("Каналы с хорошим качеством данных")
         weight += 0.1
@@ -257,19 +264,33 @@ def _physical(incident_type: str, signals: list[Signal], ctx: Context) -> list[H
             "gas": "Ложное срабатывание: дрейф или неисправность сигнализатора",
             "flood": "Ложное срабатывание датчика затопления",
             "intrusion": "Ложное срабатывание охранного извещателя",
+            "temperature": "Сбой датчика температуры или местный нагрев (оборудование, солнце у входа)",
         }[incident_type]
         result.append(Hypothesis("false", false_title, 0.3 + 0.3 * (n == 1) + 0.3 * bool(flaky), ev))
 
+    # ППР по заказчику: 5 и больше пожарных извещателей объекта за 10 минут в рабочее время —
+    # плановая проверка извещателей, а не пожар
+    times = [s.ts for s in signals]
+    ppr = (
+        incident_type == "fire"
+        and n >= PPR_DETECTORS
+        and _work_time(ctx)
+        and (max(times) - min(times)).total_seconds() <= PPR_WINDOW_S
+    )
     if ctx.works_in_progress or (_work_time(ctx) and incident_type in {"intrusion", "fire"}):
         title = {
             "intrusion": "Санкционированный доступ (наряд-допуск, бригада)",
-            "fire": "Огневые или пыльные работы на объекте",
+            "fire": "ППР: плановая проверка извещателей" if ppr else "Огневые или пыльные работы на объекте",
         }.get(incident_type, "Работы на объекте")
         ev = []
+        if ppr:
+            ev.append(
+                f"Сработали {n} извещателей за 10 минут в рабочее время — так идёт проверка по графику ППР"
+            )
         if ctx.works_in_progress:
             ev.append(f"На объекте заявок в работе: {ctx.works_in_progress}")
         if _work_time(ctx):
             ev.append("Рабочее время")
-        result.append(Hypothesis("works", title, 0.2 + 0.7 * bool(ctx.works_in_progress), ev))
+        result.append(Hypothesis("works", title, 0.2 + 0.7 * bool(ctx.works_in_progress) + 1.3 * ppr, ev))
 
     return _normalize(result)

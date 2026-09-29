@@ -1,10 +1,10 @@
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services import log_action
+from apps.topology import geo
 from apps.topology.models import Node, NodeKind
 
 from .. import monitoring
@@ -24,7 +24,7 @@ class MonitoringView(APIView):
             lambda: monitoring.monitoring_map(request.user),
             ttl=30,
         )
-        return Response({**data, "map": {"light": settings.MAP_STYLE_LIGHT, "dark": settings.MAP_STYLE_DARK}})
+        return Response({**data, "map": geo.map_config()})
 
 
 class MonitoringOthersView(APIView):

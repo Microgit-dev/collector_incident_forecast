@@ -69,6 +69,15 @@ class Channel(TimeStampedModel):
     location_hint = models.CharField("место (ВШ, камера…)", max_length=64, blank=True)
     # Точка на карте [долгота, широта]; пусто — датчик раскладывается по контуру объекта по пикету
     location = models.JSONField("точка на карте", null=True, blank=True)
+    # Этаж объекта: датчик рисуется на плане этого этажа; пусто — этаж не указан
+    floor = models.ForeignKey(
+        "topology.Floor",
+        verbose_name="этаж",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="channels",
+    )
     is_active = models.BooleanField("активен", default=True)
     in_catalog = models.BooleanField(
         "есть в справочнике",
