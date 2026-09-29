@@ -379,6 +379,13 @@ Grafana выключена. Пароль `GRAFANA_ADMIN_PASSWORD` нужен т�
 к таблицам панелей. Задайте ей свой пароль `GRAFANA_DB_PASSWORD` в `.env` до первого запуска или
 перезапустите `migrate` и `grafana` после смены пароля.
 
+Grafana ходит в Prometheus по адресу `http://prometheus:9090/prometheus`: Prometheus опубликован под
+`/prometheus/`, и его API — под тем же префиксом. Правила оповещений о работе платформы —
+`infra/prometheus/alerts.yml`: сервис недоступен, задержка потока выше 300 с, неизвестные каналы в
+потоке, ошибки и медленные ответы API, сбои фоновых задач, подключения к базе. Они видны на панели
+«Оповещения» дашборда «Состояние системы» и на странице «Alerts» Prometheus. Файлы конфигурации
+смонтированы в контейнеры: после их правки — `docker compose restart prometheus grafana`.
+
 ## 7. Учебный контур
 
 Подсистема на том же адресе: https://forecast.corp.local/training/. Своя база, Redis, тема Kafka и

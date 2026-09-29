@@ -55,6 +55,11 @@ DOCUMENTS += [
     )
     for source, role in GUIDES
 ]
+# Общее руководство для всех ролей и памятка для проверяющего (адреса и тестовые учётные записи)
+DOCUMENTS += [
+    (HERE.parent / "guides" / "general.md", "Общее руководство пользователя.docx", "Общее руководство пользователя"),
+    (HERE.parent / "guides" / "reviewer.md", "Памятка для проверяющего.docx", "Памятка для проверяющего"),
+]
 ACCENT = RGBColor(0x1C, 0x4E, 0x9A)
 INCLUDE = re.compile(r"<!--\s*include:\s*(\S+)(.*?)-->")
 
