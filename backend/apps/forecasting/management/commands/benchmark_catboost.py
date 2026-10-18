@@ -1,4 +1,4 @@
-"""H02: fixed two-trial CatBoost comparison; select only on 2025 validation."""
+"""H02: fixed CatBoost depth/tree grid selected using external metrics on 2025 validation."""
 
 import importlib.metadata
 import json
@@ -22,14 +22,15 @@ PARAMS = {
     "learning_rate": 0.05,
     "l2_leaf_reg": 3,
     "loss_function": "Logloss",
-    "eval_metric": "PRAUC:type=Classic;use_weights=true",
-    "early_stopping_rounds": 60,
+    "eval_metric": "Logloss",
+    "use_best_model": False,
     "random_seed": 42,
     "thread_count": 4,
     "task_type": "CPU",
     "allow_writing_files": False,
     "verbose": 50,
 }
+TREE_CHECKPOINTS = [50, 100, 200, 400]
 
 
 def cat_frame(frame, columns):
@@ -44,6 +45,17 @@ def cat_frame(frame, columns):
 
 def choose_trial(trials):
     return max(trials, key=lambda r: (r["validation_recall_at_20"], r["validation_ap"]))
+
+
+def validation_trial(y, p, days, depth, trees):
+    threshold = budget_threshold(p, 20 * days)
+    _, recall = M._pr(y, p >= threshold, np.ones(len(y)))
+    return {
+        "depth": depth,
+        "trees": trees,
+        "validation_recall_at_20": recall,
+        "validation_ap": float(average_precision_score(y, p)),
+    }
 
 
 class Command(BaseCommand):
@@ -68,6 +80,8 @@ class Command(BaseCommand):
             "H02",
             params=PARAMS,
             depths=[4, 6],
+            tree_checkpoints=TREE_CHECKPOINTS,
+            early_stopping="disabled; use external AP/recall, not CatBoost trapezoidal PRAUC",
             selection="validation_recall_at_20_then_AP",
             catboost=importlib.metadata.version("catboost"),
         )
@@ -97,19 +111,14 @@ class Command(BaseCommand):
                 model = CatBoostClassifier(**PARAMS, depth=depth)
                 fit_start = time.monotonic()
                 model.fit(train, eval_set=valid)
-                p = model.predict_proba(valid)[:, 1]
-                pv[depth] = p
-                threshold = budget_threshold(p, 20 * parts["valid"]["day"].n_unique())
-                _, recall = M._pr(yv, p >= threshold, np.ones(len(yv)))
-                trials.append(
-                    {
-                        "depth": depth,
-                        "validation_recall_at_20": recall,
-                        "validation_ap": float(average_precision_score(yv, p)),
-                        "trees": model.tree_count_,
-                        "fit_seconds": time.monotonic() - fit_start,
-                    }
-                )
+                fit_seconds = time.monotonic() - fit_start
+                for trees in TREE_CHECKPOINTS:
+                    p = model.predict_proba(valid, ntree_end=trees)[:, 1]
+                    pv[depth, trees] = p
+                    trials.append(
+                        validation_trial(yv, p, parts["valid"]["day"].n_unique(), depth, trees)
+                        | {"full_fit_seconds": fit_seconds}
+                    )
                 model.save_model(output / f"{task}_depth{depth}.cbm")
                 del model
             winner = choose_trial(trials)
@@ -117,8 +126,10 @@ class Command(BaseCommand):
             # The selected candidate is frozen before constructing the test Pool.
             model = CatBoostClassifier()
             model.load_model(output / f"{task}_depth{winner['depth']}.cbm")
+            model.shrink(ntree_end=winner["trees"])
+            model.save_model(output / f"{task}_selected.cbm")
             predictions = reference_predictions(reference, task, parts)
-            predictions["valid"]["catboost"] = pv[winner["depth"]]
+            predictions["valid"]["catboost"] = pv[winner["depth"], winner["trees"]]
             predictions["test"]["catboost"] = model.predict_proba(
                 Pool(cat_frame(parts["test"], columns), cat_features=F.CATEGORICAL)
             )[:, 1]

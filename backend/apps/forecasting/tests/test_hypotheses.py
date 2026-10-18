@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from apps.forecasting.management.commands.benchmark_catboost import cat_frame, choose_trial
+from apps.forecasting.management.commands.benchmark_catboost import cat_frame, choose_trial, validation_trial
 
 
 def test_catboost_trial_selection_uses_validation_only():
@@ -11,6 +11,13 @@ def test_catboost_trial_selection_uses_validation_only():
         {"depth": 6, "validation_recall_at_20": 0.3, "validation_ap": 0.14, "test_ap": 0.1},
     ]
     assert choose_trial(trials)["depth"] == 6
+
+
+def test_external_ap_for_constant_score_matches_event_prevalence():
+    y = np.r_[np.ones(2, dtype=bool), np.zeros(98, dtype=bool)]
+    result = validation_trial(y, np.full(100, 0.1), days=1, depth=4, trees=50)
+    assert result["validation_ap"] == pytest.approx(0.02)
+    assert result["validation_recall_at_20"] == 0  # a tied group of 100 cannot fit a budget of 20
 
 
 def test_catboost_pool_handles_missing_numeric_and_unseen_category(tmp_path):
