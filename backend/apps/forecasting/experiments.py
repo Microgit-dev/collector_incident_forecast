@@ -8,7 +8,14 @@ import subprocess
 import numpy as np
 
 from . import channel_model as M
-from .management.commands.benchmark_ml import budget_threshold
+
+
+def budget_threshold(scores, max_alerts):
+    """Largest whole score group fitting the validation budget; never split ties by row order."""
+    values, counts = np.unique(scores, return_counts=True)
+    values, counts = values[::-1], counts[::-1]
+    eligible = np.flatnonzero(np.cumsum(counts) <= max_alerts)
+    return float(values[eligible[-1]]) if len(eligible) else float(np.nextafter(values[0], np.inf))
 
 
 def write_json(path, value):

@@ -12,17 +12,18 @@ from apps.forecasting import channel_model as M
 from apps.forecasting import short_windows as W
 from apps.forecasting import specs
 from apps.forecasting.domain import features as F
-from apps.forecasting.experiments import evaluate_predictions, start_run, write_json
-from apps.forecasting.management.commands.benchmark_catboost import (
-    PARAMS,
+from apps.forecasting.experiment_models import (
+    CATBOOST_PARAMS,
     TREE_CHECKPOINTS,
     cat_frame,
     choose_trial,
+    logistic_pipeline,
+    predict_batches,
     validation_trial,
 )
-from apps.forecasting.management.commands.benchmark_ml import predict_batches
+from apps.forecasting.experiments import evaluate_predictions, start_run, write_json
 from apps.forecasting.offline import ParquetHistory
-from apps.forecasting.temporal_validation import TemporalFold, TemporalHistory, logistic_pipeline
+from apps.forecasting.temporal_validation import TemporalFold, TemporalHistory
 
 
 class Command(BaseCommand):
@@ -52,7 +53,7 @@ class Command(BaseCommand):
             protocol="train before Jan1; validation H1; evaluation H2; purge entire label horizon at boundaries",
             models=["logistic", "lightgbm", "short_windows", "catboost"],
             selection="LGBM early stopping AP; CatBoost fixed depth6, checkpoints selected by H1 recall@20 then AP",
-            catboost_params=PARAMS | {"depth": 6},
+            catboost_params=CATBOOST_PARAMS | {"depth": 6},
         )
         report = {}
         for year in years:
@@ -145,7 +146,7 @@ class Command(BaseCommand):
                     parts["valid"]["y"].to_numpy(),
                     cat_features=F.CATEGORICAL,
                 )
-                model = CatBoostClassifier(**PARAMS, depth=6)
+                model = CatBoostClassifier(**CATBOOST_PARAMS, depth=6)
                 model.fit(train, eval_set=valid)
                 trials, candidate_predictions = [], {}
                 for trees in TREE_CHECKPOINTS:

@@ -14,20 +14,9 @@ from django.core.management.base import BaseCommand
 
 from apps.forecasting import channel_model as M
 from apps.forecasting import specs
-from apps.forecasting.domain import features as F
+from apps.forecasting.experiment_models import logistic_pipeline, predict_batches
+from apps.forecasting.experiments import budget_threshold
 from apps.forecasting.offline import ParquetHistory
-
-
-def budget_threshold(scores, max_alerts):
-    """Largest whole score group fitting the validation budget; never split ties by row order."""
-    values, counts = np.unique(scores, return_counts=True)
-    values, counts = values[::-1], counts[::-1]
-    eligible = np.flatnonzero(np.cumsum(counts) <= max_alerts)
-    return float(values[eligible[-1]]) if len(eligible) else float(np.nextafter(values[0], np.inf))
-
-
-def predict_batches(model, x, batch=100_000):
-    return np.concatenate([model.predict_proba(x[i : i + batch])[:, 1] for i in range(0, len(x), batch)])
 
 
 class Command(BaseCommand):
@@ -40,12 +29,6 @@ class Command(BaseCommand):
         parser.add_argument("--budgets", nargs="+", type=int, default=[5, 20, 50])
 
     def handle(self, *args, snapshot, output, tasks, budgets, **options):
-        from sklearn.compose import ColumnTransformer
-        from sklearn.impute import SimpleImputer
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.pipeline import Pipeline
-        from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
         source = ParquetHistory(snapshot)
         output.mkdir(parents=True, exist_ok=False)
         config = {
@@ -83,31 +66,7 @@ class Command(BaseCommand):
             types, columns = result.sensor_types, result.columns
             x_train = M.to_matrix(parts["train"], types, columns)
             y_train, weights = parts["train"]["y"].to_numpy(), parts["train"]["weight"].to_numpy()
-            cat = [columns.index(c) for c in F.CATEGORICAL]
-            numeric = [i for i in range(len(columns)) if i not in cat]
-            logistic = Pipeline(
-                [
-                    (
-                        "features",
-                        ColumnTransformer(
-                            [
-                                (
-                                    "numeric",
-                                    Pipeline(
-                                        [
-                                            ("impute", SimpleImputer(keep_empty_features=True)),
-                                            ("scale", StandardScaler()),
-                                        ]
-                                    ),
-                                    numeric,
-                                ),
-                                ("category", OneHotEncoder(handle_unknown="ignore"), cat),
-                            ]
-                        ),
-                    ),
-                    ("classifier", LogisticRegression(max_iter=500, tol=1e-4, random_state=42)),
-                ]
-            )
+            logistic = logistic_pipeline(columns)
             progress(0.0, "Logistic regression")
             fit_started = time.monotonic()
             logistic.fit(x_train, y_train, classifier__sample_weight=weights)

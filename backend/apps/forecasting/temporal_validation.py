@@ -51,39 +51,3 @@ class TemporalHistory(ParquetHistory):
 
     def _scan(self):
         return super()._scan().filter(pl.col("day") <= self.cutoff)
-
-
-def logistic_pipeline(columns):
-    from sklearn.compose import ColumnTransformer
-    from sklearn.impute import SimpleImputer
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
-    from .domain.features import CATEGORICAL
-
-    cat = [columns.index(name) for name in CATEGORICAL]
-    numeric = [i for i in range(len(columns)) if i not in cat]
-    return Pipeline(
-        [
-            (
-                "features",
-                ColumnTransformer(
-                    [
-                        (
-                            "numeric",
-                            Pipeline(
-                                [
-                                    ("impute", SimpleImputer(keep_empty_features=True)),
-                                    ("scale", StandardScaler()),
-                                ]
-                            ),
-                            numeric,
-                        ),
-                        ("category", OneHotEncoder(handle_unknown="ignore"), cat),
-                    ]
-                ),
-            ),
-            ("classifier", LogisticRegression(max_iter=500, tol=1e-4, random_state=42)),
-        ]
-    )

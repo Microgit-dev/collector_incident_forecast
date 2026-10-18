@@ -5,57 +5,21 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 from django.core.management.base import BaseCommand, CommandError
-from sklearn.metrics import average_precision_score
 
 from apps.forecasting import channel_model as M
 from apps.forecasting import specs
 from apps.forecasting.domain import features as F
+from apps.forecasting.experiment_models import (
+    CATBOOST_PARAMS,
+    TREE_CHECKPOINTS,
+    cat_frame,
+    choose_trial,
+    validation_trial,
+)
 from apps.forecasting.experiments import evaluate_predictions, reference_predictions, start_run, write_json
-from apps.forecasting.management.commands.benchmark_ml import budget_threshold
 from apps.forecasting.offline import ParquetHistory
-
-PARAMS = {
-    "iterations": 400,
-    "learning_rate": 0.05,
-    "l2_leaf_reg": 3,
-    "loss_function": "Logloss",
-    "eval_metric": "Logloss",
-    "use_best_model": False,
-    "random_seed": 42,
-    "thread_count": 4,
-    "task_type": "CPU",
-    "allow_writing_files": False,
-    "verbose": 50,
-}
-TREE_CHECKPOINTS = [50, 100, 200, 400]
-
-
-def cat_frame(frame, columns):
-    result = frame.select(
-        *[pl.col(c).cast(pl.Float32) for c in columns if c not in F.CATEGORICAL],
-        *[pl.col(c).cast(pl.String) for c in F.CATEGORICAL],
-    ).to_pandas()
-    for col in F.CATEGORICAL:
-        result[col] = result[col].astype("category")
-    return result
-
-
-def choose_trial(trials):
-    return max(trials, key=lambda r: (r["validation_recall_at_20"], r["validation_ap"]))
-
-
-def validation_trial(y, p, days, depth, trees):
-    threshold = budget_threshold(p, 20 * days)
-    _, recall = M._pr(y, p >= threshold, np.ones(len(y)))
-    return {
-        "depth": depth,
-        "trees": trees,
-        "validation_recall_at_20": recall,
-        "validation_ap": float(average_precision_score(y, p)),
-    }
 
 
 class Command(BaseCommand):
@@ -78,7 +42,7 @@ class Command(BaseCommand):
             output,
             source,
             "H02",
-            params=PARAMS,
+            params=CATBOOST_PARAMS,
             depths=[4, 6],
             tree_checkpoints=TREE_CHECKPOINTS,
             early_stopping="disabled; use external AP/recall, not CatBoost trapezoidal PRAUC",
@@ -108,7 +72,7 @@ class Command(BaseCommand):
             for depth in [4, 6]:
                 self.stdout.write(f"[{task}] depth={depth}")
                 self.stdout.flush()
-                model = CatBoostClassifier(**PARAMS, depth=depth)
+                model = CatBoostClassifier(**CATBOOST_PARAMS, depth=depth)
                 fit_start = time.monotonic()
                 model.fit(train, eval_set=valid)
                 fit_seconds = time.monotonic() - fit_start

@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 
 from apps.forecasting import channel_model as M
-from apps.forecasting.management.commands.benchmark_ml import budget_threshold
+from apps.forecasting.experiments import budget_threshold
 from apps.forecasting.offline import ParquetHistory
 
 from .test_features import _daily

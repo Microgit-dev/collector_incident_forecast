@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from apps.forecasting.management.commands.benchmark_catboost import cat_frame, choose_trial, validation_trial
+from apps.forecasting.experiment_models import cat_frame, choose_trial, validation_trial
 
 
 def test_catboost_trial_selection_uses_validation_only():
