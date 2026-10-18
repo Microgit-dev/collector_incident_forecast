@@ -29,6 +29,16 @@ def test_node_clusters_group_different_channels_without_mixing_nodes():
     assert clusters.filter(pl.col("node_id") == 20)["channel_onsets"].to_list() == [1]
 
 
+def test_node_cluster_gap_keeps_seconds_and_ids_include_the_task():
+    base = episodes().head(1)
+    after = base.with_columns((pl.col("start_at") + timedelta(minutes=30, seconds=1)).alias("start_at"))
+    both = pl.concat([base, after])
+    gas = cluster_node_onsets(both, "gas")
+    assert len(gas) == 2  # total_minutes() truncation would incorrectly merge these points
+    flood = cluster_node_onsets(both, "flood")
+    assert set(gas["episode_id"].to_list()).isdisjoint(flood["episode_id"].to_list())
+
+
 def test_node_aggregation_ignores_labels_and_uses_only_current_channel_scores():
     frame = pl.DataFrame(
         {
@@ -57,6 +67,8 @@ def test_node_matching_credits_node_events_and_exports_unambiguous_units():
     assert metrics["onsets"] == 3 and metrics["detected_onsets"] == 2
     assert metrics["onset_recall"] == 2 / 3
     assert metrics["sample_unit"] == "node_day"
+    assert metrics["positive_node_days"] == 2
+    assert "journal_event_precision" not in metrics
     cards = context.alert_rows(selected, scores["m_max"].to_numpy())
     assert cards["node_id"].to_list() == [10]
     assert "channel_id" not in cards.columns

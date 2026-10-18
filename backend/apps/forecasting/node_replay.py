@@ -105,10 +105,13 @@ class NodeReplayContext(ReplayContext):
         super().__init__(predictions, meta, days, events)
 
     def evaluate(self, selected):
-        return super().evaluate(selected) | {
+        result = super().evaluate(selected)
+        result["node_day_precision"] = result.pop("journal_event_precision")
+        return result | {
             "sample_unit": "node_day",
             "event_unit": "node_onset_cluster",
             "alert_unit": "node_task_day",
+            "positive_node_days": int(self.frame["y"].sum()),
         }
 
     def alert_rows(self, selected, scores):
