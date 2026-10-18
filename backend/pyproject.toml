@@ -50,6 +50,9 @@ dev = [
     "pytest-django>=4.10",
     "factory-boy>=3.3",
 ]
+experiments = [
+    "catboost>=1.2,<2",
+]
 # python-ldap needs libldap headers: installed only inside the Linux image
 ldap = [
     "django-auth-ldap>=5.1",
