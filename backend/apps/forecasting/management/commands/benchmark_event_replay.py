@@ -3,17 +3,21 @@
 import json
 import time
 from dataclasses import asdict
-from datetime import datetime, timedelta
-from datetime import time as midnight
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import polars as pl
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.forecasting import specs
 from apps.forecasting.event_history import episodes_from_runs, prepare_events
-from apps.forecasting.event_replay import AlertPolicy, AlertStream, ReplayContext, choose_policy, policy_grid
+from apps.forecasting.event_replay import (
+    AlertPolicy,
+    AlertStream,
+    ReplayContext,
+    choose_policy,
+    forecast_period_end,
+    policy_grid,
+)
 from apps.forecasting.experiments import start_run, write_json
 from apps.forecasting.offline import ParquetHistory
 
@@ -86,13 +90,12 @@ class Command(BaseCommand):
                 self.stdout.write(f"[{year}/{task}] validation policies")
                 self.stdout.flush()
                 validation = pl.read_parquet(reference / str(year) / f"{task}_valid_predictions.parquet")
-                valid_end = datetime.combine(
-                    validation["day"].max() + timedelta(days=2), midnight(), ZoneInfo("Europe/Moscow")
-                )
+                valid_end = forecast_period_end(validation)
                 valid_episodes = episodes_from_runs(
                     runs, meta, ends, task, episode_gap_minutes, cutoff=valid_end
                 )
                 valid = ReplayContext(validation, meta, days, valid_episodes)
+                valid.matches.write_parquet(folder / f"{task}_valid_episode_opportunities.parquet")
                 models = [name for name in validation.columns if name not in ("channel_id", "day", "y")]
                 trials, states, by_model = [], {}, {}
                 for model in models:
@@ -116,13 +119,12 @@ class Command(BaseCommand):
                 write_json(folder / f"{task}_selection.json", selection)
                 # Nothing from H2 is loaded until all candidate policies/model choices are frozen.
                 test_predictions = pl.read_parquet(reference / str(year) / f"{task}_test_predictions.parquet")
-                test_end = datetime.combine(
-                    test_predictions["day"].max() + timedelta(days=2), midnight(), ZoneInfo("Europe/Moscow")
-                )
+                test_end = forecast_period_end(test_predictions)
                 test_episodes = episodes_from_runs(
                     runs, meta, ends, task, episode_gap_minutes, cutoff=test_end
                 )
                 test = ReplayContext(test_predictions, meta, days, test_episodes)
+                test.matches.write_parquet(folder / f"{task}_test_episode_opportunities.parquet")
                 records = {}
                 for model in models:
                     scores = test_predictions[model].to_numpy()

@@ -1,10 +1,19 @@
 """Causal daily alert policies and telemetry-onset evaluation; policies never receive labels."""
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import polars as pl
+
+
+def forecast_period_end(frame):
+    """Exclusive UTC end of the last 24h outcome window, not the feature-day boundary."""
+    last = frame["day"].max()
+    if last is None:
+        raise ValueError("Forecast period is empty")
+    return datetime.combine(last + timedelta(days=2), time(), ZoneInfo("Europe/Moscow")).astimezone(UTC)
 
 
 @dataclass(frozen=True)

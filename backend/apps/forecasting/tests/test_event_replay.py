@@ -6,7 +6,13 @@ import polars as pl
 import pytest
 
 from apps.forecasting.event_history import compress_observations, episodes_from_runs, observations
-from apps.forecasting.event_replay import AlertPolicy, AlertStream, ReplayContext, choose_policy
+from apps.forecasting.event_replay import (
+    AlertPolicy,
+    AlertStream,
+    ReplayContext,
+    choose_policy,
+    forecast_period_end,
+)
 
 META = pl.DataFrame({"channel_id": [1, 2], "node_id": [10, 10], "sensor_type": ["gas", "gas"]})
 END = datetime(2025, 1, 1, tzinfo=UTC)
@@ -185,3 +191,15 @@ def test_selection_uses_validation_and_excludes_unbounded_comparator():
         ]
         == "a"
     )
+
+
+def test_period_cutoff_is_utc_end_of_outcome_not_feature_day():
+    predictions = pl.DataFrame({"day": [date(2023, 6, 29)]})
+    cutoff = forecast_period_end(predictions)
+    assert cutoff == datetime(2023, 6, 30, 21, tzinfo=UTC)
+    raw = raw_flags([datetime(2023, 6, 29, tzinfo=UTC), datetime(2023, 6, 30, tzinfo=UTC)], [False, True])
+    episodes = episodes_from_runs(
+        compress_observations(raw.lazy(), 0).collect(), META, {0: END}, "gas", cutoff=cutoff
+    )
+    assert len(episodes) == 1
+    assert episodes["end_bound"][0] == cutoff
