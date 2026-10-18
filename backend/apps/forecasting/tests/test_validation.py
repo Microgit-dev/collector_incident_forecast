@@ -134,6 +134,8 @@ def test_training_saves_correct_protocol_and_reloadable_model(monkeypatch, setti
     result = train(neg_rate=1.0)
     assert result.metrics["rows"] == {"train": 240, "valid": 100, "test": 100}
     assert result.metrics["evaluation_protocol"]["validation_test"] == "full_population_unit_weights"
+    assert result.metrics["evaluation_protocol"]["sample_unit"] == "channel_day"
+    assert result.metrics["test"]["positive_channel_days"] == result.metrics["test"]["onsets"]
     assert result.train_period["train"] == [str(days[0]), str(days[239])]
     meta = json.loads(result.artifact.with_suffix(".json").read_text())
     assert meta["levels"] == result.metrics["levels"]

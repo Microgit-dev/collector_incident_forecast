@@ -289,6 +289,9 @@ def evaluate(y, p, w, threshold: float, frame: pl.DataFrame | None = None) -> di
         "roc_auc": round(float(roc_auc_score(y, p, sample_weight=w)), 3),
         "base_rate": round(float((w * y).sum() / w.sum()), 5),
         "alerts_per_day": None,
+        "sample_unit": "channel_day",
+        "positive_channel_days": int(y.sum()),
+        # Legacy API name: this is a count of positive rows, not distinct telemetry episodes.
         "onsets": int(y.sum()),
     }
     if frame is not None:
@@ -412,7 +415,8 @@ def train(
             by_type[stype] = {
                 "precision": round(p, 3),
                 "recall": round(r, 3),
-                "onsets": int(xy["test"][1][mask].sum()),
+                "positive_channel_days": int(xy["test"][1][mask].sum()),
+                "onsets": int(xy["test"][1][mask].sum()),  # legacy alias, same unit as evaluate()
             }
 
     metrics = {
@@ -444,6 +448,9 @@ def train(
         "channels": int(dataset["channel_id"].n_unique()),
         "negative_sampling": neg_rate,
         "evaluation_protocol": {
+            "sample_unit": "channel_day",
+            "positive_count_field": "positive_channel_days",
+            "legacy_onsets_field": "alias_for_positive_channel_days_not_episode_onsets",
             "dataset_version": DATASET_VERSION,
             "negative_sampling": "train_only",
             "validation_test": "full_population_unit_weights",
