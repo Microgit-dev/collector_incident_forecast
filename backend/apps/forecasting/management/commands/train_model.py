@@ -21,7 +21,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, neg_rate, activate, horizon, task, **options):
         params = {"activate": activate, "horizon_hours": horizon} | (
-            {"neg_rate": neg_rate} if neg_rate else {}
+            {"neg_rate": neg_rate} if neg_rate is not None else {}
         )
         run = TrainingRun.objects.create(task=task, params=params)
         model = execute(run, echo=self.stdout.write)

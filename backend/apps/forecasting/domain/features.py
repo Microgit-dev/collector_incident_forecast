@@ -90,7 +90,8 @@ EXTRA_FEATURES = [s.name for s in EXTRA_SPECS]
 WEATHER_SPECS = [
     FeatureSpec("wx_precip_1", "Осадки за сутки: {v} мм"),
     FeatureSpec("wx_precip_3", "Осадки за 3 суток: {v} мм"),
-    FeatureSpec("wx_precip_next", "Осадки на следующие сутки (прогноз): {v} мм"),
+    # Старые артефакты ожидают эту колонку. До появления архива прогнозов она всегда null.
+    FeatureSpec("wx_precip_next", "Прогноз осадков недоступен: {v}"),
     FeatureSpec("wx_thaw_3", "Оттепель за 3 суток (сумма плюсовых максимумов): {v} °C"),
     FeatureSpec("wx_melt_3", "Таяние снега за 3 суток: {v} см покрова"),
     FeatureSpec("wx_snow_depth", "Снежный покров: {v} см"),
@@ -261,8 +262,8 @@ def compute_features(grid: pl.DataFrame, node_daily: pl.DataFrame, meta: pl.Data
 def weather_features(weather: pl.DataFrame) -> pl.DataFrame:
     """
     weather — day, precipitation_mm, temperature_max_c, snow_depth_cm (сутки по Москве).
-    Прогноз осадков на завтра при обучении берётся фактом следующих суток: суточный прогноз осадков
-    достаточно точен, а в работе это поле заполняет прогнозный API.
+    Факт следующих суток недоступен на момент прогноза. Колонка wx_precip_next оставлена
+    пустой для совместимости со старыми артефактами; новые модели её не используют.
     """
     if weather.is_empty():
         return pl.DataFrame(schema={"day": pl.Date, **{name: pl.Float64 for name in WEATHER_FEATURES}})
@@ -272,7 +273,7 @@ def weather_features(weather: pl.DataFrame) -> pl.DataFrame:
         "day",
         pl.col("precipitation_mm").alias("wx_precip_1"),
         pl.col("precipitation_mm").rolling_sum(3, min_samples=1).alias("wx_precip_3"),
-        pl.col("precipitation_mm").shift(-1).alias("wx_precip_next"),
+        pl.lit(None, dtype=pl.Float64).alias("wx_precip_next"),
         pl.col("temperature_max_c").clip(lower_bound=0).rolling_sum(3, min_samples=1).alias("wx_thaw_3"),
         (pl.col("snow_depth_cm").shift(3) - pl.col("snow_depth_cm")).clip(lower_bound=0).alias("wx_melt_3"),
         pl.col("snow_depth_cm").alias("wx_snow_depth"),
