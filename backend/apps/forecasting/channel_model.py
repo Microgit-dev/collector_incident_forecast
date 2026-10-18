@@ -90,11 +90,11 @@ def _keep_negative(frame: pl.DataFrame, rate: float) -> pl.Expr:
     return pl.col("y") | pl.col("y_orig") | pl.col("fb") | (bucket < rate)
 
 
-def _sample_rows(frame: pl.DataFrame, rate: float) -> pl.DataFrame:
+def _sample_rows(frame: pl.DataFrame, rate: float, train_before: date = VALID_FROM) -> pl.DataFrame:
     """Прореживание и веса — только train. Validation/test имеют единичный вес на строку."""
     if not 0 < rate <= 1:
         raise ValueError("Доля отрицательных примеров должна быть в интервале (0, 1]")
-    is_train = pl.col("day") < VALID_FROM
+    is_train = pl.col("day") < train_before
     return (
         frame.filter(~is_train | _keep_negative(frame, rate))
         .with_columns(
@@ -133,6 +133,7 @@ def build_dataset(
     use_cache: bool = True,
     labels: pl.DataFrame | None = None,
     source=None,
+    train_before: date = VALID_FROM,
 ) -> tuple[pl.DataFrame, dict, dict]:
     """
     Выборка кешируется в artifacts/models: повторное обучение на тех же данных и той же разметке
@@ -155,6 +156,8 @@ def build_dataset(
         f"dataset_v{DATASET_VERSION}_{getattr(source, 'cache_key', 'database')}_{spec.task}_{last:%Y%m%d}_{neg_rate:g}"
         f"_h{horizon_days}_{labels_fingerprint(labels)}"
     )
+    if train_before != VALID_FROM:
+        name += f"_train_before{train_before:%Y%m%d}"
     cache = settings.ARTIFACTS_DIR / "models" / f"{name}.parquet"
     stats_file = cache.with_suffix(".json")
     if use_cache and cache.exists() and stats_file.exists():
@@ -166,7 +169,9 @@ def build_dataset(
             saved["stats"],
             {int(k): v for k, v in saved["per_label"].items()},
         )
-    frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels, source)
+    frame, stats, per_label = _collect(
+        spec, progress, neg_rate, last, horizon_days, labels, source, train_before
+    )
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
     stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
@@ -186,6 +191,7 @@ def _collect(
     horizon_days: int,
     labels: pl.DataFrame,
     source=data,
+    train_before: date = VALID_FROM,
 ) -> tuple[pl.DataFrame, dict, dict]:
     from .domain.feedback import apply_labels, merge_stats
 
@@ -209,7 +215,7 @@ def _collect(
         labelled, part_stats, part_rows = apply_labels(labelled, chunk_labels, horizon_days)
         merge_stats(stats, part_stats)
         per_label.update(part_rows)
-        sampled = _sample_rows(labelled, neg_rate)
+        sampled = _sample_rows(labelled, neg_rate, train_before)
         parts.append(
             sampled.select(
                 "channel_id",
