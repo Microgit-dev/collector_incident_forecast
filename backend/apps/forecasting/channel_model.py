@@ -132,6 +132,7 @@ def build_dataset(
     horizon_days: int = 1,
     use_cache: bool = True,
     labels: pl.DataFrame | None = None,
+    source=None,
 ) -> tuple[pl.DataFrame, dict, dict]:
     """
     Выборка кешируется в artifacts/models: повторное обучение на тех же данных и той же разметке
@@ -141,16 +142,17 @@ def build_dataset(
     from .feedback import labels_fingerprint
 
     labels = labels if labels is not None else empty_labels()
+    source = data if source is None else source
     neg_rate = spec.neg_rate if neg_rate is None else neg_rate
     if not 0 < neg_rate <= 1:
         raise ValueError("Доля отрицательных примеров должна быть в интервале (0, 1]")
     # Конец выборки — последние полные сутки: одиночные сутки после них (тестовый прогон) дали бы
     # месяцы «пустых» дней без событий и завысили бы метрики
-    last = data.last_complete_day() or data.last_daily_day()
+    last = source.last_complete_day() or source.last_daily_day()
     if last is None:
         raise _not_enough({"train": 0, "valid": 0, "test": 0}, {"train": 0, "valid": 0})
     name = (
-        f"dataset_v{DATASET_VERSION}_{spec.task}_{last:%Y%m%d}_{neg_rate:g}"
+        f"dataset_v{DATASET_VERSION}_{getattr(source, 'cache_key', 'database')}_{spec.task}_{last:%Y%m%d}_{neg_rate:g}"
         f"_h{horizon_days}_{labels_fingerprint(labels)}"
     )
     cache = settings.ARTIFACTS_DIR / "models" / f"{name}.parquet"
@@ -159,35 +161,45 @@ def build_dataset(
         progress(1, "Выборка взята из кеша")
         saved = json.loads(stats_file.read_text(encoding="utf-8"))
         frame = pl.read_parquet(cache)
-        return _with_weather(frame, spec), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
-    frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels)
+        return (
+            _with_weather(frame, spec, source),
+            saved["stats"],
+            {int(k): v for k, v in saved["per_label"].items()},
+        )
+    frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels, source)
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
     stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
-    return _with_weather(frame, spec), stats, per_label
+    return _with_weather(frame, spec, source), stats, per_label
 
 
-def _with_weather(frame: pl.DataFrame, spec: TaskSpec) -> pl.DataFrame:
+def _with_weather(frame: pl.DataFrame, spec: TaskSpec, source=data) -> pl.DataFrame:
     """Погода — по дню, одна на все каналы: присоединяется после кеша, выборку не пересобирает."""
-    return F.add_weather(frame, data.load_weather()) if spec.uses_weather else frame
+    return F.add_weather(frame, source.load_weather()) if spec.uses_weather else frame
 
 
 def _collect(
-    spec: TaskSpec, progress: Progress, neg_rate: float, last: date, horizon_days: int, labels: pl.DataFrame
+    spec: TaskSpec,
+    progress: Progress,
+    neg_rate: float,
+    last: date,
+    horizon_days: int,
+    labels: pl.DataFrame,
+    source=data,
 ) -> tuple[pl.DataFrame, dict, dict]:
     from .domain.feedback import apply_labels, merge_stats
 
-    all_meta = data.load_meta()
+    all_meta = source.load_meta()
     meta = _task_meta(all_meta, spec)
-    excluded = data.excluded_range()
+    excluded = source.excluded_range()
     first = meta["first_day"].min()
-    nodes = data.load_node_daily()
+    nodes = source.load_node_daily()
     ids = sorted(meta.filter(pl.col("first_day").is_not_null())["channel_id"].to_list())
     chunks = [ids[i : i + CHUNK] for i in range(0, len(ids), CHUNK)]
     parts, stats, per_label = [], {}, {}
     for i, chunk in enumerate(chunks):
         progress(i / len(chunks), f"Признаки: каналы {i * CHUNK + 1}–{i * CHUNK + len(chunk)} из {len(ids)}")
-        daily = data.load_daily(first, last + timedelta(days=1), chunk)
+        daily = source.load_daily(first, last + timedelta(days=1), chunk)
         if daily.is_empty():
             continue
         grid = F.build_grid(daily, last, excluded)
@@ -347,6 +359,7 @@ def train(
     horizon_hours: int = HORIZON_HOURS,
     labels: pl.DataFrame | None = None,
     champion_artifact: str | None = None,
+    source=None,
 ) -> TrainResult:
     started = time.monotonic()
     if horizon_hours < 24 or horizon_hours % 24:
@@ -355,7 +368,7 @@ def train(
     params = PARAMS | spec.params
     neg_rate = spec.neg_rate if neg_rate is None else neg_rate
     dataset, fb_stats, per_label = build_dataset(
-        spec, lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels
+        spec, lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels, source=source
     )
     columns = matrix_columns(spec.features)
     parts = _split_dataset(dataset, horizon_days)
