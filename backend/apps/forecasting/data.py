@@ -39,7 +39,7 @@ SELECT channel_id,
        min(ts) FILTER (WHERE state = 'fault') AS first_fault_ts,
        max(ts) AS last_ts
 FROM telemetry_reading
-WHERE ts > %(start)s AND ts <= %(end)s
+WHERE ts >= %(start)s AND ts <= %(end)s
 GROUP BY channel_id
 """
 
@@ -108,9 +108,16 @@ def load_daily(since: date, until: date, channel_ids: list[int] | None = None) -
     return _normalize(frame)
 
 
-def load_window(end: datetime) -> pl.DataFrame:
-    """Последние 24 часа до end как суточная строка с day = end.date()."""
-    frame = _query(WINDOW_SQL, {"start": end - timedelta(hours=24), "end": end})
+def load_window(end: datetime, *, start: datetime | None = None) -> pl.DataFrame:
+    """Окно [start, end], по умолчанию последние 24 часа.
+
+    Прогноз передаёт начало календарных суток, чтобы не повторять события из суточной истории.
+    Data Health по-прежнему использует отдельное скользящее окно 24 ч.
+    Событие ровно в end уже известно: data_clock может вернуть время последнего сообщения.
+    """
+    frame = _query(
+        WINDOW_SQL, {"start": start if start is not None else end - timedelta(hours=24), "end": end}
+    )
     if frame.is_empty():
         return frame
     from zoneinfo import ZoneInfo

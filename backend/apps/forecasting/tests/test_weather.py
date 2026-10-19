@@ -16,13 +16,13 @@ def _weather():
     )
 
 
-def test_weather_features_rolling_melt_and_next_day():
+def test_weather_features_rolling_melt_without_future_observations():
     w = weather_features(_weather())
     # пропущенные сутки 04.03 достраиваются, а не «склеивают» соседние дни
     assert w["day"].to_list()[3] == date(2024, 3, 4)
     row = w.filter(pl.col("day") == date(2024, 3, 3)).row(0, named=True)
     assert row["wx_precip_3"] == 7.0 and row["wx_thaw_3"] == 8.0 and row["wx_precip_next"] is None
-    assert w.filter(pl.col("day") == date(2024, 3, 2))["wx_precip_next"][0] == 4.0
+    assert w["wx_precip_next"].null_count() == len(w)
     # таяние — убыль покрова за 3 суток, прирост снега таянием не считается
     assert w.filter(pl.col("day") == date(2024, 3, 5))["wx_melt_3"][0] == 18.0
 
@@ -31,3 +31,17 @@ def test_add_weather_joins_by_day_for_every_channel():
     frame = pl.DataFrame({"channel_id": [1, 2], "day": [date(2024, 3, 3), date(2024, 3, 3)]})
     out = add_weather(frame, _weather())
     assert out["wx_precip_1"].to_list() == [4.0, 4.0]
+
+
+def test_future_weather_does_not_change_past_features():
+    past = _weather().filter(pl.col("day") <= date(2024, 3, 2))
+    before = weather_features(past)
+    after = weather_features(_weather()).filter(pl.col("day") <= date(2024, 3, 2))
+    assert before.equals(after)
+
+
+def test_new_flood_models_do_not_use_legacy_future_weather_column():
+    from apps.forecasting.specs import FLOOD
+
+    assert FLOOD.uses_weather
+    assert "wx_precip_next" not in FLOOD.features

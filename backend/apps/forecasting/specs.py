@@ -93,7 +93,7 @@ FLOOD = TaskSpec(
     event_title="тревога затопления (насосы АНС, датчики затопления)",
     incident_type="flood",
     # Погода (осадки, оттепель, таяние снега) — внешний фактор подтоплений, ТЗ §13
-    features=[*F.FEATURES, *F.EXTRA_FEATURES, *F.WEATHER_FEATURES],
+    features=[*F.FEATURES, *F.EXTRA_FEATURES, *[f for f in F.WEATHER_FEATURES if f != "wx_precip_next"]],
     event=lambda: pl.col("alarms") > 0,
     healthy=lambda: pl.col("last_state") != "alarm",
     sensor_types=("Состояние насоса", "Датчик затопления"),

@@ -4,9 +4,8 @@
 
 Обучение — на суточной витрине за всю историю, валидация строго по времени:
 обучение до 2025 года, 2025 год — подбор порогов и ранняя остановка, 2026 год — отложенный тест.
-Отрицательных примеров в сотни раз больше, чем положительных, поэтому они прореживаются
-(детерминированно по хешу канал-сутки) с весом 1/доля: метрики и вероятности остаются
-несмещёнными относительно полной выборки.
+Отрицательные примеры прореживаются только в обучении (по хешу канал-сутки) с весом 1/доля.
+Валидация и тест сохраняются целиком; границы очищаются на весь горизонт будущих меток.
 """
 
 from __future__ import annotations
@@ -37,6 +36,7 @@ HORIZON_HOURS = 24
 HISTORY_DAYS = 100  # глубина истории для признаков при прогнозе (окна до 90 суток)
 CHUNK = 1500  # каналов за проход при сборке выборки — ограничивает пиковую память
 NEG_RATE = 0.05
+DATASET_VERSION = 2  # несовместим со старым sampling и его кешем
 VALID_FROM, TEST_FROM = date(2025, 1, 1), date(2026, 1, 1)
 # Меньше событий в обучающем или проверочном годе — модель и пороги уровней не из чего получить
 MIN_EVENTS = {"train": 20, "valid": 5}
@@ -86,8 +86,39 @@ def _noop(fraction: float, stage: str) -> None:
 
 def _keep_negative(frame: pl.DataFrame, rate: float) -> pl.Expr:
     """Все положительные, все размеченные диспетчерами и доля rate отрицательных (по хешу)."""
-    bucket = (pl.col("channel_id") * 1_000_003 + pl.col("day").dt.epoch("d")) % 1000
-    return pl.col("y") | pl.col("y_orig") | pl.col("fb") | (bucket < int(rate * 1000))
+    bucket = pl.struct("channel_id", "day").hash(seed=42).cast(pl.Float64) / float(2**64)
+    return pl.col("y") | pl.col("y_orig") | pl.col("fb") | (bucket < rate)
+
+
+def _sample_rows(frame: pl.DataFrame, rate: float, train_before: date = VALID_FROM) -> pl.DataFrame:
+    """Прореживание и веса — только train. Validation/test имеют единичный вес на строку."""
+    if not 0 < rate <= 1:
+        raise ValueError("Доля отрицательных примеров должна быть в интервале (0, 1]")
+    is_train = pl.col("day") < train_before
+    return (
+        frame.filter(~is_train | _keep_negative(frame, rate))
+        .with_columns(
+            pl.when(~is_train | pl.col("y_orig") | pl.col("fb"))
+            .then(1.0)
+            .otherwise(1 / rate)
+            .alias("weight_orig")
+        )
+        .with_columns(
+            pl.when(is_train).then(pl.col("weight_orig") * pl.col("fb_weight")).otherwise(1.0).alias("weight")
+        )
+    )
+
+
+def _split_dataset(dataset: pl.DataFrame, horizon_days: int) -> dict[str, pl.DataFrame]:
+    """Последний день целевого окна обязан оставаться внутри своей временной выборки."""
+    label_end = pl.col("day") + timedelta(days=horizon_days)
+    return {
+        "train": dataset.filter((pl.col("day") < VALID_FROM) & (label_end < VALID_FROM)),
+        "valid": dataset.filter(
+            (pl.col("day") >= VALID_FROM) & (pl.col("day") < TEST_FROM) & (label_end < TEST_FROM)
+        ),
+        "test": dataset.filter(pl.col("day") >= TEST_FROM),
+    }
 
 
 def _task_meta(meta: pl.DataFrame, spec: TaskSpec) -> pl.DataFrame:
@@ -101,6 +132,8 @@ def build_dataset(
     horizon_days: int = 1,
     use_cache: bool = True,
     labels: pl.DataFrame | None = None,
+    source=None,
+    train_before: date = VALID_FROM,
 ) -> tuple[pl.DataFrame, dict, dict]:
     """
     Выборка кешируется в artifacts/models: повторное обучение на тех же данных и той же разметке
@@ -110,48 +143,69 @@ def build_dataset(
     from .feedback import labels_fingerprint
 
     labels = labels if labels is not None else empty_labels()
-    neg_rate = neg_rate or spec.neg_rate
+    source = data if source is None else source
+    neg_rate = spec.neg_rate if neg_rate is None else neg_rate
+    if not 0 < neg_rate <= 1:
+        raise ValueError("Доля отрицательных примеров должна быть в интервале (0, 1]")
     # Конец выборки — последние полные сутки: одиночные сутки после них (тестовый прогон) дали бы
     # месяцы «пустых» дней без событий и завысили бы метрики
-    last = data.last_complete_day() or data.last_daily_day()
+    last = source.last_complete_day() or source.last_daily_day()
     if last is None:
         raise _not_enough({"train": 0, "valid": 0, "test": 0}, {"train": 0, "valid": 0})
-    name = f"dataset_{spec.task}_{last:%Y%m%d}_{neg_rate:g}_h{horizon_days}_{labels_fingerprint(labels)}"
+    name = (
+        f"dataset_v{DATASET_VERSION}_{getattr(source, 'cache_key', 'database')}_{spec.task}_{last:%Y%m%d}_{neg_rate:g}"
+        f"_h{horizon_days}_{labels_fingerprint(labels)}"
+    )
+    if train_before != VALID_FROM:
+        name += f"_train_before{train_before:%Y%m%d}"
     cache = settings.ARTIFACTS_DIR / "models" / f"{name}.parquet"
     stats_file = cache.with_suffix(".json")
     if use_cache and cache.exists() and stats_file.exists():
         progress(1, "Выборка взята из кеша")
         saved = json.loads(stats_file.read_text(encoding="utf-8"))
         frame = pl.read_parquet(cache)
-        return _with_weather(frame, spec), saved["stats"], {int(k): v for k, v in saved["per_label"].items()}
-    frame, stats, per_label = _collect(spec, progress, neg_rate, last, horizon_days, labels)
+        return (
+            _with_weather(frame, spec, source),
+            saved["stats"],
+            {int(k): v for k, v in saved["per_label"].items()},
+        )
+    frame, stats, per_label = _collect(
+        spec, progress, neg_rate, last, horizon_days, labels, source, train_before
+    )
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(cache)
     stats_file.write_text(json.dumps({"stats": stats, "per_label": per_label}), encoding="utf-8")
-    return _with_weather(frame, spec), stats, per_label
+    return _with_weather(frame, spec, source), stats, per_label
 
 
-def _with_weather(frame: pl.DataFrame, spec: TaskSpec) -> pl.DataFrame:
+def _with_weather(frame: pl.DataFrame, spec: TaskSpec, source=data) -> pl.DataFrame:
     """Погода — по дню, одна на все каналы: присоединяется после кеша, выборку не пересобирает."""
-    return F.add_weather(frame, data.load_weather()) if spec.uses_weather else frame
+    return F.add_weather(frame, source.load_weather()) if spec.uses_weather else frame
 
 
 def _collect(
-    spec: TaskSpec, progress: Progress, neg_rate: float, last: date, horizon_days: int, labels: pl.DataFrame
+    spec: TaskSpec,
+    progress: Progress,
+    neg_rate: float,
+    last: date,
+    horizon_days: int,
+    labels: pl.DataFrame,
+    source=data,
+    train_before: date = VALID_FROM,
 ) -> tuple[pl.DataFrame, dict, dict]:
     from .domain.feedback import apply_labels, merge_stats
 
-    all_meta = data.load_meta()
+    all_meta = source.load_meta()
     meta = _task_meta(all_meta, spec)
-    excluded = data.excluded_range()
+    excluded = source.excluded_range()
     first = meta["first_day"].min()
-    nodes = data.load_node_daily()
+    nodes = source.load_node_daily()
     ids = sorted(meta.filter(pl.col("first_day").is_not_null())["channel_id"].to_list())
     chunks = [ids[i : i + CHUNK] for i in range(0, len(ids), CHUNK)]
     parts, stats, per_label = [], {}, {}
     for i, chunk in enumerate(chunks):
         progress(i / len(chunks), f"Признаки: каналы {i * CHUNK + 1}–{i * CHUNK + len(chunk)} из {len(ids)}")
-        daily = data.load_daily(first, last + timedelta(days=1), chunk)
+        daily = source.load_daily(first, last + timedelta(days=1), chunk)
         if daily.is_empty():
             continue
         grid = F.build_grid(daily, last, excluded)
@@ -161,18 +215,7 @@ def _collect(
         labelled, part_stats, part_rows = apply_labels(labelled, chunk_labels, horizon_days)
         merge_stats(stats, part_stats)
         per_label.update(part_rows)
-        # Вес прореживания считается по исходной метке: строки, которые попали бы в выборку и без
-        # разметки, весят так же; размеченные дополнительно умножаются на вес правила
-        sampled = (
-            labelled.filter(_keep_negative(labelled, neg_rate))
-            .with_columns(
-                pl.when(pl.col("y_orig") | pl.col("fb"))
-                .then(1.0)
-                .otherwise(1 / neg_rate)
-                .alias("weight_orig")
-            )
-            .with_columns((pl.col("weight_orig") * pl.col("fb_weight")).alias("weight"))
-        )
+        sampled = _sample_rows(labelled, neg_rate, train_before)
         parts.append(
             sampled.select(
                 "channel_id",
@@ -224,9 +267,12 @@ def pick_threshold(y: np.ndarray, p: np.ndarray, w: np.ndarray, precision: float
     ys, ws, ps = y[order], w[order], p[order]
     tp = np.cumsum(ws * ys)
     predicted = np.cumsum(ws)
-    prec = tp / predicted
-    ok = np.where(prec >= precision)[0]
-    ok = ok[ok >= 20]  # не меньше 20 срабатываний, иначе порог случаен
+    if not len(p):
+        return None
+    prec = np.divide(tp, predicted, out=np.zeros_like(tp, dtype=float), where=predicted > 0)
+    # p >= threshold включает всю группу одинаковых score, а не произвольный префикс группы.
+    group_end = np.r_[ps[:-1] != ps[1:], True]
+    ok = np.flatnonzero(group_end & (prec >= precision) & (np.arange(len(p)) >= 19))
     return float(ps[ok.max()]) if len(ok) else None
 
 
@@ -243,6 +289,9 @@ def evaluate(y, p, w, threshold: float, frame: pl.DataFrame | None = None) -> di
         "roc_auc": round(float(roc_auc_score(y, p, sample_weight=w)), 3),
         "base_rate": round(float((w * y).sum() / w.sum()), 5),
         "alerts_per_day": None,
+        "sample_unit": "channel_day",
+        "positive_channel_days": int(y.sum()),
+        # Legacy API name: this is a count of positive rows, not distinct telemetry episodes.
         "onsets": int(y.sum()),
     }
     if frame is not None:
@@ -319,21 +368,20 @@ def train(
     horizon_hours: int = HORIZON_HOURS,
     labels: pl.DataFrame | None = None,
     champion_artifact: str | None = None,
+    source=None,
 ) -> TrainResult:
     started = time.monotonic()
-    horizon_days = max(1, horizon_hours // 24)
+    if horizon_hours < 24 or horizon_hours % 24:
+        raise ValueError("Горизонт прогноза должен быть положительным числом суток (кратно 24 ч)")
+    horizon_days = horizon_hours // 24
     params = PARAMS | spec.params
-    neg_rate = neg_rate or spec.neg_rate
+    neg_rate = spec.neg_rate if neg_rate is None else neg_rate
     dataset, fb_stats, per_label = build_dataset(
-        spec, lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels
+        spec, lambda f, s: progress(f * 0.6, s), neg_rate, horizon_days, labels=labels, source=source
     )
-    sensor_types = sorted(dataset["sensor_type"].unique().to_list())
     columns = matrix_columns(spec.features)
-    parts = {
-        "train": dataset.filter(pl.col("day") < VALID_FROM),
-        "valid": dataset.filter(pl.col("day").is_between(VALID_FROM, TEST_FROM, closed="left")),
-        "test": dataset.filter(pl.col("day") >= TEST_FROM),
-    }
+    parts = _split_dataset(dataset, horizon_days)
+    sensor_types = sorted(parts["train"]["sensor_type"].unique().to_list())
     events = {k: int(v["y"].sum()) for k, v in parts.items()}
     if any(events[k] < n for k, n in MIN_EVENTS.items()) or parts["test"].is_empty():
         raise _not_enough({k: len(v) for k, v in parts.items()}, events)
@@ -350,10 +398,9 @@ def train(
     # Порог уровня — наименьший, при котором точность на 2025 годе не ниже заданной
     found = {k: pick_threshold(yv, scores["valid"], wv, prec) for k, prec in spec.level_precision.items()}
     fallback = float(np.quantile(scores["valid"], 0.999))
-    levels = {"medium": found["medium"] or fallback / 4}
-    levels["high"] = max(found["high"] or fallback / 2, levels["medium"])
-    levels["critical"] = max(found["critical"] or fallback, levels["high"])
-    levels = {k: round(v, 4) for k, v in levels.items()}
+    levels = {"medium": found["medium"] if found["medium"] is not None else fallback / 4}
+    levels["high"] = max(found["high"] if found["high"] is not None else fallback / 2, levels["medium"])
+    levels["critical"] = max(found["critical"] if found["critical"] is not None else fallback, levels["high"])
     high = levels["high"]
     target_met = found["critical"] is not None
 
@@ -368,7 +415,8 @@ def train(
             by_type[stype] = {
                 "precision": round(p, 3),
                 "recall": round(r, 3),
-                "onsets": int(xy["test"][1][mask].sum()),
+                "positive_channel_days": int(xy["test"][1][mask].sum()),
+                "onsets": int(xy["test"][1][mask].sum()),  # legacy alias, same unit as evaluate()
             }
 
     metrics = {
@@ -399,6 +447,16 @@ def train(
         "rows": {k: len(v) for k, v in parts.items()},
         "channels": int(dataset["channel_id"].n_unique()),
         "negative_sampling": neg_rate,
+        "evaluation_protocol": {
+            "sample_unit": "channel_day",
+            "positive_count_field": "positive_channel_days",
+            "legacy_onsets_field": "alias_for_positive_channel_days_not_episode_onsets",
+            "dataset_version": DATASET_VERSION,
+            "negative_sampling": "train_only",
+            "validation_test": "full_population_unit_weights",
+            "purged_horizon_days": horizon_days,
+            "future_weather": "disabled_without_forecast_archive",
+        },
         "best_iteration": booster.best_iteration,
         "train_seconds": round(time.monotonic() - started),
     }
@@ -429,9 +487,7 @@ def train(
         encoding="utf-8",
     )
     period = {
-        "train": [str(parts["train"]["day"].min()), str(VALID_FROM - timedelta(days=1))],
-        "valid": [str(VALID_FROM), str(TEST_FROM - timedelta(days=1))],
-        "test": [str(TEST_FROM), str(test["day"].max())],
+        **{k: [str(v["day"].min()), str(v["day"].max())] for k, v in parts.items()},
         "excluded": "2021 — переход на новую систему мониторинга",
     }
     progress(1, "Модель обучена")
@@ -491,7 +547,11 @@ def _load(artifact: str):
 def inference_features(
     as_of: datetime, node_ids: list[int] | None = None, spec: TaskSpec = SENSOR_FAILURE
 ) -> pl.DataFrame:
-    """Признаки на момент as_of: суточная витрина до вчера + скользящие последние 24 часа."""
+    """Завершённые календарные сутки + непересекающаяся часть текущих суток до as_of.
+
+    В полночь до первого события нового дня признаки совпадают со снимком на конец прошлых суток.
+    Внутридневной снимок содержит неполные сутки; его качество требует отдельного replay.
+    """
     all_meta = data.load_meta()
     meta = _task_meta(all_meta, spec)
     if node_ids:
@@ -499,9 +559,10 @@ def inference_features(
     if meta.is_empty():
         return pl.DataFrame()
     today = as_of.astimezone(MSK).date()
+    midnight = datetime.combine(today, datetime.min.time(), tzinfo=MSK)
     restrict = meta["channel_id"].to_list() if (node_ids or spec.sensor_types) else None
     history = data.load_daily(today - timedelta(days=HISTORY_DAYS), today, restrict)
-    window_all = data.load_window(as_of)
+    window_all = data.load_window(as_of, start=midnight)
     window = window_all
     if not window.is_empty():
         window = window.with_columns(pl.lit(today).alias("day")).select(
@@ -515,7 +576,7 @@ def inference_features(
     )
     if daily.is_empty():
         return pl.DataFrame()
-    end_day = today if not window.is_empty() else today - timedelta(days=1)
+    end_day = today if as_of > midnight or not window.is_empty() else today - timedelta(days=1)
     grid = F.build_grid(daily, end_day, data.excluded_range())
     # Каскадные признаки объекта — по всем его каналам, как при обучении, а не только по каналам задачи
     nodes = data.load_node_daily(today - timedelta(days=HISTORY_DAYS), today)
@@ -527,7 +588,11 @@ def inference_features(
     nodes = nodes.with_columns(pl.col("node_faults").cast(pl.Int32), pl.col("node_power").cast(pl.Int32))
     feats = F.compute_features(grid, nodes, meta)
     feats = feats.filter((pl.col("day") == end_day) & spec.healthy().fill_null(True))
-    return F.add_weather(feats, data.load_weather()) if spec.uses_weather else feats
+    if spec.uses_weather:
+        # Суточный факт текущего дня ещё не доступен, даже если он уже есть в БД при бэктесте.
+        weather = data.load_weather().filter(pl.col("day") < today)
+        feats = F.add_weather(feats, weather)
+    return feats
 
 
 class ChannelForecaster:
