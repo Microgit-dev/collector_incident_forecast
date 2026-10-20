@@ -52,6 +52,7 @@ class Context:
 
     local_time: datetime
     works_in_progress: int = 0  # заявки «в работе» на объекте
+    hot_works: int = 0  # из них хозработы со сваркой или резкой — дым и тепло от них ждать
     node_channels: int = 0  # всего каналов на объекте
 
 
@@ -280,9 +281,15 @@ def _physical(incident_type: str, signals: list[Signal], ctx: Context) -> list[H
     if ctx.works_in_progress or (_work_time(ctx) and incident_type in {"intrusion", "fire"}):
         title = {
             "intrusion": "Санкционированный доступ (наряд-допуск, бригада)",
-            "fire": "ППР: плановая проверка извещателей" if ppr else "Огневые или пыльные работы на объекте",
+            "fire": "ППР: плановая проверка извещателей"
+            if ppr
+            else "Сварка или резка по заявке на хозработы"
+            if ctx.hot_works
+            else "Огневые работы (сварка, резка) или пыльные работы на объекте",
         }.get(incident_type, "Работы на объекте")
         ev = []
+        if incident_type == "fire" and ctx.hot_works and not ppr:
+            ev.append(f"В работе заявки на хозработы со сваркой или резкой: {ctx.hot_works}")
         if ppr:
             ev.append(
                 f"Сработали {n} извещателей за 10 минут в рабочее время — так идёт проверка по графику ППР"
@@ -291,6 +298,9 @@ def _physical(incident_type: str, signals: list[Signal], ctx: Context) -> list[H
             ev.append(f"На объекте заявок в работе: {ctx.works_in_progress}")
         if _work_time(ctx):
             ev.append("Рабочее время")
-        result.append(Hypothesis("works", title, 0.2 + 0.7 * bool(ctx.works_in_progress) + 1.3 * ppr, ev))
+        # сварка по заявке даёт дым и тепло у одного-двух извещателей — это ожидаемо, а не пожар
+        hot = incident_type == "fire" and bool(ctx.hot_works)
+        weight = 0.2 + 0.7 * bool(ctx.works_in_progress) + 1.3 * ppr + 0.6 * hot
+        result.append(Hypothesis("works", title, weight, ev))
 
     return _normalize(result)

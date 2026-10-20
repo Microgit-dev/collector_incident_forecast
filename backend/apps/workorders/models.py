@@ -15,6 +15,7 @@ class WorkType(models.TextChoices):
     VENTILATION = "ventilation", "Обслуживание вентиляции"
     CLEANING = "cleaning", "Очистка / откачка"
     SECURITY = "security", "Проверка охраны периметра"
+    HOT_WORKS = "hot_works", "Хозработы: сварка, резка"
 
 
 class MaintenanceRecommendation(TimeStampedModel):

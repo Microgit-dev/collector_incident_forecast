@@ -215,3 +215,15 @@ def test_ppr_burst_in_work_hours_is_planned_check_not_fire():
     # та же серия ночью — пожар, а не проверка
     night = [Signal(channel_id=s.channel_id, state="alarm", ts=NIGHT + (s.ts - day)) for s in burst]
     assert hypotheses("fire", night, Context(local_time=NIGHT))[0].code == "fire"
+
+
+def test_single_smoke_during_welding_order_points_to_hot_works():
+    """Хозработы со сваркой по заявке: дым у одного извещателя — сварка, даже вечером."""
+    evening = datetime(2026, 6, 30, 16, 0, tzinfo=UTC)
+    smoke = [Signal(channel_id=1, state="alarm", ts=evening)]
+    ranked = hypotheses("fire", smoke, Context(local_time=evening, works_in_progress=1, hot_works=1))
+    assert ranked[0].code == "works" and ranked[0].title.startswith("Сварка")
+    assert any("сваркой" in e for e in ranked[0].evidence)
+    # без заявки на сварку тот же сигнал — не сварка
+    plain = hypotheses("fire", smoke, Context(local_time=evening))
+    assert all(not h.title.startswith("Сварка") for h in plain)

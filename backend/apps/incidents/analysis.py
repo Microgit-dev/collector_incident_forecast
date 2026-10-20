@@ -73,15 +73,14 @@ def _signals(incident) -> list[Signal]:
 
 def _context(incident) -> Context:
     from apps.assets.models import Channel
-    from apps.workorders.models import WorkOrder
+    from apps.workorders.models import WorkOrder, WorkType
 
     node = incident.node
-    works = WorkOrder.objects.filter(
-        node__path__startswith=node.path, status=WorkOrder.Status.IN_PROGRESS
-    ).count()
+    works = WorkOrder.objects.filter(node__path__startswith=node.path, status=WorkOrder.Status.IN_PROGRESS)
     return Context(
         local_time=(incident.first_signal_at or incident.opened_at).astimezone(MSK),
-        works_in_progress=works,
+        works_in_progress=works.count(),
+        hot_works=works.filter(work_type=WorkType.HOT_WORKS).count(),
         node_channels=Channel.objects.filter(node=node, is_active=True).count(),
     )
 

@@ -329,7 +329,7 @@ def fill_mandatory(prs):
         "Эксплуатации: ТО по состоянию, графики в формах заказчика",
         "Внедрению: одна команда, закрытый контур",
         "Тиражированию: новый район и датчики без кода",
-        "Эффект: ≈ 9,6 млн ₽ в год на район",
+        f"Эффект: ≈ {_mln(sum(v for _, v, _ in economics()))} млн ₽ в год на район",
     ])
 
 
@@ -599,44 +599,97 @@ def slide_ml(prs):
     ], size=13)
 
 
+def _pair_bars(s, x, y, w, caption, model, rule, scale=100):
+    """Модель против правила на одной шкале: подпись значения — сразу у столбца."""
+    text(s, x, y, w, 0.75, [caption], size=13.5, bold=True, color=INK)
+    track = w - 3.8
+    for k, (name, value, color) in enumerate([("модель", model, PINK), ("правило", rule, LAVENDER)]):
+        by = y + 0.75 + k * 0.72
+        text(s, x, by - 0.05, 2.2, 0.7, [name], size=12, color=GREY, anchor=MSO_ANCHOR.MIDDLE)
+        rect(s, x + 2.2, by + 0.1, track, 0.45, fill=LANE, radius=0.5)
+        bw = max(track * value / scale, 0.25)
+        rect(s, x + 2.2, by + 0.1, bw, 0.45, fill=color, radius=0.5)
+        text(s, x + 2.3 + bw, by - 0.08, 1.6, 0.7, [f"{value}"], size=14, bold=True, color=INK,
+             anchor=MSO_ANCHOR.MIDDLE)
+
+
+# Тест 2026 года по исправленному протоколу (валидация и тест целиком, без утечки через границы выборок):
+# уровень «высокий», горизонт 24 ч; правило — «был сбой / уровень / тревога за последние 7 суток».
+# В сутки у правила = событий в сутки × полнота / точность (180 суток теста).
+RESULTS = {
+    "sensor_failure": {
+        "title": "Отказ датчика", "horizon": "за сутки вперёд, 10,5 тыс. каналов",
+        "precision": 40, "rule_precision": 10, "recall": 3, "rule_recall": 45, "per_day": 5, "rule_per_day": 325,
+        "alerts": 5, "one_in": "2", "lead": 11,
+        "plain": ["5 каналов в сутки — 2 откажут, в среднем через 11 ч. У правила 325: смена их не проверит"],
+    },
+    "gas": {
+        "title": "Метан ≥ 1 %", "horizon": "за сутки вперёд, газовые датчики",
+        "precision": 8, "rule_precision": 7, "recall": 73, "rule_recall": 39, "per_day": 18, "rule_per_day": 12,
+        "plain": ["О 73 превышениях из 100 смена знает за сутки — почти вдвое больше, чем по правилу"],
+    },
+    "flood": {
+        "title": "Подтопление", "horizon": "за сутки вперёд, датчики и насосы",
+        "precision": 19, "rule_precision": 12, "recall": 30, "rule_recall": 53, "per_day": 11, "rule_per_day": 32,
+        "plain": ["11 предупреждений в сутки вместо 32: сбывается каждое 5-е, у правила — каждое 9-е"],
+    },
+}
+
+
 def slide_results(prs):
     s = new_slide(prs)
     header(s, "Результаты: тест 2026 года")
+    text(s, 1.0, 2.75, 31.8, 0.9, [
+        "Учили на 2019–2024, пороги — на 2025, проверяли на январе–июне 2026: этих данных модель не видела"],
+        size=14, color=WHITE)
+    for i, task in enumerate(("sensor_failure", "gas", "flood")):
+        r = RESULTS[task]
+        x, w = 1.0 + i * 10.75, 10.3
+        rect(s, x, 3.9, w, 11.2, fill=WHITE, radius=0.05)
+        text(s, x + 0.45, 4.15, w - 0.9, 0.9, [r["title"]], size=19, bold=True, color=PURPLE)
+        text(s, x + 0.45, 5.0, w - 0.9, 0.7, [r["horizon"]], size=13, color=GREY)
+        _pair_bars(s, x + 0.45, 5.75, w - 0.9, "Сбылось из 100 предупреждений", r["precision"], r["rule_precision"])
+        _pair_bars(s, x + 0.45, 8.05, w - 0.9, "Предупредили о событиях из 100", r["recall"], r["rule_recall"])
+        _pair_bars(s, x + 0.45, 10.35, w - 0.9, "Предупреждений в сутки", r["per_day"],
+                   r["rule_per_day"], scale=max(r["per_day"], r["rule_per_day"]))
+        rect(s, x + 0.45, 12.75, w - 0.9, 2.2, fill=PINK_LIGHT, radius=0.08)
+        text(s, x + 0.7, 12.8, w - 1.4, 2.1, r["plain"], size=13, color=INK, anchor=MSO_ANCHOR.MIDDLE)
+    rect(s, 1.0, 15.5, 31.8, 2.7, fill=DARK, radius=0.06)
+    text(s, 1.5, 15.65, 30.8, 2.5, [
+        ("Как читать", {"bold": True, "color": PINK, "size": 15}),
+        "«Сбылось» — сколько предупреждений из 100 подтвердились (точность). «Предупредили» — о скольких событиях "
+        "из 100 система сказала заранее (полнота). «Правило» — как проверяют сейчас: «был сбой, тревога или "
+        "метан ≥ 0,5 % за неделю — проверить».",
+    ], size=13, color=WHITE)
+
+
+def slide_support(prs):
+    s = new_slide(prs)
+    header(s, "Поддержка и развитие: что если…")
     rows = [
-        ["Задача", "ROC-AUC", "PR-AUC (случайная)", "Высокий: точность / полнота", "Правило: точность / полнота"],
-        ["Отказ датчика, 24 ч", "0,90", "0,112 (0,006)", "0,21 / 0,09 · 32 в сутки", "0,10 / 0,45"],
-        ["Метан ≥ 1 %, 24 ч", "0,94", "0,188 (0,004)", "0,08 / 0,74 · 20 в сутки", "0,07 / 0,39"],
-        ["Подтопление, 24 ч", "0,82", "0,179 (0,040)", "0,15 / 0,46 · 21 в сутки", "0,13 / 0,54"],
+        ("Упал сервер или весь ЦОД", "Резервный сервер: образы, .env и последняя копия базы → одна команда запуска. "
+         "Модели внутри образа — прогноз работает сразу", "≤ 4 ч"),
+        ("Пока системы не было, шли события", "Поток Kafka дочитывается с места остановки, повторы отсекаются; "
+         "пробел закрывается загрузкой журнала СМВУ", "без дублей"),
+        ("Обновление сломало работу", "Откат на прошлую версию образов одной командой; база — из копии, "
+         "сделанной перед обновлением", "≈ 1 мин"),
+        ("Новая модель хуже прежней", "Переобучение раз в неделю: претендент заменяет чемпиона, только если лучше "
+         "на проверочном годе; откат версии — кнопкой", "0 простоя"),
+        ("Новый датчик, формат или район", "Конструктор датчиков, справочники и зоны — в интерфейсе, без релиза "
+         "и без программиста", "без кода"),
+        ("Сменилась команда поддержки", "Независимые модули, 242 автотеста, 120 страниц документации, "
+         "Grafana и оповещения Prometheus", "передаётся"),
     ]
-    tbl = s.shapes.add_table(len(rows), len(rows[0]), Cm(1.0), Cm(3.3), Cm(31.8), Cm(5.2)).table
-    widths = [7.0, 3.6, 5.6, 8.0, 7.6]
-    for i, w in enumerate(widths):
-        tbl.columns[i].width = Cm(w)
-    for r, row in enumerate(rows):
-        for c, val in enumerate(row):
-            cell = tbl.cell(r, c)
-            cell.text = val
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = PURPLE if r == 0 else (WHITE if r % 2 else LANE)
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    _font(run, 11, r == 0, WHITE if r == 0 else INK)
-    stats = [
-        ("×33", "точнее случайного выбора"),
-        ("74 %", "превышений метана ловит модель (правило — 39 %)"),
-        ("12 ч", "упреждение прогноза отказа"),
-        ("×42", "сжатие потока тревог"),
-    ]
-    for i, (big, small) in enumerate(stats):
-        x = 1.0 + i * 8.0
-        rect(s, x, 9.3, 7.6, 4.2, fill=WHITE, radius=0.06)
-        text(s, x + 0.4, 9.6, 6.8, 1.5, [big], size=28, bold=True, color=PINK)
-        text(s, x + 0.4, 11.2, 6.8, 2.2, [small], size=12.5, color=INK)
-    rect(s, 1.0, 14.2, 31.8, 3.0, fill=DARK, radius=0.06)
-    text(s, 1.5, 14.5, 30.8, 2.5, [
-        ("Уровни риска выбраны по точности", {"bold": True, "color": PINK, "size": 13}),
-        ("«Критический» — немедленная реакция, «высокий» — плановая проверка", {"color": WHITE}),
-    ], size=12)
+    rh = 2.45
+    for i, (what, how, big) in enumerate(rows):
+        y = 3.1 + i * rh
+        rect(s, 1.0, y, 31.8, rh - 0.25, fill=WHITE, radius=0.08)
+        text(s, 1.5, y, 8.6, rh - 0.25, [what], size=15, bold=True, color=PURPLE, anchor=MSO_ANCHOR.MIDDLE)
+        text(s, 10.3, y, 16.4, rh - 0.25, [how], size=13.5, color=INK, anchor=MSO_ANCHOR.MIDDLE)
+        pill = rect(s, 27.2, y + 0.45, 5.2, rh - 1.15, fill=PINK if i == 0 else PINK_LIGHT, radius=0.4)
+        label(pill, [big], size=15, bold=True, color=WHITE if i == 0 else PURPLE)
+    text(s, 1.0, 17.9, 31.8, 0.8, ["Проверено на стенде: полная копия базы — 18 с, восстановление в чистую базу — 14 с"],
+         size=12, color=WHITE)
 
 
 def slide_fire(prs):
@@ -703,24 +756,102 @@ def slide_accidents(prs):
     text(s, 26.0, 15.6, 6.4, 2.0, ["Потеря связи или питания — инцидент"], size=10.5, color=GREY)
 
 
+# Сверка с графиком ТО и ТР заказчика на 2026 год (docs/maintenance.md): генератор на том же составе
+# оборудования — 24 объекта, 140 строк «объект × вид оборудования»
+SCHEDULE = {
+    "months": ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"],
+    "customer": [55, 41, 35, 62, 47, 33, 55, 42, 36, 62, 47, 33],
+    "system": [46, 47, 45, 46, 47, 44, 46, 47, 45, 46, 47, 44],
+    "rows": 140,
+    "same_visits": 127,
+    "same_repairs": 138,
+    "same_months": 38,
+    "examples": [
+        ("Объект 1 · МОД, 55 шт.", [2, 5, 8, 11], [2, 5, 8, 11]),
+        ("Объект 2 · газоанализаторы, 56 шт.", [1, 3, 5, 7, 9, 11], [2, 4, 6, 8, 10, 12]),
+    ],
+}
+CUSTOMER_GREY = RGBColor(0xB4, 0xAF, 0xE0)
+
+
+def _month_bars(s, x, y, w, h, series, colors, names):
+    """Сгруппированные столбцы по месяцам: общий ноль, одна шкала, подписи — у пиков."""
+    rect(s, x, y, w, h, fill=WHITE, radius=0.04)
+    top = max(max(v) for v in series)
+    plot_x, plot_y, plot_w, plot_h = x + 0.6, y + 2.0, w - 1.2, h - 3.4
+    base = plot_y + plot_h
+    # легенда
+    lx = x + 0.6
+    for name, color in zip(names, colors):
+        rect(s, lx, y + 0.65, 0.5, 0.5, fill=color, radius=0.15)
+        text(s, lx + 0.65, y + 0.45, 6.5, 0.9, [name], size=14, bold=True, color=INK)
+        lx += 7.6
+    slot = plot_w / 12
+    bar_w = slot * 0.36
+    for m in range(12):
+        for k, (values, color) in enumerate(zip(series, colors)):
+            v = values[m]
+            bh = plot_h * v / top
+            bx = plot_x + m * slot + slot * 0.12 + k * (bar_w + 0.06)
+            rect(s, bx, base - bh, bar_w, bh, fill=color, radius=0.12)
+            if k == 0 and v == max(values):
+                text(s, bx - 0.5, base - bh - 0.75, bar_w + 1.0, 0.7, [str(v)], size=13, bold=True,
+                     color=INK, align=PP_ALIGN.CENTER)
+        text(s, plot_x + m * slot, base + 0.1, slot, 0.7, [SCHEDULE["months"][m]], size=12, color=GREY,
+             align=PP_ALIGN.CENTER)
+    line = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Cm(plot_x), Cm(base), Cm(plot_x + plot_w), Cm(base))
+    line.line.color.rgb = GREY
+    line.line.width = Pt(0.75)
+
+
+def _month_strip(s, x, y, cell, marks, color, caption, months=False):
+    if months:
+        for m in range(12):
+            text(s, x + 3.0 + m * (cell + 0.08) - 0.2, y - 0.6, cell + 0.4, 0.55, [SCHEDULE["months"][m][0].upper()],
+                 size=10, color=GREY, align=PP_ALIGN.CENTER)
+    text(s, x, y, 3.0, cell, [caption], size=13, bold=True, color=PURPLE, anchor=MSO_ANCHOR.MIDDLE)
+    for m in range(12):
+        filled = (m + 1) in marks
+        rect(s, x + 3.0 + m * (cell + 0.08), y, cell, cell, fill=color if filled else LANE, radius=0.15)
+
+
 def slide_maintenance(prs):
     s = new_slide(prs)
-    header(s, "Инженер ТО: графики")
-    picture(s, IMG / "schedules.png", 1.2, 3.4, w=19.0)
-    stats = [("91 %", "совпадение периодичности с графиком заказчика"), ("47 / 62", "пик работ в месяц: система / заказчик")]
-    for i, (big, small) in enumerate(stats):
-        y = 3.2 + i * 4.3
-        rect(s, 21.0, y, 11.8, 3.9, fill=WHITE, radius=0.06)
-        text(s, 21.4, y + 0.3, 11.0, 1.5, [big], size=28, bold=True, color=PINK)
-        text(s, 21.4, y + 1.9, 11.0, 1.8, [small], size=12.5, color=INK)
-    steps = ["Регламент", "График", "Утверждение", "Заявки"]
-    prev = None
-    for i, t in enumerate(steps):
-        b = rect(s, 21.0, 12.0 + i * 1.5, 11.8, 1.2, fill=PINK if i == 0 else WHITE, radius=0.3)
-        label(b, [t], size=12, bold=True, color=WHITE if i == 0 else PURPLE)
-        if prev:
-            arrow(s, prev, b, "bottom", "top", elbow=False, color=WHITE, width=1.5)
-        prev = b
+    header(s, "Графики ТО: сверка с заказчиком")
+    sc = SCHEDULE
+    text(s, 1.0, 2.75, 31.8, 0.9, [
+        "Система построила график ТО и ТР 2026 года на том же оборудовании, что у заказчика: 24 объекта, 140 строк"],
+        size=14, color=WHITE)
+    _month_bars(s, 1.0, 3.9, 20.0, 8.2, [sc["customer"], sc["system"]], [CUSTOMER_GREY, PINK],
+                ["График заказчика", "График системы"])
+    text(s, 1.6, 11.25, 19.0, 0.8, ["Работ в месяц: у заказчика пики в апреле и октябре, у системы 44–47"],
+         size=13, color=GREY)
+    facts = [
+        (f"{sc['same_visits']} из {sc['rows']}", "строк: столько же ТО в год, сколько у заказчика — это и есть 91 %"),
+        ("548 → 550", "работ за год: заказчик → система, объём тот же"),
+        ("62 → 47", "работ в самый загруженный месяц: бригады без авралов"),
+    ]
+    for i, (big, small) in enumerate(facts):
+        y = 3.9 + i * 2.8
+        rect(s, 21.6, y, 11.2, 2.5, fill=WHITE, radius=0.08)
+        text(s, 22.0, y + 0.2, 10.4, 1.1, [big], size=24, bold=True, color=PINK)
+        text(s, 22.0, y + 1.25, 10.4, 1.2, [small], size=13, color=INK)
+    # что именно совпадает — на двух строках графика
+    rect(s, 1.0, 12.6, 31.8, 5.6, fill=WHITE, radius=0.04)
+    text(s, 1.5, 12.8, 31.0, 0.9, ["Как сравнивали: одна строка графика — 12 месяцев"], size=15, bold=True,
+         color=PURPLE)
+    cell = 0.62
+    for i, (name, theirs, ours) in enumerate(sc["examples"]):
+        x = 1.5 + i * 15.9
+        text(s, x, 13.6, 15.0, 0.8, [name], size=13, bold=True, color=INK)
+        _month_strip(s, x, 14.75, cell, theirs, CUSTOMER_GREY, "Заказчик", months=True)
+        _month_strip(s, x, 15.5, cell, ours, PINK, "Система")
+        verdict = "4 ТО в те же месяцы — полное совпадение" if theirs == ours else \
+            "6 ТО — совпало; месяцы сдвинуты, чтобы срезать пик"
+        text(s, x, 16.25, 15.0, 0.8, [verdict], size=13, color=GREY)
+    text(s, 1.5, 17.2, 31.0, 0.8, [
+        "Не совпало 13 строк: блоки питания и газоанализаторы — у заказчика на разных объектах 4 или 6 ТО в год"],
+        size=12, color=GREY)
 
 
 def slide_constructor(prs):
@@ -849,7 +980,7 @@ def slide_training(prs):
     s = new_slide(prs)
     header(s, "Учебный контур и учения")
     picture(s, IMG / "exercise.png", 1.2, 3.4, w=19.0)
-    steps = [("Руководитель", "выбирает сценарий"), ("Симулятор", "11 сценариев, 6 готовых"),
+    steps = [("Руководитель", "выбирает сценарий"), ("Симулятор", "12 сценариев, 7 готовых"),
              ("Полигон", "настоящие карточки"), ("Смена", "реагирует как в жизни"), ("Разбор", "норматив, решения")]
     prev = None
     for i, (t, d) in enumerate(steps):
@@ -892,21 +1023,33 @@ def slide_tz(prs):
 def slide_business(prs):
     s = new_slide(prs)
     header(s, "Эффект для эксплуатации")
-    items = [
-        ("Меньше ложных выездов", "причина видна до выезда"),
-        ("Раньше о рисках", "прогноз на сутки"),
-        ("ТО по состоянию", "ровная загрузка бригад"),
-        ("Прозрачная смена", "нормативы и показатели"),
-        ("Быстрое внедрение", "одна команда развёртывания"),
-        ("Масштабирование", "новый район без кода"),
+    m = RESULTS
+    fail = m["sensor_failure"]
+    rows = [
+        ("Тревоги", "≈ 3 000 сигналов в сутки, каждый смотрит диспетчер",
+         "≈ 70 карточек в сутки, у каждой — причина и приоритет", "в 42 раза меньше"),
+        ("Выезды", "«на всякий случай» — причину узнают на месте",
+         "до выезда видно: связь, питание, ППР, сварка, работы", f"−{economics_trips()} в год"),
+        ("Отказы датчиков", "узнаём, когда датчик уже отказал",
+         f"список на сутки: {fail['alerts']} каналов, {fail['one_in']} из них откажут", f"за ≈ {fail['lead']} ч"),
+        ("Метан ≥ 1 %", "замечаем по факту превышения",
+         f"за сутки знаем о {m['gas']['recall']} превышениях из 100, правило — о {m['gas']['rule_recall']}",
+         "вдвое больше"),
+        ("ТО", "пики: 62 работы в апреле и октябре",
+         "44–47 работ каждый месяц, тот же объём за год", "без авралов"),
     ]
-    for i, (t, d) in enumerate(items):
-        col, row = i % 3, i // 3
-        x, y = 1.0 + col * 10.7, 3.3 + row * 7.3
-        rect(s, x, y, 10.2, 6.8, fill=WHITE, radius=0.06)
-        text(s, x + 0.5, y + 0.4, 9.2, 1.0, [f"0{i + 1}"], size=22, bold=True, color=PINK)
-        text(s, x + 0.5, y + 2.0, 9.2, 1.2, [t], size=16, bold=True, color=PURPLE)
-        text(s, x + 0.5, y + 3.5, 9.2, 2.8, [d], size=14, color=INK)
+    y0, rh = 3.2, 2.95
+    text(s, 7.0, y0 - 0.05, 10.0, 0.8, ["Было"], size=15, bold=True, color=WHITE)
+    text(s, 17.0, y0 - 0.05, 10.0, 0.8, ["Стало с системой"], size=15, bold=True, color=PINK)
+    for i, (what, before, after, big) in enumerate(rows):
+        y = y0 + 0.85 + i * rh
+        rect(s, 1.0, y, 31.8, rh - 0.3, fill=WHITE, radius=0.08)
+        text(s, 1.5, y, 5.4, rh - 0.3, [what], size=16, bold=True, color=PURPLE, anchor=MSO_ANCHOR.MIDDLE)
+        text(s, 7.0, y, 9.4, rh - 0.3, [before], size=14, color=GREY, anchor=MSO_ANCHOR.MIDDLE)
+        rect(s, 16.5, y + 0.95, 0.5, 0.75, fill=PINK, shape=MSO_SHAPE.CHEVRON)
+        text(s, 17.3, y, 9.0, rh - 0.3, [after], size=14, color=INK, anchor=MSO_ANCHOR.MIDDLE)
+        pill = rect(s, 26.6, y + 0.45, 5.8, rh - 1.2, fill=PINK_LIGHT, radius=0.4)
+        label(pill, [big], size=15, bold=True, color=PURPLE)
 
 
 # Экономический эффект: объёмы — из данных заказчика, ставки и доли — допущения (docs/delivery/economics.md)
@@ -919,7 +1062,7 @@ ECON = {
     "signal_seconds": 10,  # просмотр сигнала без системы
     "card_minutes": 2,  # разбор карточки эпизода
     "hour_cost": 800,  # ₽ за час диспетчера с взносами
-    "failures_per_day": 32 * 0.21,  # верные прогнозы отказа уровня «высокий» в сутки
+    "failures_per_day": 5.4 * 0.40,  # верные прогнозы отказа уровня «высокий» в сутки (тест 2026)
     "replace_share": 0.10,  # доля отказов, требующих выезда на замену
     "replace_saving": 8_000,  # ₽: плановая замена вместо аварийной
 }
@@ -939,40 +1082,107 @@ def economics() -> list[tuple[str, float, str]]:
     ]
 
 
+def economics_trips() -> int:
+    e = ECON
+    return round(e["cards_30d"] * 365 / 30 * e["trip_share"] * e["trip_avoided"])
+
+
 def _mln(value: float) -> str:
     return f"{value / 1e6:.1f}".replace(".", ",")
 
 
+def _num(value: float) -> str:
+    return f"{value:,.0f}".replace(",", " ")
+
+
+def _chain(s, x, y, w, h, items):
+    """Расчёт строкой: [число | подпись] × [число | подпись] = … ; вид числа — из данных, допущение, итог."""
+    style = {
+        "data": (WHITE, PURPLE, PURPLE, LAVENDER),
+        "assume": (PINK_LIGHT, PURPLE, PURPLE, None),
+        "mid": (LANE, INK, GREY, None),
+        "total": (PINK, WHITE, WHITE, None),
+    }
+    op_w = 0.75
+    boxes = [it for it in items if it[0] not in ("×", "=", "−")]
+    weight = sum(it[3] if len(it) > 3 else 1 for it in boxes)
+    ops = len(items) - len(boxes)
+    unit = (w - ops * op_w) / weight
+    cx = x
+    for it in items:
+        if it[0] in ("×", "=", "−"):
+            text(s, cx, y, op_w, h, [it[0]], size=22, bold=True, color=WHITE, align=PP_ALIGN.CENTER,
+                 anchor=MSO_ANCHOR.MIDDLE)
+            cx += op_w
+            continue
+        big, small, kind = it[:3]
+        bw = unit * (it[3] if len(it) > 3 else 1) - 0.12
+        fill, c_big, c_small, line = style[kind]
+        b = rect(s, cx + 0.06, y, bw, h, fill=fill, line=line, radius=0.12, line_width=1.5)
+        label(b, [(big, {"size": 18, "bold": True, "color": c_big}), (small, {"size": 11.5, "color": c_small})])
+        cx += bw + 0.12
+
+
 def slide_economics(prs):
     s = new_slide(prs)
-    header(s, "Экономический эффект")
+    header(s, "Экономический эффект: как считали")
+    e = ECON
+    year = 365 / 30
+    cards = e["cards_30d"] * year
+    signals = e["signals_30d"] * year
+    trips = cards * e["trip_share"] * e["trip_avoided"]
+    hours = signals * e["signal_seconds"] / 3600 - cards * e["card_minutes"] / 60
+    replaced = e["failures_per_day"] * 365 * e["replace_share"]
     parts = economics()
     total = sum(v for _, v, _ in parts)
-    top = max(v for _, v, _ in parts)
-    # столбцы — простая схема вклада
-    for i, (name, value, note) in enumerate(parts):
-        x = 1.0 + i * 7.2
-        h = 9.0 * value / top
-        rect(s, x, 3.4, 6.6, 12.2, fill=WHITE, radius=0.05)
-        text(s, x + 0.3, 3.7, 6.0, 1.4, [f"{_mln(value)} млн ₽"], size=22, bold=True, color=PINK, align=PP_ALIGN.CENTER)
-        bar = rect(s, x + 1.8, 14.0 - h, 3.0, h, fill=PINK if i == 0 else LAVENDER, radius=0.05)
-        bar.shadow.inherit = False
-        text(s, x + 0.3, 14.2, 6.0, 0.8, [name], size=13, bold=True, color=PURPLE, align=PP_ALIGN.CENTER)
-        text(s, x + 0.3, 14.9, 6.0, 0.7, [note], size=10.5, color=GREY, align=PP_ALIGN.CENTER)
-    rect(s, 23.0, 3.4, 9.8, 12.2, fill=DARK, radius=0.05)
-    text(s, 23.4, 4.0, 9.0, 1.0, ["Итого на один район"], size=14, bold=True, color=WHITE)
-    text(s, 23.4, 5.4, 9.0, 2.2, [f"≈ {_mln(total)} млн ₽"], size=36, bold=True, color=PINK)
-    text(s, 23.4, 7.9, 9.0, 0.8, ["в год, 95 объектов"], size=13, color=WHITE)
-    text(s, 23.4, 9.6, 9.0, 5.6, [
-        ("Не вошло в расчёт:", {"bold": True, "color": PINK}),
-        "• ущерб от предотвращённых аварий",
-        "• ровная загрузка бригад по ТО",
-        "• каждый новый район — ×N",
-    ], size=12, color=WHITE)
-    text(s, 1.0, 16.2, 31.8, 1.6, [
-        "Объёмы — из журналов заказчика (1,1 млн сигналов и 26 тыс. карточек в год); ставки и доли — допущения: "
-        "выезд 15 тыс. ₽, 5 % карточек с выездом, система снимает 30 %, час диспетчера 800 ₽. Расчёт — economics.md.",
-    ], size=10, color=WHITE)
+    rows = [
+        ("Ложные выезды", [
+            (f"{_num(round(cards, -3))}", "карточек в год", "data", 1.15), ("×",),
+            (f"{e['trip_share'] * 100:.0f} %", "с выездом бригады", "assume"), ("×",),
+            (f"{e['trip_avoided'] * 100:.0f} %", "снимает система", "assume"), ("=",),
+            (f"{trips:.0f}", "выездов меньше", "mid"), ("×",),
+            (f"{_num(e['trip_cost'])} ₽", "2 чел. × 3 ч", "assume", 1.15), ("=",),
+            (f"{_mln(parts[0][1])} млн ₽", "в год", "total", 1.15),
+        ]),
+        ("Время смены", [
+            (f"{signals / 1e6:.1f} млн".replace(".", ","), "сигналов × 10 с", "data", 1.15), ("−",),
+            (f"{_num(round(cards, -3))}", "карточек × 2 мин", "data", 1.15), ("=",),
+            (f"{_num(round(hours, -1))} ч", "≈ 1,2 ставки", "mid"), ("×",),
+            (f"{e['hour_cost']} ₽", "час диспетчера", "assume"), ("=",),
+            (f"{_mln(parts[1][1])} млн ₽", "в год", "total", 1.15),
+        ]),
+        ("Плановая замена", [
+            (f"{e['failures_per_day']:.1f}".replace(".", ","), "верных прогнозов отказа в сутки", "data", 1.3), ("×",),
+            ("365", "дней", "data", 0.7), ("×",),
+            (f"{e['replace_share'] * 100:.0f} %", "требуют замены", "assume"), ("=",),
+            (f"{replaced:.0f}", "замен по плану", "mid"), ("×",),
+            (f"{_num(e['replace_saving'])} ₽", "дешевле аварийной", "assume", 1.15), ("=",),
+            (f"{_mln(parts[2][1])} млн ₽", "в год", "total", 1.15),
+        ]),
+    ]
+    for i, (name, items) in enumerate(rows):
+        y = 3.1 + i * 3.25
+        text(s, 1.0, y, 4.6, 2.6, [name], size=16, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+        _chain(s, 5.6, y, 27.2, 2.6, items)
+    # легенда: откуда каждое число
+    ly = 12.95
+    for j, (fill, line, caption) in enumerate([
+        (WHITE, LAVENDER, "из журналов заказчика и теста модели"),
+        (PINK_LIGHT, None, "допущение: подставляется цифра заказчика"),
+    ]):
+        lx = 5.6 + j * 12.2
+        rect(s, lx, ly + 0.1, 0.9, 0.6, fill=fill, line=line, radius=0.2, line_width=1.5)
+        text(s, lx + 1.1, ly, 13.5, 0.8, [caption], size=13, color=WHITE)
+    rect(s, 1.0, 14.1, 20.6, 4.0, fill=DARK, radius=0.06)
+    text(s, 1.5, 14.35, 19.8, 3.6, [
+        ("Не вошло в расчёт — только сверху", {"bold": True, "color": PINK, "size": 15}),
+        "• предотвращённые аварии: одно подтопление кабельного отсека может стоить больше всего годового эффекта",
+        "• ровная загрузка бригад по ТО: меньше сверхурочных и подрядчиков в пиковые месяцы",
+    ], size=13, color=WHITE)
+    rect(s, 22.2, 14.1, 10.6, 4.0, fill=WHITE, radius=0.06)
+    text(s, 22.6, 14.3, 9.8, 0.9, ["Итого на один район"], size=15, bold=True, color=PURPLE)
+    text(s, 22.6, 15.1, 9.8, 1.6, [f"≈ {_mln(total)} млн ₽ в год"], size=30, bold=True, color=PINK)
+    text(s, 22.6, 16.9, 9.8, 1.0, ["95 объектов, 11,5 тыс. каналов"], size=13, color=GREY)
 
 
 def slide_plans(prs):
@@ -1012,7 +1222,7 @@ def build() -> Path:
     fill_mandatory(prs)
     for fn in (slide_problem, slide_cycle, slide_features, slide_roles, slide_bpmn_incident, slide_bpmn_maintenance,
                slide_ml, slide_results, slide_map, slide_floors, slide_episode, slide_fire, slide_accidents, slide_maintenance, slide_constructor,
-               slide_architecture, slide_quality, slide_mobile, slide_training, slide_tz, slide_business, slide_economics,
+               slide_architecture, slide_quality, slide_support, slide_mobile, slide_training, slide_tz, slide_business, slide_economics,
                slide_plans, slide_final):
         fn(prs)
     # из шаблона остаются только обязательные 7–11, служебные и образцы удаляются

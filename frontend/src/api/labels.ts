@@ -144,6 +144,7 @@ export const WORK_TYPE: Record<string, string> = {
   ventilation: 'Обслуживание вентиляции',
   cleaning: 'Очистка / откачка',
   security: 'Проверка охраны периметра',
+  hot_works: 'Хозработы: сварка, резка',
 }
 
 export const EQUIPMENT_SOURCE: Record<string, { label: string; color: string }> = {

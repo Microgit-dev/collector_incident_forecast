@@ -177,6 +177,32 @@ def authorized(engine: Engine, object_id: int, picket: float | None, speed: floa
     return steps
 
 
+def welding(engine: Engine, object_id: int, picket: float | None, speed: float = 1.0) -> list[Step]:
+    """
+    Сварка на хозработах: охрана снята по наряду, у места сварки греется воздух и срабатывает один дымовой
+    извещатель, соседи молчат; после работ всё возвращается в норму. Учит отличать огневые работы от пожара.
+    """
+    cat = engine.catalog
+    pk = _picket(engine, object_id, picket)
+    smoke = _need(cat.find(object_id, "Датчик дыма", pk, 1), "датчики дыма")[0]
+    temp = cat.find(object_id, "Датчик температуры", pk, 1)
+    door = cat.find(object_id, "КД Дверь", pk, 1)
+    steps = [_step(0, "Охрана снята: хозработы по наряду", lambda: engine.set_guard(object_id, False))]
+    if door:
+        steps.append(_step(20, f"Бригада открыла: {door[0].name}", lambda: engine.set_mode(door[0].id, ALARM)))
+    if temp:
+        t = temp[0]
+        steps.append(_step(60, f"Сварка, воздух до 38 °C: {t.name}", lambda: engine.ramp(t.id, 38, 180 / speed)))
+    steps.append(_step(90, f"Дым от сварки: {smoke.name}", lambda: engine.set_mode(smoke.id, ALARM)))
+    steps.append(_step(120, f"Сварка окончена, сброс: {smoke.name}", lambda: engine.set_mode(smoke.id, NORMAL)))
+    if temp:
+        t = temp[0]
+        steps.append(_step(0, f"Температура в норму: {t.name}", lambda: engine.ramp(t.id, 18, 240 / speed)))
+    if door:
+        steps.append(_step(60, f"Дверь закрыта: {door[0].name}", lambda: engine.set_mode(door[0].id, NORMAL)))
+    return steps
+
+
 def power_loss(engine: Engine, object_id: int, picket: float | None, speed: float = 1.0) -> list[Step]:
     cat = engine.catalog
     ups = cat.find(object_id, "ИБП", None, 1)
@@ -265,6 +291,12 @@ SCENARIOS: dict[str, Scenario] = {
             "Работы по наряду",
             "Охрана снята, дверь и движение — рабочая активность без тревоги (учит отличать от НСД)",
             authorized,
+        ),
+        Scenario(
+            "welding",
+            "Сварка на хозработах",
+            "Охрана снята по наряду, у места сварки до 38 °C и один дымовой, соседи молчат (учит отличать от пожара)",
+            welding,
         ),
         Scenario(
             "power",
